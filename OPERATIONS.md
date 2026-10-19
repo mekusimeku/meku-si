@@ -10,6 +10,9 @@ This log records observable project milestones and verification status. A sent e
 - 2026-10-19 — Clarified the independent tester procedure: a separate operator-issued key, one authenticated meku_search_humans call, redacted evidence, and key revocation. Cursor and Claude Code recipes remain marked untested against a MEKU-issued key.
 - 2026-10-19 — Published a simulated Human Cloud walkthrough. The search counts and request receipt are explicitly mock values; the page does not claim that any real person, work request, task, or payment occurred.
 - 2026-10-19 — Five one-to-one technical test emails in the connected Gmail account were confirmed in Sent. An inbox search at the time of this update found no replies from those recipients. Recipient-level status is tracked in the private outreach record.
+- 2026-10-19 — Prepared 25 additional personalized technical outreach targets after reviewing public work and checking prior Gmail records. None was sent; direct email addresses were not guessed.
+- 2026-10-19 — Reviewed 30 relevant open-source repositories for fit and contribution rules. No issue, pull request, directory submission, or community post was created.
+- 2026-10-19 — Confirmed the repository description and existing topics already cover MCP, agents, human-in-the-loop work, and real-world tasks.
 
 ## Evidence and current status
 

@@ -67,3 +67,6 @@ GitHub API snapshot checked 2026-10-19: 0 stars, 0 forks, 0 open issues. This ne
 
 
 - **VERIFIED** — Tightened the existing independent pilot guide: Level 2 now stops unless server-enforced search-only scope, write denial, test scope/window, expiry, and revocation are confirmed; it also defines safe handling for 401, 429, JSON-RPC errors, and ambiguous outcomes. Commit: [c9e4d3b](https://github.com/mekusimeku/meku-si/commit/c9e4d3b0b05c2482a0b187cd90e4500bad80c2e1).
+
+
+- **VERIFIED** — GitHub issue chooser now lists the Human Cloud Protocol Challenge report form and the form fields render. The YAML parser treated unquoted Yes/No options as booleans; choices are now quoted, missing default labels were removed, and no issue was created. Fix commit: [60f7132](https://github.com/mekusimeku/meku-si/commit/60f71322a17068a1c11b51273f10f7bc7fa0cb03).

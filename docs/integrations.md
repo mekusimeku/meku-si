@@ -80,3 +80,10 @@ Configure the MCP Client Tool using the docs for your installed n8n version. Set
 ## Report an integration result
 
 Use the [integration report template](https://github.com/mekusimeku/meku-si/issues/new?template=integration_request.yml). Include the client and version, whether authenticated initialization and discovery completed, the tool called, and a redacted outcome. Never include API keys, raw personal profiles, or private contact details. A config example or HTTP 200 response alone does not prove a tool call succeeded; report actual independently observed results only.
+
+
+## Shared diagnostic and repeatable verification
+
+Use the [shared read-only MCP diagnostic](../examples/shared/README.md) to inspect initialization, tool discovery, and `meku_search_humans` before wiring a framework SDK. Its local tests use injected mock responses; they do not connect to MEKU. It has not been run against MEKU using an operator-issued key.
+
+Follow the [integration verification standard](integration-standard.md) when adding an adapter or recording results. Use the [candidate use-case library](use-cases.md) for clearly bounded mock task briefs, and the [independent test report template](independent-test-case-study-template.md) only after a tester completes a test and consents to share it.

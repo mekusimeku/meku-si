@@ -61,3 +61,14 @@ Useful, reproducible integration reports and documentation fixes are welcome. Pl
 - [Integration verification standard](docs/integration-standard.md)
 - [20 candidate Human Cloud use cases and mock task briefs](docs/use-cases.md)
 - [Independent test report template](docs/independent-test-case-study-template.md)
+
+
+## Human Cloud Protocol Challenge
+
+Try a clearly labeled local simulation before using any live credential. The challenge separates three levels: Level 1 simulation (no credential), Level 2 independent authenticated read-only MCP test (currently blocked pending a server-enforced search-only test key), and Level 3 separately approved real human-work pilot.
+
+- [Challenge specification and evidence rules](docs/human-cloud-protocol-challenge.md)
+- [Run the local simulator](examples/human-cloud-simulator/README.md) — mock data only, no network calls or real mission
+- [Challenge report issue form](.github/ISSUE_TEMPLATE/human_cloud_challenge.yml)
+- [Exploratory MEKU human-work handoff proposal](docs/human-work-handoff-proposal.md)
+- [Public growth control center and evidence register](ops/black-sun-control-center.md)

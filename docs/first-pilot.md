@@ -1,67 +1,39 @@
 # Independent developer pilot
 
-MEKU SI is looking for developers to independently test the public MCP interface and report what works, what fails, and what is unclear. The aim is a small, reproducible integration, not a promotional endorsement.
+MEKU SI invites developers to test its public MCP interface and report what works, what fails, and what is unclear. This is a reproducible technical test, not a request for endorsement.
 
-## Read-only test: one MCP tool call
+## One read-only MCP client test
 
-This is the first test for an independent developer. It does not submit work or move funds.
+This first test does not submit work, connect a wallet, or move funds.
 
-1. Read the current [AI access instructions](https://meku.farm/ai-access) and the [MCP reference](mcp-reference.md).
-2. Ask the MEKU operator for a separate test key. Before it is issued, ask whether the key can be limited to `meku_search_humans` and how it can be revoked. Do not use a production operator key. Do not share the test key in email, chat, an issue, a screenshot, or a repository.
-3. Store the key in a local secret manager or private shell session. For example:
+1. Review the current [AI access instructions](https://meku.farm/ai-access) and [MCP reference](mcp-reference.md).
+2. Ask the MEKU operator for a separate test key. Before use, ask whether it can be limited to the read-only **meku_search_humans** tool and how it can be revoked. Do not use an operator's production key. Keep the test key in a local secret manager or private environment variable. Never put it in a repository, issue, screenshot, prompt, or report.
+3. Connect an independent MCP client that supports remote HTTP and bearer headers. Start with the [Cursor guide](../examples/cursor/README.md) or [Claude Code guide](../examples/claude-code/README.md). Both are reference examples and have not been independently verified. Do not treat a config-only setup as a successful integration.
+4. In the client, make exactly one call to **meku_search_humans** with a harmless skill query such as **photography**. Do not call **meku_request_human** or **meku_get_request_status**. Search results are aggregate availability information; counts can change and do not identify people. The call uses the key's shared rate limit.
+5. Check the client result, not only its connection indicator. A successful call returns a valid MCP/JSON-RPC result with no tool error. Do not repeat calls in a loop.
+6. Ask the operator to revoke the test key when it is no longer needed.
 
-   ~~~sh
-   export MEKU_MCP_URL="https://meku.farm/api/public/mcp"
-   read -s MEKU_API_KEY
-   export MEKU_API_KEY
-   ~~~
+### Success checklist
 
-4. Make exactly one read-only tool call. Replace the skill with a harmless search term. This request uses the bearer key and consumes the key's shared rate limit.
+- [ ] Client and version recorded
+- [ ] Separate test key issued by the operator and stored privately
+- [ ] Remote HTTP MCP connection attempted
+- [ ] **meku_search_humans** called once and valid result observed
+- [ ] Redacted evidence reviewed by the tester and MEKU
+- [ ] Test key revoked or marked for revocation
 
-   ~~~sh
-   curl -i -sS -X POST "$MEKU_MCP_URL" \
-     -H "Authorization: Bearer $MEKU_API_KEY" \
-     -H "Content-Type: application/json" \
-     -H "Accept: application/json, text/event-stream" \
-     -d '{
-       "jsonrpc":"2.0",
-       "id":1,
-       "method":"tools/call",
-       "params":{
-         "name":"meku_search_humans",
-         "arguments":{"skills":["photography"]}
-       }
-     }'
-   ~~~
+Record the client name and version, operating system, timestamp with time zone, connection stage, and redacted result or error. If it fails, include HTTP status and JSON-RPC error code/message when available. Do not share credentials, personal details, or private mission data. Raw HTTP diagnostics are in the [quickstart](quickstart.md), but a curl call alone does not count as an independent client integration.
 
-5. Check both the HTTP status and the JSON-RPC body. A successful test has an HTTP success response, a matching JSON-RPC `id`, and a result without a tool error. Record the returned aggregate fields as received; counts can change and do not identify people. An HTTP success by itself is not proof that the tool call succeeded.
-6. After the test, ask the operator to revoke the test key if it is no longer needed.
+## Verification status
 
-If the connection fails, save the client name and version, operating system, timestamp with time zone, HTTP status, JSON-RPC error code/message, and the step that failed. Redact the key and any personal or private data. Do not retry repeatedly; authentication, discovery, tool calls, and failures use the shared rate limit.
+Track stages separately: **configured**, **attempted**, **successful**, and **independently confirmed**. A successful independent test requires confirmation from the outside developer that the named client completed the authenticated **meku_search_humans** call, with redacted evidence. Do not call MEKU's internal test independent.
 
-## What counts as a confirmed independent test
+## Optional later human-work pilot
 
-Record each stage separately:
+Only after both sides agree, define the task, scope, requirements, deliverable, timing, and proposed budget. A human must see the details and freely accept or decline. Do not call **meku_request_human** until the operator has reviewed the proposed task and the developer has explicit approval to submit it. Submission creates a request for operator review; it does not hire a person, verify completion, or make payment. The three MCP tools do not handle mission funding, completion verification, or payment. See [security and consent](security-and-consent.md).
 
-- **Configured:** the client contains the endpoint and can read the key from a private source.
-- **Attempted:** the tester made the read-only call and recorded the response or error.
-- **Successful:** the tester received a valid JSON-RPC result from `meku_search_humans`.
-- **Independently confirmed:** the tester confirms the client, call, and result, and MEKU can review redacted evidence.
+## Report the result
 
-Do not describe a configured or attempted connection as successful. Do not call an internal MEKU test independent.
+Use the [integration report form](https://github.com/mekusimeku/meku-si/issues/new?template=integration_request.yml) only after removing secrets and personal data. A report is not required to include a raw response; share only what is needed to reproduce the result.
 
-## Optional later work pilot
-
-The read-only test does not require a work request, wallet connection, token purchase, or payment. Do not submit a live request just to complete the test.
-
-If the tester and MEKU both agree to explore a real task later, first write down its scope, requirements, deliverable, timing, and proposed budget. A person must see that information and choose whether to accept. Do not call `meku_request_human` until the operator has reviewed the proposed task and the developer has explicit approval to submit it.
-
-`meku_request_human` creates a request for operator review; it does not approve work, hire a person, verify completion, or make payment. The current three MCP tools do not handle mission funding, completion verification, or payment. Any approved paid mission must follow the separately documented MEKU process and be confirmed with the human before work begins.
-
-## Evidence and privacy
-
-Use the repository's [integration report form](https://github.com/mekusimeku/meku-si/issues/new?template=integration_request.yml) after redacting credentials and personal data. Do not publish raw keys, private mission details, or a worker's identity without consent. A redacted response may still contain operational details; share only what is needed to reproduce the result.
-
-## Join the pilot
-
-Email meku_si@outlook.com with the subject “MEKU MCP independent test”. Include your preferred MCP client and version, whether you can test one read-only call, and a public link to relevant developer work. Do not include secrets. This is an invitation to test; it is not a paid offer or partnership commitment.
+To join, email meku_si@outlook.com with the subject “MEKU MCP independent test”. Include your preferred client/version, whether you can test one read-only call, and a public link to relevant developer work. Do not include secrets. This invitation is not a paid offer or partnership commitment.

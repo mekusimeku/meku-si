@@ -40,3 +40,27 @@ GitHub API snapshot checked 2026-10-19: 0 stars, 0 forks, 0 open issues. This ne
 - Linked the reusable materials from the README and integration guide. Framework-specific recipes remain reference-only and untested with a MEKU-issued key.
 - Related commits: diagnostic 9b98261e4b0ac004225a9884b42d4e554969e487; error handling fix 12f46481479aa3838b24f43cd5017c248d9dcf9e; diagnostic guide d946a572b74473587002decdbc03c5f1cc5ec9b8; mock tests b1dfbf3f7a3ea4e1e8dd5573e9839a7b8e7b0751; integration standard b199d1a02f15cc9234c466061f588af30dac8964; use cases e1163e47171952420bf1b1820864f15346b05562; test report template ca0a4d984acaf930a951b8eb57e6e2fad306daca; README links 823f0a1b767394a05c2e1247c895a132bf7e3322; integration guide links 64c50716cf81bf322678243a6c89256891b8a910.
 - Independent external MCP tests remain 0; independently verified paid missions remain 0. No email or X message was sent, and no production system, credential, wallet, or Lovable credit was used.
+
+
+## 2026-10-19 — Operation Black Sun cycle
+
+- **VERIFIED** — Published the Human Cloud Protocol Challenge with three distinct levels: local simulation, gated authenticated read-only MCP test, and separately approved real human-work pilot. The challenge does not claim that a production key is read-only or that Levels 2/3 have occurred.
+- **VERIFIED** — Published the challenge report issue form. It requests client/version, outcome, redacted behavior and optional public evidence; it warns against posting credentials, personal data, or private task details.
+- **VERIFIED** — Published a deterministic, offline simulator with three bounded mock scenarios, explicit requester/operator/worker decisions, and no HTTP client. Local checks: Node syntax check succeeded; 5/5 Node tests passed. Test result applies only to the local simulator.
+- **COMPLETED** — Published an exploratory MEKU proposal for human-work handoff concepts after comparing generic MCP task tracking, tool annotations, and framework-level approval. It is not an official standard and does not claim the MEKU endpoint implements MCP Tasks.
+- **VERIFIED** — Published the public-safe Black Sun control center with evidence register, ranked backlog, integration status, partnership/outreach aggregates, blocker and directory trackers, distribution ideas, and outcome metrics. Personal outreach details and credentials are excluded.
+- **VERIFIED** — Linked the challenge, simulator, proposal, and control center from the README.
+- **BLOCKED** — Independent authenticated MCP tests: 0; independently verified paid missions: 0. Next step: an authorized MEKU operator must confirm a server-enforced meku_search_humans-only test credential, approved scope/window, expiry, and revocation. Client-side tool filtering is not sufficient.
+- **IN PROGRESS** — Warm independent tester lead remains active from the founder's prior conversation. No X login or new message was attempted.
+- **VERIFIED** — No email was sent in this cycle. Earlier outreach remains recorded in the private tracker; no new recipient or message is claimed here. No production changes, credentials, wallet actions, Lovable credits, or external directory submissions were used.
+
+### Evidence commits
+
+- Challenge specification: [5a3e4ab](https://github.com/mekusimeku/meku-si/commit/5a3e4aba17c60572756849dfe90e6aa763f39196)
+- Human-work handoff proposal: [6874af1](https://github.com/mekusimeku/meku-si/commit/6874af1995ece2aad36c1e06ad77efee84c6e76d)
+- Challenge report form: [31c424b](https://github.com/mekusimeku/meku-si/commit/31c424b8cb0746ead6e8e82f8f70b3cd2bd07627)
+- Simulator guide: [67e03b0](https://github.com/mekusimeku/meku-si/commit/67e03b01fa1ff048b0664cea19718b2e2dbee4e7)
+- Simulator implementation: [2903aad](https://github.com/mekusimeku/meku-si/commit/2903aad38608b13ca1fd943cad3b523d7299c688)
+- Simulator tests: [d238162](https://github.com/mekusimeku/meku-si/commit/d23816272b41fca7fcc6438db1f165a97965e51a)
+- Public control center: [66e2607](https://github.com/mekusimeku/meku-si/commit/66e2607009d91a91299c76ef88cbb47043552673)
+- README challenge links: [901a476](https://github.com/mekusimeku/meku-si/commit/901a47651a2d76454af495e47ade392e2f593ed4)

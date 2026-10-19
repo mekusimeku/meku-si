@@ -29,5 +29,11 @@ MEKU currently documents JSON responses and does not provide long-lived SSE stre
 ## Environment variable is not found
 Cursor and Claude Code inherit environment from their launch process. Restart them from an environment where MEKU_API_KEY is set. Do not write a literal key into a config file you will commit or share.
 
+## Glama connector shows Unhealthy
+
+On 2026-10-19, a single unauthenticated initialize POST to the live endpoint returned HTTP 401 with “Missing API key.” MEKU requires a bearer key on every JSON-RPC POST, including initialization and discovery. Glama's public connector page reports failed health checks but does not publish their raw responses, so this reproduces the likely failure condition; it does not prove the exact response from Glama's stored checks.
+
+Glama supports an API Key test profile for authenticated health checks ([Glama FAQ](https://glama.ai/mcp/faq#how-do-i-submit-an-mcp-connector)). Before adding a MEKU credential there, confirm its scope and handling. MEKU's public docs do not document read-only or tool-scoped keys, and meku_request_human is a write action that submits work for operator review. Do not use a general key for a directory health check unless its scope and handling are acceptable. A safe resolution is a limited test credential that cannot call the write tool, then configure Glama's API Key test profile. Keep authentication intact while that safe credential or test path is unavailable.
+
 ## Still blocked?
 Open a [bug report](https://github.com/mekusimeku/meku-si/issues/new?template=bug_report.yml) with the client/version, transport, redacted request/response, and timestamp. Never include an API key, wallet credential, or private personal data.

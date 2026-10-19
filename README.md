@@ -53,3 +53,11 @@ Useful, reproducible integration reports and documentation fixes are welcome. Pl
 - Developer access: [meku.farm/ai-access](https://meku.farm/ai-access)
 - Email: meku_si@outlook.com
 - X: [@MEKU_SI](https://x.com/MEKU_SI)
+
+
+## Reusable developer tools
+
+- [Shared read-only MCP diagnostic](examples/shared/README.md): protocol-level Node.js utility; its tests use mock responses and do not connect to MEKU.
+- [Integration verification standard](docs/integration-standard.md)
+- [20 candidate Human Cloud use cases and mock task briefs](docs/use-cases.md)
+- [Independent test report template](docs/independent-test-case-study-template.md)

@@ -64,3 +64,6 @@ GitHub API snapshot checked 2026-10-19: 0 stars, 0 forks, 0 open issues. This ne
 - Simulator tests: [d238162](https://github.com/mekusimeku/meku-si/commit/d23816272b41fca7fcc6438db1f165a97965e51a)
 - Public control center: [66e2607](https://github.com/mekusimeku/meku-si/commit/66e2607009d91a91299c76ef88cbb47043552673)
 - README challenge links: [901a476](https://github.com/mekusimeku/meku-si/commit/901a47651a2d76454af495e47ade392e2f593ed4)
+
+
+- **VERIFIED** — Tightened the existing independent pilot guide: Level 2 now stops unless server-enforced search-only scope, write denial, test scope/window, expiry, and revocation are confirmed; it also defines safe handling for 401, 429, JSON-RPC errors, and ambiguous outcomes. Commit: [c9e4d3b](https://github.com/mekusimeku/meku-si/commit/c9e4d3b0b05c2482a0b187cd90e4500bad80c2e1).

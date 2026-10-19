@@ -97,7 +97,7 @@ export async function runSmokeCheck({
       throw new Error(`Expected a JSON response for ${method}.`);
     }
 
-    if (envelope?.jsonrpc !== "2.0") throw new Error("Invalid JSON-RPC envelope for ${method}.`);
+    if (envelope?.jsonrpc !== "2.0") throw new Error("Invalid JSON-RPC envelope for " + method + ".");
     if (envelope?.error) {
       const code = Number.isInteger(envelope.error.code) ? envelope.error.code : "unknown";
       // Do not print server-provided error messages; they may contain request data.

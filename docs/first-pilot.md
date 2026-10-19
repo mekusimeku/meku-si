@@ -37,3 +37,10 @@ Only after both sides agree, define the task, scope, requirements, deliverable, 
 Use the [integration report form](https://github.com/mekusimeku/meku-si/issues/new?template=integration_request.yml) only after removing secrets and personal data. A report is not required to include a raw response; share only what is needed to reproduce the result.
 
 To join, email meku_si@outlook.com with the subject “MEKU MCP independent test”. Include your preferred client/version, whether you can test one read-only call, and a public link to relevant developer work. Do not include secrets. This invitation is not a paid offer or partnership commitment.
+
+
+## Current credential gate — stop unless confirmed
+
+The public MEKU documentation does not establish a server-enforced read-only key scope. Level 2 is therefore blocked unless an authorized MEKU operator confirms, before the test, that a separate test key is restricted server-side to meku_search_humans, cannot call meku_request_human or any write operation, has an expiry or explicit revocation route, and is approved for a defined test window and harmless query scope. A client-side tool allowlist or a general production key is not enough. If any condition is unconfirmed, do not connect; report the blocker instead.
+
+After one approved search call, stop and ask the operator to revoke the credential. Do not probe other tools to test the restriction. Treat HTTP 401 / JSON-RPC -32001 as an authentication failure and stop. Treat HTTP 429 / -32001 as rate-limited; no Retry-After is documented, so do not retry automatically. Inspect JSON-RPC errors and tool-level isError even when HTTP is 200. On a timeout or ambiguous outcome, do not repeat the call without operator guidance.

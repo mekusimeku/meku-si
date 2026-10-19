@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible documentation or integration issue.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include API keys, wallet credentials, personal data, or private mission details."
+  - type: input
+    id: client
+    attributes:
+      label: Client and version
+      placeholder: "For example, Cursor version ..."
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: MEKU documentation page or repository file
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include redacted configuration and the tool called.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed and expected result
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed API keys and other secrets.
+          required: true
+        - label: I removed private personal and mission information.
+          required: true

@@ -1,0 +1,72 @@
+name: Human Cloud Protocol Challenge report
+description: Submit a redacted Level 1 simulation, Level 2 test, or approved Level 3 pilot result
+title: "[Challenge]: "
+labels: [challenge, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read the [challenge rules](https://github.com/mekusimeku/meku-si/blob/main/docs/human-cloud-protocol-challenge.md) first. Never include API keys, bearer tokens, request IDs, personal contact details, private locations, or unredacted user/worker data. Level 2 requires a server-enforced read-only test credential. Level 3 requires separate pilot approval.
+  - type: dropdown
+    id: level
+    attributes:
+      label: Participation level
+      options:
+        - Level 1 — local simulation
+        - Level 2 — authenticated read-only test
+        - Level 3 — separately approved human-work pilot
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client and version
+      description: Include the MCP client/runtime version. Do not include a credential or private URL.
+      placeholder: "Example: local simulator with Node.js 24"
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options:
+        - Passed
+        - Failed
+        - Stopped safely
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and observed behavior
+      description: State what you tried and what happened. For errors, redact headers, tokens, IDs, and personal data.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: evidence
+    attributes:
+      label: Public redacted evidence link (optional)
+      description: Link only to material that is safe to share publicly. Never upload raw credentials, private task data, or worker identity.
+    validations:
+      required: false
+  - type: checkboxes
+    id: attestations
+    attributes:
+      label: Safety and evidence confirmations
+      options:
+        - label: I removed secrets, personal information, request identifiers, and private location data.
+          required: true
+        - label: I have not described a simulation as a live MEKU call or real human mission.
+          required: true
+        - label: If this is Level 2 or Level 3, I used only separately authorized credentials and approvals.
+          required: true
+  - type: dropdown
+    id: attribution
+    attributes:
+      label: May MEKU publicly attribute this report to your GitHub account?
+      options:
+        - No
+        - Yes
+    validations:
+      required: true

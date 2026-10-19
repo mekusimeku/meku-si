@@ -35,6 +35,8 @@ The existing [Cursor config example](../examples/cursor/mcp.json) is safe to com
 
 If connection fails, inspect Cursor's MCP Logs and confirm the key is present in Cursor's launch environment. See [Cursor MCP docs](https://cursor.com/docs/mcp).
 
+For detailed setup and safety notes, see the [Cursor example guide](../examples/cursor/README.md).
+
 ## Claude Code
 
 Set **MEKU_API_KEY** in the environment that launches Claude Code. Put the following in the project-root **.mcp.json**:
@@ -55,11 +57,15 @@ The committed config contains only a variable reference. Claude Code's interacti
 
 The existing [Claude Code config example](../examples/claude-code/.mcp.json) is reference material and has not been tested against MEKU.
 
+For setup and safety notes, see the [Claude Code example guide](../examples/claude-code/README.md).
+
 ## OpenAI Agents SDK (TypeScript)
 
 The [example](../examples/openai-agents-sdk/read-only.ts) uses **MCPServerStreamableHttp** from the local Agents SDK runtime. It puts the MEKU bearer header in **requestInit** and applies a static allowlist containing only **meku_search_humans**. The MEKU key goes from the local runtime to MEKU; it is not configured as an OpenAI-hosted MCP credential. The prompt and tool result can still be sent to the model provider, so review returned data before sharing.
 
 Install **@openai/agents**, set **OPENAI_API_KEY** and **MEKU_API_KEY** in a private runtime environment, then run the file with your project's TypeScript runner. This read-only example does not expose the MEKU request tool. It has not been typechecked or tested against a MEKU-issued key. See the [official Agents SDK MCP guide](https://openai.github.io/openai-agents-js/guides/mcp/).
+
+For setup, data flow, and consent details, see the [OpenAI Agents SDK example guide](../examples/openai-agents-sdk/README.md).
 
 A future mission-request flow needs a separate explicit agent-side human approval step and MEKU operator review. A submitted request is not evidence of a human accepting work or a payment.
 

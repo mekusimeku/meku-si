@@ -15,6 +15,7 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 - [FAQ](docs/faq.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Independent pilot guide](docs/first-pilot.md)
+- [Human Cloud showcase](docs/showcase.md)
 - [Roadmap](ROADMAP.md)
 
 ## Connect

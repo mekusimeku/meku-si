@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "meku-human-cloud": {
+      "type": "http",
+      "url": "https://meku.farm/api/public/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MEKU_API_KEY}"
+      }
+    }
+  }
+}

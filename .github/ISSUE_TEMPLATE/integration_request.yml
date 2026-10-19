@@ -1,0 +1,57 @@
+name: Integration report
+description: Record a reproducible MEKU MCP client integration attempt.
+title: "[Integration]: "
+labels:
+  - integration
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include API keys, wallet credentials, personal data, or private mission details. An attempt is not a verified integration."
+  - type: input
+    id: client
+    attributes:
+      label: Client, version, and hosting mode
+    validations:
+      required: true
+  - type: input
+    id: date
+    attributes:
+      label: Test date and timezone
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options:
+        - Configured only
+        - Connection failed
+        - Tool discovery succeeded
+        - Read-only search succeeded
+        - Write request submitted for review
+      description: Do not submit a write request just to complete this report.
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Redacted setup
+      description: Include transport and header configuration with credentials removed.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Result evidence
+      description: Share a redacted response and note limitations.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed API keys, wallet credentials, and personal information.
+          required: true
+        - label: I distinguish attempted, successful, and independently verified behavior.
+          required: true

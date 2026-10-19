@@ -1,7 +1,6 @@
 name: Human Cloud Protocol Challenge report
 description: Submit a redacted Level 1 simulation, Level 2 test, or approved Level 3 pilot result
 title: "[Challenge]: "
-labels: [challenge, triage]
 body:
   - type: markdown
     attributes:

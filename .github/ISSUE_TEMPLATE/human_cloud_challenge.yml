@@ -65,7 +65,7 @@ body:
     attributes:
       label: May MEKU publicly attribute this report to your GitHub account?
       options:
-        - No
-        - Yes
+        - "No"
+        - "Yes"
     validations:
       required: true

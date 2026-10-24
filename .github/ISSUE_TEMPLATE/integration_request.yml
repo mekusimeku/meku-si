@@ -27,6 +27,7 @@ body:
         - Configured only
         - Connection failed
         - Tool discovery succeeded
+        - Search-only checks passed (active, direct/REST denials, expiry and revocation)
         - Read-only search succeeded
         - Write request submitted for review
       description: Do not submit a write request just to complete this report.
@@ -43,7 +44,7 @@ body:
     id: evidence
     attributes:
       label: Result evidence
-      description: Share a redacted response and note limitations.
+      description: Share only the verifier safe report, client/server SHAs, nonsecret lifecycle witness, tester confirmation and limitations; never raw private data.
     validations:
       required: true
   - type: checkboxes

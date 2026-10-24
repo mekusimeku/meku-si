@@ -15,7 +15,7 @@ This example connects Cursor to MEKU over remote Streamable HTTP so an agent can
 ## Safety and limits
 
 - The config sends the bearer key to MEKU from Cursor's runtime. Never replace the environment reference with a literal key or commit a local secret file.
-- Search results may contain personal information. Ask for an aggregate summary and avoid copying raw profiles into prompts, logs, screenshots, or issues.
+- The reviewed server returns aggregate fields only. Stop on any unexpected identity, contact or profile field; do not publish raw data.
 - This example does not submit a mission. Any future work request requires separate human consent and MEKU operator review.
 - A configuration file is not proof of a successful integration. Report success only after an authenticated search tool call actually completes.
 
@@ -26,3 +26,10 @@ This example connects Cursor to MEKU over remote Streamable HTTP so an agent can
 - If setup still fails, use the repository's [integration report template](https://github.com/mekusimeku/meku-si/issues/new?template=integration_request.yml) and include the Cursor version, operating system, failing stage, and a redacted error.
 
 See the [shared client guide](../../docs/integrations.md) and [official Cursor MCP documentation](https://cursor.com/docs/mcp).
+
+## Search-only preparation
+
+Use the [verification guide](../../docs/first-contact-verification.md) first. Set
+**MEKU_MCP_URL** to the approved nonproduction endpoint and request a server-enforced
+search-only credential. A client tool filter is not server authorization. Hosted
+enforcement and this client integration remain unverified.

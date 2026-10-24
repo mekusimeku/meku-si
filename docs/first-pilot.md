@@ -2,27 +2,21 @@
 
 MEKU SI invites developers to test its public MCP interface and report what works, what fails, and what is unclear. This is a reproducible technical test, not a request for endorsement.
 
-## One read-only MCP client test
+## One bounded search-only integration test
 
-This first test does not submit work, connect a wallet, or move funds.
+Follow the [complete verification guide](first-contact-verification.md). It covers
+initialization, single-tool discovery, aggregate search, explicit direct-call and
+REST denials, revocation and expiry of initially working credentials. These
+negative probes contain no usable work request. Do not manually probe other
+operations. The active phase uses 10 requests over about two minutes.
 
-1. Review the current [AI access instructions](https://meku.farm/ai-access) and [MCP reference](mcp-reference.md).
-2. Ask the MEKU operator for a separate test key. Before use, ask whether it can be limited to the read-only **meku_search_humans** tool and how it can be revoked. Do not use an operator's production key. Keep the test key in a local secret manager or private environment variable. Never put it in a repository, issue, screenshot, prompt, or report.
-3. Connect an independent MCP client that supports remote HTTP and bearer headers. Start with the [Cursor guide](../examples/cursor/README.md) or [Claude Code guide](../examples/claude-code/README.md). Both are reference examples and have not been independently verified. Do not treat a config-only setup as a successful integration.
-4. In the client, make exactly one call to **meku_search_humans** with a harmless skill query such as **photography**. Do not call **meku_request_human** or **meku_get_request_status**. Search results are aggregate availability information; counts can change and do not identify people. The call uses the key's shared rate limit.
-5. Check the client result, not only its connection indicator. A successful call returns a valid MCP/JSON-RPC result with no tool error. Do not repeat calls in a loop.
-6. Ask the operator to revoke the test key when it is no longer needed.
-
-### Success checklist
-
-- [ ] Client and version recorded
-- [ ] Separate test key issued by the operator and stored privately
-- [ ] Remote HTTP MCP connection attempted
-- [ ] **meku_search_humans** called once and valid result observed
-- [ ] Redacted evidence reviewed by the tester and MEKU
-- [ ] Test key revoked or marked for revocation
-
-Record the client name and version, operating system, timestamp with time zone, connection stage, and redacted result or error. If it fails, include HTTP status and JSON-RPC error code/message when available. Do not share credentials, personal details, or private mission data. Raw HTTP diagnostics are in the [quickstart](quickstart.md), but a curl call alone does not count as an independent client integration.
+The operator must authorize the exact nonproduction endpoint, test window,
+synthetic dataset and two restricted credentials. No live credential or contact
+has been created by preparing this guide. Record client/runtime versions and
+redacted evidence, then obtain the outside tester's own confirmation. An SDK
+claim requires that SDK to make the actual call; the portable Node verifier alone
+does not establish framework compatibility. Cursor and Claude Code configurations
+are reference examples until independently exercised.
 
 ## Verification status
 
@@ -38,9 +32,12 @@ Use the [integration report form](https://github.com/mekusimeku/meku-si/issues/n
 
 To join, email meku_si@outlook.com with the subject “MEKU MCP independent test”. Include your preferred client/version, whether you can test one read-only call, and a public link to relevant developer work. Do not include secrets. This invitation is not a paid offer or partnership commitment.
 
+## Current hosted gate
 
-## Current credential gate — stop unless confirmed
-
-The public MEKU documentation does not establish a server-enforced read-only key scope. Level 2 is therefore blocked unless an authorized MEKU operator confirms, before the test, that a separate test key is restricted server-side to meku_search_humans, cannot call meku_request_human or any write operation, has an expiry or explicit revocation route, and is approved for a defined test window and harmless query scope. A client-side tool allowlist or a general production key is not enough. If any condition is unconfirmed, do not connect; report the blocker instead.
-
-After one approved search call, stop and ask the operator to revoke the credential. Do not probe other tools to test the restriction. Treat HTTP 401 / JSON-RPC -32001 as an authentication failure and stop. Treat HTTP 429 / -32001 as rate-limited; no Retry-After is documented, so do not retry automatically. Inspect JSON-RPC errors and tool-level isError even when HTTP is 200. On a timeout or ambiguous outcome, do not repeat the call without operator guidance.
+Source controls are implemented on the website development branch and exercised
+with native PostgreSQL and local HTTP. Hosted enforcement remains unverified.
+The remaining step needs an outside-reachable nonproduction endpoint running the
+reviewed commit/migrations, two operator-issued search-only test credentials and
+authorized outside tester participation. A client-side allowlist or a general
+production credential is not a substitute. Follow the guide; stop on 401/429 or
+any contract mismatch and do not automatically retry.

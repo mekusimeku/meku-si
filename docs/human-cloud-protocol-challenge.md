@@ -6,13 +6,13 @@ This challenge gives agent developers a small, testable way to explore a handoff
 
 ## Participation levels
 
-| Level | What you do | Credentials | What counts as evidence |
-| --- | --- | --- | --- |
-| 1 — Simulation | Run the local mock workflow and inspect its event trace. | None | Client/runtime version, command, test result, and a redacted output excerpt. |
-| 2 — Authenticated MCP test | Connect an independent MCP client and call only **meku_search_humans** with an operator-issued, server-enforced read-only test credential. | Issued privately by an authorized MEKU operator; never committed or shared. | Client/version, timestamp, success or exact redacted error, and confirmation that only the read-only tool was callable. |
-| 3 — Real human-work pilot | With separate authorization, request a bounded task, wait for operator review, and let a person choose whether to accept. | Separately issued credential and explicit pilot approval. | Redacted event timeline, operator decision, human choice, completion evidence, and payment evidence only if payment actually occurs. |
+| Level                      | What you do                                                                                                                                | Credentials                                                                 | What counts as evidence                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1 — Simulation             | Run the local mock workflow and inspect its event trace.                                                                                   | None                                                                        | Client/runtime version, command, test result, and a redacted output excerpt.                                                         |
+| 2 — Authenticated MCP test | Connect an independent MCP client and call only **meku_search_humans** with an operator-issued, server-enforced read-only test credential. | Issued privately by an authorized MEKU operator; never committed or shared. | Client/version, timestamp, success or exact redacted error, and confirmation that only the read-only tool was callable.              |
+| 3 — Real human-work pilot  | With separate authorization, request a bounded task, wait for operator review, and let a person choose whether to accept.                  | Separately issued credential and explicit pilot approval.                   | Redacted event timeline, operator decision, human choice, completion evidence, and payment evidence only if payment actually occurs. |
 
-Level 1 can be completed now. Levels 2 and 3 are gated. The public documentation does not establish that MEKU can currently issue a server-enforced read-only key. A client-side tool allowlist is not a credential restriction. Do not use a general production key for this challenge. Ask the MEKU operator to confirm scope and revocation before proceeding to Level 2.
+Level 1 can be completed now. Levels 2 and 3 are gated. Server-enforced search-only controls are prepared and tested locally on the website development branch; hosted enforcement remains unverified. A client-side tool allowlist is not a credential restriction. Do not use a general production key for this challenge. Ask the MEKU operator to confirm scope and revocation before proceeding to Level 2.
 
 ## Level 1 — run the simulation
 
@@ -23,18 +23,18 @@ From the repository root, with Node.js 20 or newer:
     node examples/human-cloud-simulator/simulate.mjs shelf_count
     node --test examples/human-cloud-simulator/simulate.test.mjs
 
-The simulator has no HTTP client and makes no MEKU call. Its tool traces have **called: false**; its people, decisions, identifiers, statuses, and outputs are mock values. Payment is not simulated. See the [simulator guide](../examples/human-cloud-simulator/README.md).
+The simulator has no HTTP client and makes no MEKU call. Its tool traces have **called: false**; its people, decisions, identifiers, statuses, and outputs are mock values. The payment result is simulated; no real transfer occurs. See the [simulator guide](../examples/human-cloud-simulator/README.md).
 
-## Level 2 — authenticated read-only test (currently blocked)
+## Level 2 — authenticated search-only test (awaiting hosted authorization)
 
 Do not attempt this level until an authorized MEKU operator has confirmed all of the following in writing:
 
 1. The credential is a separate test key with a server-enforced allowlist limited to meku_search_humans.
 2. The key cannot invoke meku_request_human or any write operation, even if a client is misconfigured.
-3. The key has a defined expiry or revocation route, and the operator will revoke it after the test.
+3. The key has a finite expiry and a revocation route, and the operator will revoke it after the test.
 4. The operator approves the test window and the permitted query/data scope.
 
-Once those conditions are met, use the [independent read-only test guide](first-pilot.md) and the [shared MCP diagnostic](../examples/shared/README.md). Do not place credentials in command history, source files, screenshots, issue reports, or public logs. If the server does not enforce a read-only scope, stop and report the blocker; do not substitute client-side restrictions.
+Once those conditions are met, use the [independent verification procedure](first-contact-verification.md) and the [shared MCP diagnostic](../examples/shared/README.md). Do not place credentials in command history, source files, screenshots, issue reports, or public logs. If the server does not enforce a read-only scope, stop and report the blocker; do not substitute client-side restrictions.
 
 ## Level 3 — real human-work pilot (separately gated)
 

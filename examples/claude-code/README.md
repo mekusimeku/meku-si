@@ -15,7 +15,7 @@ The project-scoped MCP configuration connects Claude Code to MEKU over remote HT
 ## Safety and limits
 
 - The key is sent as a bearer header from the local Claude Code process to MEKU. Never commit a populated key or share screenshots or logs containing it.
-- Search can return information about individual humans. Ask Claude Code to return broad counts only; do not expose names, contact details, or raw profiles in a public report.
+- The reviewed search contract contains aggregate fields only. Unexpected identities, contacts or profiles are a failed privacy check; do not publish them.
 - A work request is a separate write action. Human consent and MEKU operator review are still required before work proceeds.
 - This example is untested against a MEKU-issued key. Do not report it as working until authenticated initialization, discovery, and a search call have all been observed.
 
@@ -26,3 +26,10 @@ The project-scoped MCP configuration connects Claude Code to MEKU over remote HT
 - Review local diagnostic output privately and redact keys, request headers, and human data before sharing a failure report.
 
 See the [shared client guide](../../docs/integrations.md) and [official Claude Code MCP documentation](https://code.claude.com/docs/en/mcp).
+
+## Search-only preparation
+
+Use the [verification guide](../../docs/first-contact-verification.md) first. Set
+**MEKU_MCP_URL** to the approved nonproduction endpoint and request a server-enforced
+search-only credential. A client tool filter is not server authorization. Hosted
+enforcement and this client integration remain unverified.

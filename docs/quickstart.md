@@ -1,54 +1,37 @@
-# MCP quickstart
+# Search-only MCP quickstart
 
-This guide configures a client and makes a read-only availability query. It does not submit work or move funds.
+Use Node.js 22+ and the [independent verification guide](first-contact-verification.md).
+No model API, wallet, dependency install or payment is required.
 
-## 1. Request access
+1. Agree on one bounded test on an operator-controlled nonproduction endpoint.
+   Confirm the exact deployed code/migrations. Hosted enforcement is unverified
+   until observed; a repository branch does not prove deployment.
+2. Obtain a separate operator-issued search-only credential. Set `MEKU_MCP_URL`
+   to that approved endpoint and load `MEKU_API_KEY` privately, without echo or
+   command-history capture. Never pass the value in a command-line argument.
+3. Run the verifier. Its active phase takes about two minutes, checks 10 requests
+   and stops if discovery shows anything beyond `meku_search_humans`:
 
-Read the current instructions at [meku.farm/ai-access](https://meku.farm/ai-access). The MCP server requires an Agent API key issued by MEKU SI. Do not put the key in a public repository, a browser page, a prompt shared with others, or a client config file that will be committed.
+```sh
+node examples/shared/mcp-search-only-verify.mjs --phase=active --allow-remote
+```
 
-Store the key in a private environment variable named MEKU_API_KEY. For example, in a local shell session:
+Follow the full guide to verify revocation of the same key and expiry of a
+second initially working key. Both lifecycle phases also check all three REST request routes. The operator can issue the expiry-test key with a
+5-minute lifetime; developer approvals still default to 30 days. No automatic
+retry, live work, mission, payment or operator function is allowed in this test.
 
-~~~sh
-export MEKU_MCP_URL="https://meku.farm/api/public/mcp"
-read -s MEKU_API_KEY
-export MEKU_API_KEY
-~~~
+The output contains only fixed check names, counts and nonsecret run metadata.
+It rejects unexpected search fields/content instead of silently stripping them.
+A validation error is not accepted as a permission denial. Do not post raw
+server responses if a check fails.
 
-The read -s command prompts for the value without echoing it. Use your operating system or secret manager to set persistent secrets securely; do not add them to shell startup files that are synced or shared.
+The public catalog URL is `https://meku.farm/api/public/mcp`; this script has no
+default URL and always rejects the known production hosts, even with `--allow-remote`. Other remote URLs still require explicit nonproduction approval. Protocol is `2025-06-18`,
+opaque bearer authentication on every JSON-RPC POST, JSON responses and no
+long-lived SSE/session tracking. A GET returns static metadata only.
 
-## 2. Make a read-only call
-
-Every JSON-RPC POST requires the bearer key, including discovery and tool calls. This query searches for the skill photography:
-
-~~~sh
-curl -sS -X POST "$MEKU_MCP_URL" \
-  -H "Authorization: Bearer $MEKU_API_KEY" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":1,
-    "method":"tools/call",
-    "params":{"name":"meku_search_humans","arguments":{"skills":["photography"]}}
-  }'
-~~~
-
-This call is read-only, but it uses the key's rate limit. Parse the JSON-RPC result and inspect any tool error fields; an HTTP success response alone does not mean a tool call succeeded.
-
-## 3. Read the response
-
-The server returns JSON. Tool results are carried in the MCP result content; inspect the response rather than assuming a fixed number of matching people. Search results are aggregate counts and do not disclose names or profiles.
-
-## Endpoint behavior
-
-- MCP URL: https://meku.farm/api/public/mcp
-- Transport advertised by MEKU: Streamable HTTP
-- Protocol version advertised by MEKU: 2025-06-18
-- Authentication: Authorization: Bearer <MEKU Agent API key> on each POST
-- A GET returns static connection metadata; it does not expose tools.
-
-See the [full tool reference](mcp-reference.md) and [security and consent guide](security-and-consent.md).
-
-## Before using the write tool
-
-meku_request_human submits an execution request for operator review. It is not a completed mission, an approval, or a payment. Do not call it in an unattended workflow without a person reviewing the proposed task, scope, requirements, and any budget. A human must choose whether to accept work, and payment is not made through this MCP tool.
+See the [MCP reference](mcp-reference.md). Search-only keys cannot submit, list or
+read requests, even by direct tool call or REST. Legacy access is documented
+separately. External developer confirmation is still required to claim an
+independent integration; a local mock or simulator run does not count.

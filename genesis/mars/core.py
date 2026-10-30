@@ -33,10 +33,11 @@ ROLES = {"crew-operator", "engineer", "researcher", "safety-officer", "independe
 
 
 class Settlement:
-    def __init__(self, path, name):
+    def __init__(self, path, name, allow_shared_thread=False):
         self.path, self.name = str(path), name
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.path)
+        # The web controller serializes all access with one lock when shared across HTTP threads.
+        self.db = sqlite3.connect(self.path, check_same_thread=not allow_shared_thread)
         os.chmod(self.path, 0o600)  # Private keys are stored locally in this prototype database.
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
@@ -179,6 +180,18 @@ class Settlement:
                 "requested": dict(requests), "all_fit": sum(requests.values()) <= available,
                 "shortfall": max(0, sum(requests.values()) - available),
                 "human_decision_required": True}
+
+    def inject_resource_loss(self, kind):
+        """Simulated external incident, not an approved allocation or real action."""
+        if kind not in UNITS:
+            raise Rejected("unknown resource")
+        with self.db:
+            before = self.db.execute("SELECT qty FROM stock WHERE kind=?", (kind,)).fetchone()[0]
+            after = min(before, RESERVE[kind])
+            self.db.execute("UPDATE stock SET qty=? WHERE kind=?", (after, kind))
+            self.record("simulated-shortage", {"kind": kind, "unit": UNITS[kind], "before": before,
+                                               "after": after, "lost": before - after, "simulated": True})
+        return {"before": before, "after": after, "lost": before - after}
 
     def prepare_transfer(self, transfer_id, recipient, kind, qty, task):
         if not recipient or recipient == self.name or not transfer_id:

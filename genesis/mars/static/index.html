@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FF6000">
+  <title>MEKU MARS — Genesis</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><div class="brand"><div><strong>MEKU MARS</strong><small>GENESIS · LOCAL SIMULATION</small></div></div><div class="top-status" id="top-status" aria-live="polite">Connecting…</div></header>
+  <main>
+    <section class="hero"><div><p class="eyebrow">THE COLLECTIVE INTELLIGENCE TEST</p><h1>Three settlements.<br><span>One shared record.</span></h1><p>Explore evidence, human decisions, resources and delayed messages in a local simulation. Every reading shown here is simulated.</p></div><div class="clock-panel"><div class="clock-label">SIMULATION STEP</div><div class="clock-number" id="clock">—</div><div id="clock-state">Paused</div></div></section>
+    <section class="controls panel" aria-label="Simulation controls"><div class="section-heading"><div><p class="eyebrow">CONTROL</p><h2>Simulation</h2></div><span class="tag">LOCAL ONLY</span></div><div class="button-row"><button data-command="start" class="primary">Start</button><button data-command="pause">Pause</button><button data-command="advance">Advance one step</button><button data-command="reset" class="danger">Reset simulation</button></div><p class="hint">Start advances one simulated step per second. Reset deletes only this demo's local settlement data. Human roles here are simulated labels, not signed-in identities.</p><p id="notice" class="notice" role="status" aria-live="polite"></p></section>
+    <section class="section"><div class="section-heading"><div><p class="eyebrow">LIVE SQLITE STATE</p><h2>Settlements</h2></div><span id="pending-count" class="tag">—</span></div><div id="settlements" class="settlement-grid"></div></section>
+    <section id="detail" class="section" aria-live="polite"></section>
+    <section class="section panel benchmark"><div class="section-heading"><div><p class="eyebrow">PAIRED EXPERIMENT</p><h2>Isolated vs cooperative</h2></div><button id="run-benchmark">Run five-seed benchmark</button></div><p class="hint">Real output from the Python benchmark. Steps are simulated, and the human choices are scripted for comparison.</p><div id="benchmark-results">Run the benchmark to see its results.</div></section>
+    <footer>MEKU MARS · EARTH IS OUR TESTING GROUND · NO REAL EQUIPMENT CONNECTED</footer>
+  </main>
+</body>
+</html>

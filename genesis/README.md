@@ -1,6 +1,6 @@
 # MEKU MARS — Genesis (local simulation)
 
-Three SQLite-backed settlements test evidence, human authority, local resources, and delayed knowledge exchange. Python 3.11+ and the free `cryptography` library. No hardware, external network, token, or production integration.
+Three SQLite-backed settlements test evidence, human authority, local resources, and delayed knowledge exchange. Phase 3 adds a local browser control center backed by those SQLite nodes. Python 3.11+ and the free `cryptography` library. No hardware, external service, token, or production integration.
 
 Run from this directory:
 
@@ -9,7 +9,14 @@ python3 -m pip install -r requirements.txt
 python3 -m unittest discover -s tests -v
 python3 -m mars demo --dir /tmp/meku-mars-demo
 python3 -m mars benchmark --seeds 1 2 3 4 5
+python3 -m mars.web --port 8765 --data ./genesis-state
 ```
+
+Open `http://127.0.0.1:8765/` on the computer running Python. The UI shows live resource stock, alerts, task evidence and human decisions, signed message envelopes, package review, and paired benchmark output. Start ticks once per second; pause and advance control the local clock. Incident buttons inject labeled simulated sensor failures, blackouts, and resource losses. Reset deletes only the three databases under `--data` and starts a new local scenario. Do not place real data in that directory.
+
+For an iPhone on the **same trusted Wi-Fi**, run on the computer with `--host 0.0.0.0`, then visit `http://COMPUTER_LAN_IP:8765/` on the phone. Replace `COMPUTER_LAN_IP` with that computer's actual local address; firewall settings may block it. This local server has **no login** and must not be exposed to the internet or an untrusted network. Nothing is hosted online by this project. The responsive layout and touch-sized controls are implemented, but device-specific iPhone testing is still needed.
+
+No official MEKU logo asset exists in this branch; the page uses plain text as its title.
 
 `demo` creates three separate databases. Reuse a fresh directory or pass `--dir` to inspect records after the run. `benchmark` prints JSON with per-seed isolated, cooperative, and poisoned-message cases. Each case starts with the same seed and incident schedule; the poisoned case is an explicit additional fault injection. Numbers are simulation steps, not real time. The model uses scripted human approvals for repeatability, not a claim that humans would approve these actions.
 

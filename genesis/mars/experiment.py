@@ -31,6 +31,7 @@ def trial(seed, mode, scenario):
                 pkt["content"]["method"] = "incorrect seal bypass"
                 pkt["hash"] = digest(pkt["content"])
                 pkt["id"] = digest([pkt["origin"], pkt["version"], pkt["hash"]])
+                pkt = h.sign_package(pkt)
             net.offline.add("ARES")
             net.send("HESTIA", "ARES", pkt, delay=2)
             net.tick(6)

@@ -125,6 +125,7 @@ class GenesisTests(unittest.TestCase):
         second["content"]["method"] = "other method"
         second["hash"] = digest(second["content"])
         second["id"] = digest([second["origin"], second["version"], second["hash"]])
+        second = self.h.sign_package(second)
         self.delivered(second)
         self.assertEqual(self.a.review_package(second["id"], "independent-verifier", True), "conflict-review")
 

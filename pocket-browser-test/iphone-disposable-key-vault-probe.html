@@ -1,0 +1,113 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"/>
+<title>MEKU Pocket — Stage 8 Disposable Signing Key Test</title>
+<style>:root{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#151515;background:#fff}body{padding:30px 18px 80px;margin:auto;max-width:520px}h1{font-size:29px;letter-spacing:-.5px;line-height:1.15}p{line-height:1.5;color:#434343}.logo{background:#ff6000;color:white;padding:7px 11px;border-radius:5px;display:inline-block;font-weight:800;letter-spacing:.3px} .alert{background:#fff6ed;border:1px solid #ffd1a9;padding:12px;border-radius:12px;margin:18px 0;font-weight:650;font-size:15px}.btn{width:100%;display:block;background:#f26624;color:white;font-weight:750;font-size:18px;border:0;border-radius:14px;padding:18px 14px;margin:13px 0;text-align:center}.btn.dark{background:#1c1c1c}.btn.light{background:#f1f1f1;color:#1c1c1c}.btn:disabled{opacity:.5}#status{font-weight:750;margin:18px 0;line-height:1.5}#lines>div{border-bottom:1px solid #dedede;padding:12px 0;color:#246339;line-height:1.35;font-weight:600}.muted{color:#777;font-size:14px}.address{font-weight:700;letter-spacing:.5px;font-size:17px}button{cursor:pointer}</style></head><body>
+<span class="logo">MEKU POCKET</span><h1>iPhone disposable signing-key test</h1>
+<div class="alert">NO REAL WALLET · NO RECOVERY WORDS · NO MONEY. A temporary key is made only for this browser test. Its test password is PUBLIC and offers NO real protection. NEVER send SOL or MEKU SI to it.</div>
+<p>This checks whether Safari can create a new Ed25519 keypair, save encrypted key bytes, reload, restore the same key, sign a fixed TEST message, and erase the test record. It makes no network requests.</p>
+<p id="status">Ready. No test started.</p><p class="address" id="address"></p>
+<button class="btn" id="start">1. Create throwaway key + encrypt</button>
+<button class="btn dark" id="reload">2. Reload this page</button>
+<button class="btn" id="verify">3. Restore + verify + erase</button>
+<button class="btn light" id="erase">Erase disposable test data now</button>
+<div id="lines" role="status" aria-live="polite"></div>
+<p class="muted">Passing will NOT prove real wallet safety, backup words, cross-device recovery, website code safety, or Mainnet transactions. This test intentionally stores a temporary key using a public password; never use it with funds.</p>
+<script>
+/* exact inlined disposable crypto test module */
+/**
+ * MEKU Pocket Stage 8: THROWAWAY Ed25519 browser vault diagnostics ONLY.
+ * NO BIP39, no Solana message/transaction signing, no use with real funds.
+ * This module deliberately signs ONLY one fixed diagnostics string.
+ * A public, hard-coded password is used exclusively for the disposable probe;
+ * it provides ZERO confidentiality against anyone with page source access.
+ * Actual wallet release requires reviewed wallet libraries, real password UX,
+ * a secure origin/code audit, 12-word backup and independent device recovery.
+ */
+const DISPOSABLE_STAGE8_CONTEXT = 'MEKU_POCKET_PUBLIC_DISPOSABLE_ED25519_V1_NO_FUNDS';
+const DISPOSABLE_STAGE8_PASSWORD = 'MEKU-STAGE8-PUBLIC-PASSWORD-NOT-SECURE-NOT-A-WALLET';
+const DISPOSABLE_STAGE8_ITERATIONS = 600_000;
+const DISPOSABLE_STAGE8_PROBE = 'MEKU_POCKET_STAGE8_TEST_SIGNATURE_ONLY_NEVER_A_SOLANA_TRANSACTION';
+const alphabet='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const enc=new TextEncoder();
+const isPlain=o=>o!==null&&typeof o==='object'&&Object.getPrototypeOf(o)===Object.prototype;
+const keys=(o,k)=>isPlain(o)&&Object.keys(o).sort().join(',')===k.slice().sort().join(',');
+function fail(code){throw new Error(code)}
+function cryptoRequired(c){if(!c?.subtle||typeof c.getRandomValues!=='function')fail('WEB_CRYPTO_REQUIRED');return c}
+function encode58(bytes){if(!(bytes instanceof Uint8Array)||bytes.length!==32)fail('PUBKEY_INVALID');let n=0n;for(const b of bytes)n=n*256n+BigInt(b);let s='';while(n>0n){s=alphabet[Number(n%58n)]+s;n/=58n}for(const b of bytes){if(b!==0)break;s='1'+s}return s}
+function b64(x){let b='';for(const c of x)b+=String.fromCharCode(c);return btoa(b).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function unb64(s,exactLen){if(typeof s!=='string'||s.length>2000||!/^[-_a-zA-Z0-9]+$/.test(s))fail('RECORD_INVALID');let raw;try{raw=atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4))}catch{fail('RECORD_INVALID')};const a=Uint8Array.from(raw,x=>x.charCodeAt(0));if((exactLen!=null&&a.length!==exactLen)||b64(a)!==s)fail('RECORD_INVALID');return a}
+function validateRecord(rec){
+ if(!keys(rec,['v','purpose','address','publicRaw','salt','iv','encryptedPkcs8'])||rec.v!==1||rec.purpose!==DISPOSABLE_STAGE8_CONTEXT)fail('RECORD_INVALID');
+ const pub=unb64(rec.publicRaw,32),salt=unb64(rec.salt,16),iv=unb64(rec.iv,12),ct=unb64(rec.encryptedPkcs8);
+ if(ct.length<60||ct.length>500||rec.address!==encode58(pub))fail('RECORD_INVALID');
+ return {pub,salt,iv,ct};
+}
+async function passwordKey(c,password,salt){
+ if(typeof password!=='string'||password.length<14||password.length>256)fail('PASSWORD_INVALID');
+ const raw=enc.encode(password);
+ const input=await c.subtle.importKey('raw',raw,'PBKDF2',false,['deriveKey']);raw.fill(0);
+ return c.subtle.deriveKey({name:'PBKDF2',salt,hash:'SHA-256',iterations:DISPOSABLE_STAGE8_ITERATIONS},input,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+function aad(address,publicRaw){return enc.encode(`${DISPOSABLE_STAGE8_CONTEXT}\n${address}\n${publicRaw}`)}
+/** Generate a real but disposable browser Ed25519 keypair, encrypted at rest. */
+async function createDisposableEd25519Record(c=globalThis.crypto,password=DISPOSABLE_STAGE8_PASSWORD){
+ cryptoRequired(c);
+ const pair=await c.subtle.generateKey({name:'Ed25519'},true,['sign','verify']);
+ const pub=new Uint8Array(await c.subtle.exportKey('raw',pair.publicKey));
+ const address=encode58(pub),publicRaw=b64(pub);
+ const pkcs8=new Uint8Array(await c.subtle.exportKey('pkcs8',pair.privateKey));
+ const salt=c.getRandomValues(new Uint8Array(16)),iv=c.getRandomValues(new Uint8Array(12));
+ try{
+   const key=await passwordKey(c,password,salt);
+   const ct=new Uint8Array(await c.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad(address,publicRaw),tagLength:128},key,pkcs8));
+   const record={v:1,purpose:DISPOSABLE_STAGE8_CONTEXT,address,publicRaw,salt:b64(salt),iv:b64(iv),encryptedPkcs8:b64(ct)};
+   validateRecord(record);
+   return Object.freeze({record:Object.freeze(record),address,previewAddress:`${address.slice(0,7)}…${address.slice(-7)}`,testOnly:true});
+ }finally{pkcs8.fill(0)}
+}
+/** Restores the disposable signing capability, restricted to a fixed probe. */
+async function restoreDisposableEd25519Record(rec,c=globalThis.crypto,password=DISPOSABLE_STAGE8_PASSWORD){
+ cryptoRequired(c);
+ const {pub,salt,iv,ct}=validateRecord(rec);
+ const key=await passwordKey(c,password,salt);
+ let clear;
+ try{clear=new Uint8Array(await c.subtle.decrypt({name:'AES-GCM',iv,additionalData:aad(rec.address,rec.publicRaw),tagLength:128},key,ct))}
+ catch{fail('DECRYPTION_REJECTED')}
+ let privateKey;
+ try{privateKey=await c.subtle.importKey('pkcs8',clear,{name:'Ed25519'},false,['sign'])}
+ catch{fail('KEY_IMPORT_REJECTED')}
+ finally{clear.fill(0)}
+ let locked=false;
+ async function testSignature(){
+   if(locked)fail('LOCKED');
+   const msg=enc.encode(DISPOSABLE_STAGE8_PROBE);
+   const sig=new Uint8Array(await c.subtle.sign({name:'Ed25519'},privateKey,msg));
+   const publicKey=await c.subtle.importKey('raw',pub,{name:'Ed25519'},false,['verify']);
+   const correct=await c.subtle.verify({name:'Ed25519'},publicKey,sig,msg);
+   const altered=await c.subtle.verify({name:'Ed25519'},publicKey,sig,enc.encode(DISPOSABLE_STAGE8_PROBE+'-TAMPERED'));
+   if(!correct||altered||sig.length!==64)fail('SIGNER_ADDRESS_MISMATCH');
+   return Object.freeze({valid:true,tamperDenied:true,address:rec.address,testOnly:true});
+ }
+ // No arbitrary sign(message) method; cannot be used as a Solana wallet API.
+ return Object.freeze({address:rec.address,testOnly:true,testSignature,lock(){locked=true}});
+}
+function isDisposableStage8Record(rec){try{validateRecord(rec);return true}catch{return false}}
+
+/* standalone Safari test runner */
+const DB='meku-pocket-stage8-throwaway-20261103-v1',STORE='disposable',RUN='MEKU_STAGE8_RELOAD_REQUIRED';
+const boot='session-'+Array.from(crypto.getRandomValues(new Uint8Array(12)),x=>x.toString(16).padStart(2,'0')).join('');
+const $=s=>document.getElementById(s),lines=$('lines'),status=$('status');
+function out(x){const d=document.createElement('div');d.textContent=x;lines.append(d)}
+function tell(x){status.textContent=x}
+function clear(){lines.replaceChildren()}
+function openDB(){return new Promise((resolve,reject)=>{const req=indexedDB.open(DB,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(STORE))req.result.createObjectStore(STORE)};req.onerror=()=>reject(Error('IndexedDB open failed'));req.onblocked=()=>reject(Error('IndexedDB blocked'));req.onsuccess=()=>resolve(req.result)})}
+async function save(rec){const db=await openDB();try{await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(rec,'only');tx.oncomplete=resolve;tx.onerror=()=>reject(Error('IndexedDB save error'));tx.onabort=()=>reject(Error('IndexedDB save aborted'))})}finally{db.close()}}
+async function load(){const db=await openDB();try{return await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readonly'),req=tx.objectStore(STORE).get('only');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(Error('IndexedDB read failed'))})}finally{db.close()}}
+async function erase(){const db=await openDB();db.close();return new Promise((resolve,reject)=>{const req=indexedDB.deleteDatabase(DB);req.onsuccess=resolve;req.onerror=()=>reject(Error('IndexedDB delete failed'));req.onblocked=()=>reject(Error('Close other test tabs before erase'))})}
+async function use(btn,fn){btn.disabled=true;try{await fn()}catch(e){tell('FAIL — '+String(e?.message||e));out('FAIL — '+String(e?.message||e));out('Use Erase test data now if needed. No real money was involved.')}finally{btn.disabled=false}}
+$('start').onclick=()=>use($('start'),async()=>{clear();if(!isSecureContext)throw Error('HTTPS required');if(await load())throw Error('Existing disposable test found. Erase it before restarting.');tell('Creating disposable key…');const created=await createDisposableEd25519Record(crypto);await save(created.record);sessionStorage.setItem(RUN,boot);$('address').textContent='Unfunded test address: '+created.previewAddress;out('PASS — Temporary Ed25519 keypair generated');out('PASS — Encrypted test key saved to IndexedDB');tell('Step 1 passed. Now tap Step 2 to reload this page.')});
+$('reload').onclick=()=>location.reload();
+$('verify').onclick=()=>use($('verify'),async()=>{clear();const prior=sessionStorage.getItem(RUN);if(!prior||prior===boot)throw Error('You must create the disposable key, then reload this page before verifying.');let rec=await load();if(!rec)throw Error('Disposable key record missing after reload.');tell('Checking restored disposable key…');const result=await restoreDisposableEd25519Record(rec,crypto);const sig=await result.testSignature();if(!sig.valid||!sig.tamperDenied||sig.address!==rec.address)throw Error('Restored test key failed verification');out('PASS — Same newly generated public address after reload');out('PASS — Encrypted private test key restored');out('PASS — Ed25519 test signature verified; changed message rejected');result.lock();let locked=false;try{await result.testSignature()}catch{locked=true}if(!locked)throw Error('Lock did not block test signing');out('PASS — Locked test key cannot sign again');let wrongDenied=false;try{await restoreDisposableEd25519Record(rec,crypto,'THIS-IS-DEFINITELY-THE-WRONG-PASSWORD')}catch{wrongDenied=true}if(!wrongDenied)throw Error('Wrong password was accepted');out('PASS — Wrong password rejected');rec={...rec,encryptedPkcs8:(rec.encryptedPkcs8[0]==='A'?'B':'A')+rec.encryptedPkcs8.slice(1)};let tamperDenied=false;try{await restoreDisposableEd25519Record(rec,crypto)}catch{tamperDenied=true}if(!tamperDenied)throw Error('Changed ciphertext accepted');out('PASS — Changed encrypted test key rejected');await erase();sessionStorage.removeItem(RUN);const check=await load();if(check)throw Error('Disposable key record was not erased');await erase();out('PASS — Temporary key database erased');$('address').textContent='';tell('ALL 7 TESTS PASSED. No real wallet or recovery words were used. Send screenshot.')});
+$('erase').onclick=()=>use($('erase'),async()=>{await erase();sessionStorage.removeItem(RUN);$('address').textContent='';clear();out('Disposable test database erased.');tell('Test data erased. No real wallet was created.')});
+(async()=>{try{const rec=await load();if(rec){$('address').textContent='Saved throwaway test address: '+rec.address.slice(0,7)+'…'+rec.address.slice(-7);tell('Disposable test data found. Tap Step 3 only after you used Step 2 to reload.')}}catch(e){tell('Browser storage may be blocked: '+e.message)}})();
+</script></body></html>

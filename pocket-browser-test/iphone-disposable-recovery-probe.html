@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>MEKU Pocket — Disposable iPhone Recovery Check</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,sans-serif;color:#161616;background:#fff}
+body{margin:0 auto;max-width:640px;padding:max(24px,env(safe-area-inset-top)) 20px max(24px,env(safe-area-inset-bottom))}
+h1{font-size:25px;margin:12px 0}p{line-height:1.5;color:#444}small{color:#666}
+mark{color:white;background:#ff6000;padding:5px 9px;border-radius:6px}
+strong{font-weight:750}.warn{padding:14px;border:1px solid #ddd;border-radius:12px}
+button{display:block;width:100%;border-radius:12px;border:0;background:#ff6000;color:white;padding:15px;margin:10px 0;font-size:16px;font-weight:700;min-height:48px}
+button.alt{background:#222}button.outline{color:#222;background:#f5f5f5;border:1px solid #ddd}
+button:disabled{opacity:.5}.result{padding:9px 0;border-bottom:1px solid #eee;overflow-wrap:anywhere}
+.pass{color:#166235}.fail{color:#a10e0e}#status{font-weight:700;color:#262626}
+</style></head><body>
+<p><mark>MEKU POCKET</mark></p>
+<h1>iPhone recovery check</h1>
+<p class="warn"><strong>TEST ONLY — NOT A WALLET.</strong> This page uses a well-known public test phrase built into its code. Never send money to its test address. It asks for NO passwords, recovery words, or personal details. No server requests.</p>
+<p><strong>Test address (not yours):</strong><br><small>HAgk14…T3DKpqk</small></p>
+<p id="status">Ready. Start with Step 1.</p>
+<button id="start" type="button">1. Start disposable recovery test</button>
+<button id="reload" type="button" class="alt">2. Reload this page</button>
+<button id="restore" type="button">3. Verify recovery + erase</button>
+<button id="erase" type="button" class="outline">Erase test data now</button>
+<div id="results" aria-live="polite"></div>
+<p><small>Passing proves browser test functions only. It does NOT test recovery of a real secret, private key security, a fresh-device backup, the live Pocket app, or Mainnet payments. The script is intentionally single-file for this test, not a release-ready wallet.</small></p>
+<script type="module">
+/**
+ * MEKU Pocket Stage 6: PUBLIC FIXTURE ONLY. NOT WALLET CODE.
+ * Never pass any real mnemonic/private key to these functions.
+ * Purpose: test iPhone Safari's deterministic PBKDF2-SHA512, SLIP-0010 Ed25519,
+ * known public-address restoration, and disposable AES-GCM IndexedDB data roundtrip.
+ * The phrase below is a *widely published* BIP39 test vector, NOT PRIVATE.
+ * This hand-coded derivation is diagnostic only, NOT a reviewed wallet library.
+ */
+export const PUBLIC_TEST_MNEMONIC = `${'abandon '.repeat(11)}about`;
+export const PUBLIC_TEST_ADDRESS = 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk';
+export const PUBLIC_TEST_PATH = "m/44'/501'/0'/0'";
+export const TEST_ONLY_NOTICE = 'PUBLIC TEST PHRASE — NEVER SEND FUNDS TO THIS ADDRESS';
+const expectedPublicHex = 'f036276246a75b9de3349ed42b15e232f6518fc20f5fcd4f1d64e81f9bd258f7';
+const alphabet='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const enc=new TextEncoder();
+const dec=new TextDecoder();
+const privateDerPrefix=Uint8Array.from([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+const readonlyMarker='MEKU-POCKET-DISPOSABLE-BROWSER-PROBE-V1';
+const disposablePassword='MEKU-TEST-ONLY-NOT-A-REAL-PASSWORD';
+export const DISPOSABLE_RECORD_VERSION=1;
+export function toBase58(bytes){
+ if(!(bytes instanceof Uint8Array)||bytes.length===0)throw Error('BAD_BYTES');
+ let n=0n; for(const b of bytes)n=(n<<8n)|BigInt(b);
+ let s='';while(n>0n){s=alphabet[Number(n%58n)]+s;n/=58n;}
+ for(const b of bytes){if(b!==0)break;s='1'+s;}return s;
+}
+function bytesToHex(v){return Array.from(v,x=>x.toString(16).padStart(2,'0')).join('');}
+function fromB64url(x){if(typeof x!=='string'||!/^[a-zA-Z0-9_-]+$/.test(x))throw Error('BAD_RECORD');const b=atob(x.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-x.length%4)%4));return Uint8Array.from(b,c=>c.charCodeAt(0));}
+function b64url(x){let s='';for(const b of x)s+=String.fromCharCode(b);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function cryptoRequired(c){if(!c?.subtle||!c?.getRandomValues)throw Error('WEB_CRYPTO_MISSING');return c;}
+async function signHmac(c,keyRaw,data){const k=await c.subtle.importKey('raw',keyRaw,{name:'HMAC',hash:'SHA-512'},false,['sign']);return new Uint8Array(await c.subtle.sign('HMAC',k,data));}
+/** PUBLIC fixture, deterministic crypto API check; NEVER a production signer. */
+export async function derivePublicFixture(c=globalThis.crypto){
+ cryptoRequired(c);
+ const base=await c.subtle.importKey('raw',enc.encode(PUBLIC_TEST_MNEMONIC),'PBKDF2',false,['deriveBits']);
+ const bipSeed=new Uint8Array(await c.subtle.deriveBits({name:'PBKDF2',hash:'SHA-512',salt:enc.encode('mnemonic'),iterations:2048},base,512));
+ let result=await signHmac(c,enc.encode('ed25519 seed'),bipSeed);
+ bipSeed.fill(0);
+ let key=result.slice(0,32),chain=result.slice(32);
+ result.fill(0);
+ for(const index of [44,501,0,0]){
+   const data=new Uint8Array(37);data.set(key,1);new DataView(data.buffer).setUint32(33,0x80000000+index,false);
+   const out=await signHmac(c,chain,data);
+   key.fill(0);chain.fill(0);data.fill(0);key=out.slice(0,32);chain=out.slice(32);out.fill(0);
+ }
+ chain.fill(0);
+ const der=new Uint8Array(privateDerPrefix.length+32);der.set(privateDerPrefix);der.set(key,privateDerPrefix.length);
+ const privateKey=await c.subtle.importKey('pkcs8',der,{name:'Ed25519'},true,['sign']);
+ key.fill(0);der.fill(0);
+ // EXTRACTABLE only because the key is derived from a PUBLIC, unsafe test phrase.
+ // Real wallets must never copy this technique without independent security review.
+ const jwk=await c.subtle.exportKey('jwk',privateKey);
+ if(jwk.crv!=='Ed25519'||jwk.kty!=='OKP'||!jwk.x)throw Error('NO_PUBLIC_KEY');
+ const publicBytes=fromB64url(jwk.x);
+ const address=toBase58(publicBytes);
+ const publicMatches=address===PUBLIC_TEST_ADDRESS&&bytesToHex(publicBytes)===expectedPublicHex;
+ const publicKey=await c.subtle.importKey('raw',publicBytes,{name:'Ed25519'},false,['verify']);
+ const msg=enc.encode('MEKU-PUBLIC-TEST-ONLY-NO-FUNDS');
+ const sig=await c.subtle.sign('Ed25519',privateKey,msg);
+ const signed=await c.subtle.verify('Ed25519',publicKey,sig,msg);
+ const altered=await c.subtle.verify('Ed25519',publicKey,sig,enc.encode('ALTERED'));
+ publicBytes.fill(0);
+ return Object.freeze({address,publicMatches,signed:!!signed&&!altered,path:PUBLIC_TEST_PATH,publicTestOnly:true});
+}
+async function aesKey(c,password,salt){const b=await c.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);return c.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt,iterations:120000},b,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+function validateRecord(v){
+ if(!v||Object.getPrototypeOf(v)!==Object.prototype||Object.keys(v).sort().join(',')!=='address,ciphertext,iv,salt,version'||v.version!==DISPOSABLE_RECORD_VERSION||v.address!==PUBLIC_TEST_ADDRESS)throw Error('BAD_RECORD');
+ for(const [name,length] of [['iv',12],['salt',16]])if(fromB64url(v[name]).length!==length)throw Error('BAD_RECORD');
+ if(fromB64url(v.ciphertext).length<17)throw Error('BAD_RECORD');
+}
+export async function sealDisposableFixture(c=globalThis.crypto){
+ cryptoRequired(c);
+ const salt=c.getRandomValues(new Uint8Array(16)),iv=c.getRandomValues(new Uint8Array(12));
+ const raw=c.getRandomValues(new Uint8Array(32)); // purely throwaway, NOT a wallet key
+ const hex=bytesToHex(raw);
+ const data=enc.encode(readonlyMarker+'|'+hex);
+ const key=await aesKey(c,disposablePassword,salt);
+ const ciphertext=new Uint8Array(await c.subtle.encrypt({name:'AES-GCM',iv,additionalData:enc.encode(readonlyMarker+'|'+PUBLIC_TEST_ADDRESS)},key,data));
+ raw.fill(0);data.fill(0);
+ return Object.freeze({version:DISPOSABLE_RECORD_VERSION,address:PUBLIC_TEST_ADDRESS,salt:b64url(salt),iv:b64url(iv),ciphertext:b64url(ciphertext)});
+}
+export async function openDisposableFixture(record,c=globalThis.crypto,password=disposablePassword){
+ cryptoRequired(c);validateRecord(record);
+ const key=await aesKey(c,password,fromB64url(record.salt));
+ let data;try{data=new Uint8Array(await c.subtle.decrypt({name:'AES-GCM',iv:fromB64url(record.iv),additionalData:enc.encode(readonlyMarker+'|'+PUBLIC_TEST_ADDRESS)},key,fromB64url(record.ciphertext)));}
+ catch{throw Error('DECRYPTION_REJECTED');}
+ const text=dec.decode(data);data.fill(0);
+ if(!new RegExp('^'+readonlyMarker.replace(/[-]/g,'\\-')+'\\|[0-9a-f]{64}$').test(text))throw Error('RECORD_CONTENT_MISMATCH');
+ return Object.freeze({verified:true,publicTestOnly:true,address:PUBLIC_TEST_ADDRESS});
+}
+export async function testWrongPasswordAndTamper(record,c=globalThis.crypto){
+ let badPasswordDenied=false,changedCipherDenied=false;
+ try{await openDisposableFixture(record,c,'PURPOSELY-WRONG-DISPOSABLE-PASSWORD')}catch{badPasswordDenied=true;}
+ const bad={...record,ciphertext:(record.ciphertext[0]==='A'?'B':'A')+record.ciphertext.slice(1)};
+ try{await openDisposableFixture(bad,c)}catch{changedCipherDenied=true;}
+ return Object.freeze({badPasswordDenied,changedCipherDenied});
+}
+
+/* MEKU Pocket public-fixture browser probe UI. NO REAL WALLETS/SECRETS. */
+const start=document.getElementById('start');
+const reload=document.getElementById('reload');
+const restore=document.getElementById('restore');
+const erase=document.getElementById('erase');
+const report=document.getElementById('results');
+const status=document.getElementById('status');
+const DB='meku-pocket-public-fixture-20261103-v1';
+const STORE='temporary-record';
+const KEY='only-public-test';
+const SESSION='meku-pocket-public-fixture-reload-v1';
+let busy=false;
+function add(label,pass,details=''){
+  const node=document.createElement('div');node.className='result '+(pass?'pass':'fail');
+  node.textContent=(pass?'PASS':'FAIL')+' — '+label+(details?' · '+details:'');report.append(node);
+}
+function say(s){status.textContent=s;}
+function enabled(){start.disabled=busy;reload.disabled=busy;restore.disabled=busy;erase.disabled=busy;}
+function dbOpen(){return new Promise((resolve,reject)=>{
+ const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE);
+ r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error??Error('DB_OPEN'));
+ r.onblocked=()=>reject(Error('DB_BLOCKED'));
+});}
+async function dbWrite(value){const db=await dbOpen();try{await new Promise((resolve,reject)=>{
+ const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(value,KEY);
+ t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error??Error('ABORT'));
+});}finally{db.close();}}
+async function dbRead(){const db=await dbOpen();try{return await new Promise((resolve,reject)=>{
+ const t=db.transaction(STORE,'readonly');const r=t.objectStore(STORE).get(KEY);
+ r.onsuccess=()=>resolve(r.result??null);r.onerror=()=>reject(r.error);
+});}finally{db.close();}}
+async function dbErase(){const db=await dbOpen();try{await new Promise((resolve,reject)=>{
+ const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(KEY);
+ t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error??Error('ABORT'));
+});}finally{db.close();}}
+async function action(f){if(busy)return;busy=true;enabled();report.replaceChildren();try{await f();}catch(e){add('Test stopped',false,e?.name||'browser error');say('One or more checks failed. Send the screenshot.');}finally{busy=false;enabled();}}
+start.addEventListener('click',()=>action(async()=>{
+ if(location.protocol!=='https:'||!isSecureContext)throw Error('HTTPS_REQUIRED');
+ add('HTTPS secure page',true);
+ say('Checking public recovery words using browser crypto…');
+ const fixture=await derivePublicFixture(crypto);
+ if(!fixture.publicMatches||!fixture.signed)throw Error('ADDRESS_OR_SIGNATURE_MISMATCH');
+ add('Published Solana test words produce expected address',true);
+ add('Ed25519 signed sample message correctly',true);
+ say('Encrypting and saving disposable test data…');
+ const encrypted=await sealDisposableFixture(crypto);
+ await dbWrite(encrypted);
+ const check=await dbRead();if(JSON.stringify(check)!==JSON.stringify(encrypted))throw Error('STORAGE_MISMATCH');
+ add('Encrypted disposable test data saved in browser',true);
+ sessionStorage.setItem(SESSION,'pending');
+ add('Step 1 complete',true,'Tap RELOAD, then VERIFY');
+ say('Step 1 complete. Now tap Reload this page.');
+}));
+reload.addEventListener('click',()=>{if(!busy)location.reload();});
+restore.addEventListener('click',()=>action(async()=>{
+ if(sessionStorage.getItem(SESSION)!=='pending')throw Error('RUN_STEP_1_FIRST');
+ if(!performance.getEntriesByType('navigation').some(x=>x.type==='reload'))throw Error('RELOAD_REQUIRED');
+ say('Opening saved disposable test data…');
+ const record=await dbRead();if(!record)throw Error('TEST_DATA_NOT_FOUND');
+ const fixture=await derivePublicFixture(crypto);
+ if(!fixture.publicMatches||fixture.address!==record.address)throw Error('RECOVERY_ADDRESS_MISMATCH');
+ add('Same public Solana address after page reload',true);
+ const decoded=await openDisposableFixture(record,crypto);
+ if(!decoded.verified)throw Error('DECRYPTION_FAILED');
+ add('Encrypted test data restored after reload',true);
+ const rejected=await testWrongPasswordAndTamper(record,crypto);
+ if(!rejected.badPasswordDenied||!rejected.changedCipherDenied)throw Error('TAMPER_NOT_BLOCKED');
+ add('Wrong password rejected',true);
+ add('Altered encrypted data rejected',true);
+ await dbErase();if(await dbRead()!==null)throw Error('ERASE_NOT_CONFIRMED');
+ sessionStorage.removeItem(SESSION);
+ add('Disposable browser test data erased',true);
+ add('Recovery probe finished',true,'No wallet was created');
+ say('ALL TESTS PASSED. No wallet was created. Send screenshot.');
+}));
+erase.addEventListener('click',()=>action(async()=>{
+ await dbErase();sessionStorage.removeItem(SESSION);
+ if(await dbRead()!==null)throw Error('ERASE_NOT_CONFIRMED');
+ add('Disposable test data erased',true);
+ say('Cleared. No wallet was created.');
+}));
+if(sessionStorage.getItem(SESSION)==='pending'&&performance.getEntriesByType('navigation').some(x=>x.type==='reload'))say('Page reloaded. Tap Verify recovery + erase to finish.');
+
+</script></body></html>

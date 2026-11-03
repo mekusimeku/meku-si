@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#100c08"><title>MEKU CORE — Digital Reactor Laboratory</title>
+<meta name="description" content="An offline, bounded MEKU CORE research lab: ACGT software memory, deduplicated work, and human-controlled scheduling.">
+<style>
+:root{color-scheme:dark;--orange:#ff6000;--ink:#100d0a;--paper:#f8f0e7;--muted:#ac9d8e;--line:#3b2d25;--panel:#1b1612}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(ellipse 65% 40% at 50% -10%,#632606 0,transparent 80%),var(--ink);color:var(--paper);min-height:100vh}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid #ffa35a;outline-offset:3px}button:disabled{opacity:.42;cursor:not-allowed}
+.shell{width:min(1180px,100%);margin:auto;padding:23px clamp(18px,4vw,52px) 52px}.top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:17px;border-bottom:1px solid var(--line)}.identity{display:flex;align-items:center;gap:12px}.emblem{height:43px;width:43px;min-width:43px;flex-shrink:0;display:grid;place-items:center;overflow:hidden;background:#ff6000;border-radius:10px;box-shadow:0 0 14px #ff600066}.emblem img{display:block;width:100%;height:100%;object-fit:contain;border:0;border-radius:0;transform:none}.brand{font-weight:860;letter-spacing:.1em}.top-note{color:#f2ab76;font-size:11px;font-family:ui-monospace,monospace;text-align:right;line-height:1.6}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,1.06fr);gap:25px;align-items:center;padding-top:43px}.kicker{letter-spacing:.23em;text-transform:uppercase;color:#ff8a43;font-size:11px;font-weight:850}.title{font-size:clamp(49px,7.2vw,101px);line-height:.9;letter-spacing:-.07em;margin:14px 0 20px;font-weight:890}.title span{color:var(--orange)}.sub{font-size:clamp(15px,1.7vw,18px);color:#d2c3b4;line-height:1.55;max-width:540px;margin:0}.reactor-panel{height:360px;display:grid;place-items:center;position:relative;overflow:hidden}.halo{width:min(84%,330px);aspect-ratio:1;border:1px solid #8c441f;border-radius:50%;position:absolute;box-shadow:0 0 70px #ff600025,inset 0 0 65px #ff600022}.halo::before,.halo::after{content:"";position:absolute;inset:13%;border-radius:50%;border:1px dashed #bd5c2e;animation:turn 24s linear infinite}.halo::after{inset:3%;border:1px dashed #83401e;animation-direction:reverse;animation-duration:30s}.core{position:relative;width:152px;height:152px;display:grid;place-items:center;border-radius:50%;background:radial-gradient(circle at 40% 35%,#ffddab 0,#ffac41 12%,#ff6000 43%,#6c1c00 69%,#1b0d03 73%);box-shadow:0 0 22px #ff7b2d,0 0 85px #ff60005c,inset 0 0 22px #ffc186;transition:filter .3s}.core::before{content:"";position:absolute;inset:-31px;border:2px solid #ff6b1b;border-radius:50%;border-left-color:transparent;border-bottom-color:transparent;animation:turn 8s linear infinite}.core::after{content:"";position:absolute;inset:-47px;border:1px solid #ff601b66;border-radius:50%;border-right-color:transparent;animation:turn 14s linear infinite reverse}.reactor-panel.live .core{animation:breathe 2s ease-in-out infinite}.core strong{position:relative;color:white;font-size:24px;letter-spacing:.15em;text-shadow:0 1px 11px #703211}.field-note{position:absolute;bottom:13px;font-size:10px;letter-spacing:.16em;color:#c18b64;text-transform:uppercase}.north{position:absolute;top:9px;color:#f3b38b;font-size:11px;letter-spacing:.2em}
+@keyframes turn{to{transform:rotate(360deg)}}@keyframes breathe{50%{filter:brightness(1.3)}}
+.controls{display:flex;flex-wrap:wrap;gap:9px;margin:28px 0 0}.button{border:1px solid #74503a;background:#20150e;color:#fff;padding:12px 17px;border-radius:12px;font-weight:760;font-size:13px;min-height:45px}.button:hover:not(:disabled){border-color:#ff6000}.button.primary{background:var(--orange);border-color:var(--orange);color:#1b0b02}.button.stop{border-color:#ad4841;color:#ff9d95}.button.small{padding:9px 13px;font-size:12px;min-height:38px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:34px 0 14px}.bar h2{font-size:18px;letter-spacing:.02em;margin:0}.state{display:flex;align-items:center;gap:7px;color:#e2bc96;font-size:11px;font-family:ui-monospace,monospace}.led{width:9px;height:9px;background:#755743;border-radius:50%}.led.on{background:#ff6000;box-shadow:0 0 11px #ff6000}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{background:linear-gradient(145deg,#241a13,#15110e);border:1px solid var(--line);border-radius:17px;padding:18px}.metric .tag{font-size:10px;color:#bb9c83;letter-spacing:.13em;text-transform:uppercase;min-height:27px}.metric .number{font-size:clamp(27px,3.7vw,45px);font-weight:850;letter-spacing:-.06em;margin:5px 0}.metric .unit{font-size:11px;color:#d3a078}
+.lower{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:15px}.panel{background:linear-gradient(160deg,#211711,#16120f);border:1px solid var(--line);border-radius:18px;padding:22px;min-width:0}.panel h3{margin:0;font-size:16px}.panel p{line-height:1.55;color:#bca995;font-size:13px}.sequence{background:#110d0a;padding:14px;border-radius:10px;border:1px solid #3d2717;font:11px/1.8 ui-monospace,monospace;color:#ff954d;overflow-wrap:anywhere;min-height:77px;max-height:125px;overflow:auto}.dna-label{font-size:10px;letter-spacing:.12em;color:#edbc93;margin:16px 0 8px;text-transform:uppercase}.two{display:flex;gap:8px;flex-wrap:wrap}.input{flex:1;min-width:150px;padding:12px;border:1px solid #68452e;border-radius:10px;background:#100c0a;color:#fff}.log{list-style:none;margin:15px 0 0;padding:0;max-height:230px;overflow:auto}.log li{display:grid;grid-template-columns:80px 1fr;gap:8px;border-top:1px solid #392920;padding:11px 0;color:#c7b3a3;font-size:12px}.log b{color:#ff8d49;font:700 10px ui-monospace,monospace}.tiny{font-size:11px;color:#b99b83;margin:14px 0 0;line-height:1.6}.foot{border-top:1px solid var(--line);color:#a99483;padding:20px 0;margin-top:25px;font-size:11px;line-height:1.65}.foot strong{color:#e7bf9c}
+@media(max-width:800px){.hero{grid-template-columns:1fr;gap:0;padding-top:31px}.reactor-panel{height:300px}.lower{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.title{font-size:62px}.top-note{max-width:160px}}@media(max-width:360px){.title{font-size:52px}.metrics{gap:8px}.metric{padding:12px}.button{padding:12px 13px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body><div class="shell">
+  <header class="top"><div class="identity"><div class="emblem" aria-hidden="true"><img src="data:image/webp;base64,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" alt="" aria-hidden="true"></div><span class="brand">MEKU SI <span style="color:#ff6000">/ CORE</span></span></div><div class="top-note">ISOLATED RESEARCH BUILD v0.1<br>LOCAL ONLY · NO LIVE EXECUTION</div></header>
+  <section class="hero" aria-label="MEKU CORE reactor">
+    <div><div class="kicker">A NEW COMPUTATIONAL SUBSTRATE</div><h1 class="title">MEKU<br><span>CORE.</span></h1><p class="sub">Implosion turns repeated inputs into verified DNA-style memory. Explosion releases reusable results through a bounded digital work loop. Time is the fourth coordinate.</p>
+    <div class="controls"><button class="button primary" id="start">START REACTOR</button><button class="button stop" id="stop">STOP</button><button class="button" id="seed">LOAD TEST SIGNALS</button><button class="button" id="tick">SINGLE PULSE</button></div></div>
+    <div class="reactor-panel" id="reactor"><div class="north">T · MEMORY · COMPUTE · CONTROL</div><div class="halo"></div><div class="core"><strong>CORE</strong></div><div class="field-note">VERIFIED REUSE / RECOVERED CAPACITY</div></div>
+  </section>
+  <div class="bar"><h2>Live reactor state</h2><span class="state"><span class="led" id="led"></span><span id="state">STOPPED</span></span></div>
+  <section class="metrics" aria-label="reactor metrics">
+    <div class="metric"><div class="tag">COMPUTATIONS RUN</div><div class="number" id="computed">0</div><div class="unit">real local work calls</div></div>
+    <div class="metric"><div class="tag">RECOVERED CAPACITY</div><div class="number" id="reused">0</div><div class="unit">duplicate calls avoided</div></div>
+    <div class="metric"><div class="tag">RESULTS RELEASED</div><div class="number" id="results">0</div><div class="unit">completed requests</div></div>
+    <div class="metric"><div class="tag">FOURTH COORDINATE</div><div class="number" id="ticks">0</div><div class="unit">time-indexed pulses</div></div>
+  </section>
+  <div class="lower">
+    <section class="panel"><h3>01 / DNA MEMORY</h3><p>Each unique result is stored as a software A/C/G/T strand with an integrity check. Reuse is allowed only when the saved proof still matches.</p><div class="dna-label">Latest stored DNA strand</div><div class="sequence" id="dna">NO GENETIC RECORD YET</div><div class="dna-label">Current instructions</div><div class="sequence" id="genes">TICK BUDGET 3 · REUSE WINDOW 12</div>
+      <div class="two" style="margin-top:15px"><button id="mutate" class="button small">PROPOSE MUTATION</button><button id="approve" class="button small primary" disabled>APPROVE NEW DNA</button></div><div class="tiny" id="mutation">New policy DNA never activates without human approval.</div></section>
+    <section class="panel"><h3>02 / RELEASE ENGINE</h3><p>Submit a local test signal. The reactor computes it, keeps a verifiable record, and reuses the result when the identical permitted request returns.</p><div class="two"><input id="signal" class="input" maxlength="4000" value="MEKU CORE NEURA HIVE CORE" aria-label="Test signal"><button id="inject" class="button primary">INJECT SIGNAL</button></div><div class="dna-label">CONTROL LOG</div><ul class="log" id="events" aria-live="polite"><li><b>READY</b><span>Waiting for local startup</span></li></ul></section>
+  </div>
+  <footer class="foot"><strong>ENGINEERING BOUNDARY:</strong> CORE computes with the browser's existing hardware. “Recovered capacity” means avoided repeated calculations; it is not generated electricity, a cryptocurrency, a source of free compute, or a live NEURA connection. The clock runs only while this page is open and started. No network calls, storage writes, agent actions, money movement, or production access.</footer>
+</div>
+<script type="module">
+/** MEKU CORE v0.1 — isolated, deterministic browser/Node computation lab.
+ * The 'capacity' counter records avoided duplicate calculations, NOT physical energy.
+ * No persistence, credentials, network, payments, or production agent actions.
+ */
+const BASES = 'ACGT';
+const MAX_PAYLOAD_BYTES = 32768;
+const MAX_QUEUE = 128;
+const MAX_EVENTS = 96;
+const MAX_RECORDS = 256;
+const MAX_COMPLETED_IDS = 4096;
+const enc = new TextEncoder();
+const dec = new TextDecoder('utf-8', { fatal: true });
+
+function canonical(value) {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('CORE_NONFINITE_NUMBER');
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return `{${Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonical(value[k])).join(',')}}`;
+  }
+  throw new Error('CORE_UNSUPPORTED_DATA');
+}
+const hex = bytes => [...bytes].map(n => n.toString(16).padStart(2,'0')).join('');
+async function sha(bytes) { return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)); }
+async function hashText(text) { return hex(await sha(enc.encode(text))); }
+function bytesToBases(bytes) {
+  let str = '';
+  for (const b of bytes) str += BASES[(b >>> 6) & 3] + BASES[(b >>> 4) & 3] + BASES[(b >>> 2) & 3] + BASES[b & 3];
+  return str;
+}
+function basesToBytes(bases) {
+  if (typeof bases !== 'string' || bases.length % 4 || /[^ACGT]/.test(bases)) throw new Error('CORE_DNA_BAD_ALPHABET');
+  const bytes = new Uint8Array(bases.length / 4);
+  for (let i = 0; i < bytes.length; i++) {
+    let b = 0;
+    for (let j = 0; j < 4; j++) b = b * 4 + BASES.indexOf(bases[i * 4 + j]);
+    bytes[i] = b;
+  }
+  return bytes;
+}
+/** Software DNA: [version 1 byte][length 4 bytes][SHA-256 16 bytes][UTF-8 JSON]. */
+async function encodeDNA(data) {
+  const payload = enc.encode(canonical(data));
+  if (payload.length > MAX_PAYLOAD_BYTES) throw new Error('CORE_DNA_TOO_LARGE');
+  const digest = await sha(payload);
+  const out = new Uint8Array(21 + payload.length);
+  out[0] = 1;
+  new DataView(out.buffer).setUint32(1, payload.length, false);
+  out.set(digest.slice(0, 16), 5);
+  out.set(payload, 21);
+  return bytesToBases(out);
+}
+async function decodeDNA(bases) {
+  if (typeof bases !== 'string' || bases.length > (21 + MAX_PAYLOAD_BYTES) * 4) throw new Error('CORE_DNA_TOO_LARGE');
+  const raw = basesToBytes(bases);
+  if (raw.length < 21 || raw[0] !== 1) throw new Error('CORE_DNA_VERSION');
+  const length = new DataView(raw.buffer).getUint32(1, false);
+  if (length > MAX_PAYLOAD_BYTES || raw.length !== 21 + length) throw new Error('CORE_DNA_LENGTH');
+  const payload = raw.subarray(21);
+  const digest = await sha(payload);
+  if (!digest.slice(0,16).every((x,i) => x === raw[5 + i])) throw new Error('CORE_DNA_CHECKSUM');
+  const data = JSON.parse(dec.decode(payload));
+  if (canonical(data) !== dec.decode(payload)) throw new Error('CORE_DNA_NONCANONICAL');
+  return data;
+}
+const OPTIONS = Object.freeze({ tickBudget: 3, reuseWindow: 12 });
+function safeGenes(genes) {
+  return !!genes && Number.isSafeInteger(genes.tickBudget) && genes.tickBudget >= 1 && genes.tickBudget <= 6
+    && Number.isSafeInteger(genes.reuseWindow) && genes.reuseWindow >= 1 && genes.reuseWindow <= 36;
+}
+const OPERATIONS = Object.freeze(['sum','character-count','unique-words']);
+function validateTask(task, owner) {
+  if (!task || typeof task !== 'object' || Array.isArray(task)) throw new Error('CORE_TASK_INVALID');
+  if (task.owner !== owner || !task.consent) throw new Error('CORE_PERMISSION_DENIED');
+  if (typeof task.id !== 'string' || !/^[a-zA-Z0-9_-]{1,40}$/.test(task.id)) throw new Error('CORE_BAD_ID');
+  if (!OPERATIONS.includes(task.operation)) throw new Error('CORE_OPERATION_NOT_ALLOWED');
+  if (task.operation === 'sum') {
+    if (!Array.isArray(task.data) || task.data.length < 1 || task.data.length > 256 || !task.data.every(x => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1e8)) throw new Error('CORE_INPUT_INVALID');
+  } else if (typeof task.data !== 'string' || task.data.length > 4000) throw new Error('CORE_INPUT_INVALID');
+  if (enc.encode(canonical(task.data)).length > MAX_PAYLOAD_BYTES) throw new Error('CORE_INPUT_TOO_LARGE');
+}
+function compute(task) {
+  if (task.operation === 'sum') {
+    const n = task.data.reduce((a,b)=>a+b,0);
+    if (!Number.isFinite(n)) throw new Error('CORE_COMPUTE_OVERFLOW');
+    return n;
+  }
+  if (task.operation === 'character-count') return [...task.data].length;
+  if (task.operation === 'unique-words') return new Set(task.data.toLocaleLowerCase('en').match(/[\p{L}\p{N}]+/gu) || []).size;
+  throw new Error('CORE_OPERATION_NOT_ALLOWED');
+}
+class CoreReactor {
+  constructor({owner = 'local-human', genes = OPTIONS} = {}) {
+    if (typeof owner !== 'string' || !/^[a-zA-Z0-9_-]{1,40}$/.test(owner) || !safeGenes(genes)) throw new Error('CORE_CONFIG_INVALID');
+    this.owner = owner;
+    this.genes = { ...genes };
+    this.queue = [];
+    this.records = new Map();
+    this.completedIds = new Set();
+    this.pendingIds = new Set();
+    this.activeTick = false;
+    this.epoch = 0;
+    this.events = [];
+    this.running = false;
+    this.tickNo = 0;
+    this.calculations = 0;
+    this.reuseCount = 0;
+    this.proposals = 0;
+    this.denied = 0;
+    this.pendingMutation = null;
+  }
+  log(type, message) {
+    this.events.unshift({type, message, tick: this.tickNo});
+    if (this.events.length > MAX_EVENTS) this.events.pop();
+  }
+  start() { if (!this.running) { this.running = true; this.epoch++; this.log('START','Explicit local start'); } }
+  stop() { this.running = false; this.epoch++; this.log('STOP','Human STOP — no further results released'); }
+  async submit(task) {
+    try { validateTask(task, this.owner); }
+    catch (error) { this.denied++; this.log('DENIED', error.message); throw error; }
+    // Reserve IDs before any async hashing so concurrent submit calls cannot queue duplicates.
+    if (this.completedIds.size >= MAX_COMPLETED_IDS) throw new Error('CORE_HISTORY_LIMIT');
+    if (this.queue.length + this.pendingIds.size >= MAX_QUEUE) throw new Error('CORE_QUEUE_FULL');
+    if (this.completedIds.has(task.id) || this.pendingIds.has(task.id) || this.queue.some(x => x.id === task.id)) throw new Error('CORE_REPLAY_BLOCKED');
+    this.pendingIds.add(task.id);
+    try {
+      // Clone input on ingress to prevent mutation while queued.
+      const clean = JSON.parse(canonical({id:task.id, owner:task.owner, operation:task.operation, data:task.data, consent:true}));
+      clean.key = await hashText(canonical({owner:clean.owner, operation:clean.operation, data:clean.data, version:1}));
+      this.queue.push(clean);
+      this.log('QUEUED', `${clean.id} · ${clean.operation}`);
+      return clean.key;
+    } finally { this.pendingIds.delete(task.id); }
+  }
+  async tick() {
+    if (!this.running || this.activeTick) return [];
+    this.activeTick = true;
+    const epoch = this.epoch;
+    this.tickNo++;
+    const finished = [];
+    try {
+      for (let i = 0; i < this.genes.tickBudget && this.queue.length; i++) {
+        if (!this.running || epoch !== this.epoch) break;
+        // Keep task in the queue until proof verification and STOP check complete.
+        const task = this.queue[0];
+        const cached = this.records.get(task.key);
+        let record, reused = false;
+        if (cached && this.tickNo - cached.tick <= this.genes.reuseWindow) {
+          try {
+            const decoded = await decodeDNA(cached.dna);
+            if (!this.running || epoch !== this.epoch) break;
+            if (decoded.key !== task.key || decoded.owner !== this.owner || decoded.operation !== task.operation || canonical(decoded.result) !== canonical(cached.result)) throw new Error('CORE_PROOF_MISMATCH');
+            record = cached;
+            reused = true;
+          } catch {
+            if (!this.running || epoch !== this.epoch) break;
+            this.log('INVALID','Corrupt cache proof; recomputing');
+            this.records.delete(task.key);
+          }
+        }
+        if (!reused) {
+          const result = compute(task);
+          record = {key:task.key, owner:this.owner, operation:task.operation, result, tick:this.tickNo};
+          record.dna = await encodeDNA(record);
+          if (!this.running || epoch !== this.epoch) break;
+          // Verify written strand is retrievable; fail closed on corruption.
+          if ((await decodeDNA(record.dna)).key !== task.key) throw new Error('CORE_WRITE_VERIFY_FAILED');
+          if (!this.running || epoch !== this.epoch) break;
+          this.records.set(task.key, record);
+          if (this.records.size > MAX_RECORDS) this.records.delete(this.records.keys().next().value);
+          this.calculations++;
+          this.log('COMPUTED', `${task.id} · new checked result`);
+        } else {
+          this.reuseCount++;
+          this.log('REUSED', `${task.id} · saved one repeat calculation`);
+        }
+        this.queue.shift();
+        this.completedIds.add(task.id);
+        finished.push({id:task.id, result:record.result, reused, dna:record.dna, tick:this.tickNo});
+      }
+      return finished;
+    } finally { this.activeTick = false; }
+  }
+  /** Proposals change only local scheduling rules; never production identities or code. */
+  async proposeMutation() {
+    const step = this.proposals++ % 4;
+    const genes = {...this.genes};
+    if (step % 2 === 0) genes.tickBudget = Math.max(1,Math.min(6,genes.tickBudget+(step === 0 ? 1 : -1)));
+    else genes.reuseWindow = Math.max(1,Math.min(36,genes.reuseWindow+(step === 1 ? 3 : -3)));
+    const dna = await encodeDNA({type:'MEKU_CORE_POLICY_V1',owner:this.owner,genes});
+    this.pendingMutation = {dna, genes};
+    this.log('MUTATION','New policy DNA proposed; human approval required');
+    return dna;
+  }
+  async approveMutation(dna) {
+    if (!this.pendingMutation || dna !== this.pendingMutation.dna) throw new Error('CORE_MUTATION_NOT_PROPOSED');
+    const decoded = await decodeDNA(dna);
+    if (decoded.type !== 'MEKU_CORE_POLICY_V1' || decoded.owner !== this.owner || !safeGenes(decoded.genes)) throw new Error('CORE_MUTATION_INVALID');
+    this.genes = {...decoded.genes};
+    this.pendingMutation = null;
+    this.log('APPROVED','Human approved new local scheduling DNA');
+  }
+  summary() {
+    return {
+      state:this.running?'RUNNING':'STOPPED',tick:this.tickNo,pending:this.queue.length,
+      actualCalculations:this.calculations, reusedCalculations:this.reuseCount,
+      avoidedRepeatCalculations:this.reuseCount,
+      results:this.completedIds.size, mutationsProposed:this.proposals,
+      denied:this.denied,genes:{...this.genes},events:this.events.slice(0,12),
+      units:'work calls, not joules or physical energy',
+    };
+  }
+}
+
+const $=id=>document.getElementById(id);
+let reactor=new CoreReactor(), serial=0, interval=null, mutation=null, lastDNA='';
+function render(){
+ const s=reactor.summary();$('state').textContent=s.state+' · '+s.pending+' QUEUED';$('led').classList.toggle('on',s.state==='RUNNING');$('reactor').classList.toggle('live',s.state==='RUNNING');
+ $('computed').textContent=s.actualCalculations;$('reused').textContent=s.avoidedRepeatCalculations;$('results').textContent=s.results;$('ticks').textContent=s.tick;
+ $('genes').textContent=`TICK BUDGET ${s.genes.tickBudget} · REUSE WINDOW ${s.genes.reuseWindow} · MUTATIONS PROPOSED ${s.mutationsProposed}`;
+ $('dna').textContent=lastDNA ? lastDNA.slice(0,420)+(lastDNA.length>420?' …':'') : 'NO GENETIC RECORD YET';
+ const log=$('events');log.replaceChildren();s.events.forEach(event=>{const li=document.createElement('li');const b=document.createElement('b');b.textContent=event.type;const span=document.createElement('span');span.textContent='T'+event.tick+' · '+event.message;li.append(b,span);log.append(li);});
+}
+async function pulse(){try{const done=await reactor.tick();if(done.length)lastDNA=done.at(-1).dna;render();}catch(error){reactor.stop();stopClock();reactor.log('ERROR',String(error.message));render();}}
+function stopClock(){if(interval){clearInterval(interval);interval=null;}}
+function startClock(){reactor.start();stopClock();interval=setInterval(pulse,1100);render();}
+$('start').addEventListener('click',startClock);
+$('stop').addEventListener('click',()=>{reactor.stop();stopClock();render();});
+$('tick').addEventListener('click',async()=>{if(!reactor.running)reactor.log('BLOCKED','Start reactor before pulsing');else await pulse();render();});
+async function submit(operation,data){const id='test_'+(++serial);try{await reactor.submit({id,owner:'local-human',operation,data,consent:true});render();}catch(error){reactor.log('REJECTED',error.message);render();}}
+$('inject').addEventListener('click',async()=>submit('unique-words',$('signal').value));
+$('seed').addEventListener('click',async()=>{for(let i=0;i<9;i++){await submit('sum', i%3===0?[1,2,3,4]:i%3===1?[4,5,6]:[8,13,21]);}reactor.log('IMPLOSION','9 requests contain only 3 unique calculations');render();});
+$('mutate').addEventListener('click',async()=>{mutation=await reactor.proposeMutation();$('mutation').textContent='PROPOSED · '+mutation.slice(0,45)+'… · awaiting owner approval';$('approve').disabled=false;render();});
+$('approve').addEventListener('click',async()=>{try{await reactor.approveMutation(mutation);mutation=null;$('approve').disabled=true;$('mutation').textContent='Approved local scheduling DNA. No live agent controls changed.';render();}catch(error){$('mutation').textContent='Rejected: '+error.message;}});
+window.addEventListener('pagehide',()=>{reactor.stop();stopClock();});
+render();
+</script></body></html>

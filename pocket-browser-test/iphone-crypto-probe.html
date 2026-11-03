@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>MEKU Pocket — iPhone browser crypto probe (no real wallet)</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,sans-serif;color:#151515;background:#fff}
+body{margin:0;padding:max(env(safe-area-inset-top),20px) 20px max(env(safe-area-inset-bottom),20px);max-width:600px;margin:auto}
+h1{font-size:25px;margin:0 0 5px}h2{font-size:17px}p{line-height:1.55;color:#454545}
+mark{background:#ff6000;color:#fff;padding:3px 8px;border-radius:5px}
+button{background:#ff6000;color:#fff;border:0;border-radius:12px;padding:15px 20px;font-weight:700;font-size:16px;width:100%;min-height:48px}
+button:disabled{opacity:.5}.result{padding:12px 0;border-bottom:1px solid #ddd;font-size:14px;overflow-wrap:anywhere}.pass{color:#126339}.fail{color:#a10e0e}
+small{color:#636363}footer{font-size:12px;margin-top:20px}#status{font-weight:600}
+</style>
+</head>
+<body>
+<header><p><mark>MEKU POCKET</mark></p><h1>iPhone security check</h1></header>
+<p><strong>This is not a wallet.</strong> It does not ask for recovery words, make a wallet, hold keys, call a server, or send funds. It checks only the browser's built-in features with disposable test data.</p>
+<p id="status">Ready for local browser tests.</p><button type="button" id="run">Run browser checks</button>
+<div id="results" aria-live="polite"></div>
+<footer>Open only from a trusted HTTPS page when ready. A local file may lack secure browser features. Passing all checks does not prove that private keys or wallet storage are safe, nor that the live Pocket app works.</footer>
+<script>
+'use strict';
+// STAGE 5 offline-only; no network APIs and no access to mnemonic/private keys.
+const results=document.getElementById('results');const status=document.getElementById('status');const button=document.getElementById('run');
+const encoder=new TextEncoder();
+function add(name,ok,detail){const d=document.createElement('div');d.className='result '+(ok?'pass':'fail');d.textContent=(ok?'PASS: ':'FAIL: ')+name+(detail?' — '+detail:'');results.append(d);}
+async function test(name,work){try{await work();add(name,true);}catch(e){add(name,false,(e&&e.name)||'not available');}}
+function requireOk(ok){if(!ok)throw Error('FAIL');}
+async function testStorage(){
+  requireOk(typeof indexedDB!=='undefined');
+  const id='meku-pocket-ephemeral-browser-probe';
+  await new Promise((resolve,reject)=>{
+    const req=indexedDB.open(id,1);
+    req.onupgradeneeded=()=>{req.result.createObjectStore('probe');};
+    req.onerror=()=>reject(req.error);
+    req.onsuccess=()=>{
+      const db=req.result;
+      try{
+        const tx=db.transaction('probe','readwrite');tx.objectStore('probe').put('test-only','check');
+        tx.oncomplete=()=>{db.close();resolve();};
+        tx.onerror=()=>{db.close();reject(tx.error);};
+        tx.onabort=()=>{db.close();reject(tx.error||Error('ABORT'));};
+      }catch(e){db.close();reject(e);}
+    };
+  });
+  await new Promise((resolve,reject)=>{const req=indexedDB.deleteDatabase(id);req.onsuccess=()=>resolve();req.onerror=()=>reject(req.error);req.onblocked=()=>reject(Error('BLOCKED'));});
+}
+async function run(){
+  button.disabled=true;results.replaceChildren();status.textContent='Running local browser checks...';
+  await test('HTTPS secure context',async()=>requireOk(location.protocol==='https:' && isSecureContext));
+  await test('secure random bytes',async()=>{const b=new Uint8Array(32);crypto.getRandomValues(b);requireOk(b.some(x=>x!==0));b.fill(0);});
+  await test('AES-GCM encrypt/decrypt',async()=>{
+    const key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+    const iv=crypto.getRandomValues(new Uint8Array(12));const plain=encoder.encode('MEKU test only');
+    const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,plain);const out=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
+    requireOk(new TextDecoder().decode(out)==='MEKU test only');plain.fill(0);
+  });
+  await test('PBKDF2 support',async()=>{
+    const k=await crypto.subtle.importKey('raw',encoder.encode('test-password'),'PBKDF2',false,['deriveBits']);
+    const bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:encoder.encode('probe-salt-not-a-wallet'),iterations:1000},k,256);
+    requireOk(bits.byteLength===32);
+  });
+  await test('Ed25519 sign and verify',async()=>{
+    const pair=await crypto.subtle.generateKey('Ed25519',false,['sign','verify']);
+    const msg=encoder.encode('MEKU TEST ONLY');const sig=await crypto.subtle.sign('Ed25519',pair.privateKey,msg);
+    requireOk(sig.byteLength===64 && await crypto.subtle.verify('Ed25519',pair.publicKey,sig,msg));
+    requireOk(!(await crypto.subtle.verify('Ed25519',pair.publicKey,sig,encoder.encode('wrong'))));
+  });
+  await test('IndexedDB temporary write and delete',testStorage);
+  status.textContent='Checks finished. No wallet was created.';button.disabled=false;
+}
+button.addEventListener('click',run);
+</script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; form-action 'none'; base-uri 'none'" />
+<title>MEKU Pocket • iPhone IndexedDB Test</title>
+<style>
+:root {font-family:system-ui,-apple-system,sans-serif;color:#181818;background:#fff;}
+body {max-width:680px;margin:auto;padding:24px 20px 80px;line-height:1.45;}
+h1 {font-size:30px;letter-spacing:-.5px;line-height:1.13;margin:22px 0 12px;}
+.brand {background:#ff6000;color:#fff;border-radius:9px;display:inline-block;padding:5px 10px;font-size:14px;font-weight:bold;letter-spacing:.4px;}
+p {font-size:17px;color:#383838;}
+button {width:100%;border:0;border-radius:15px;background:#ff6000;color:#fff;font-weight:750;font-size:18px;padding:18px 14px;margin:7px 0;cursor:pointer;}
+button:nth-of-type(2) {background:#202020;}
+button:last-of-type {background:#ededed;color:#333;}
+button:disabled {opacity:.5;}
+#status {font-weight:750;font-size:17px;margin:20px 0;}
+#results>div {padding:13px 0;border-bottom:1px solid #ddd;font-size:16px;word-break:break-word;}
+.pass {color:#24663e;}.fail {color:#b32424;}
+.small {font-size:14px;color:#666;}
+</style></head><body>
+<span class="brand">MEKU POCKET • TEST ONLY</span>
+<h1>iPhone storage safety check</h1>
+<p><strong>This is not a wallet.</strong> It writes only disposable numbers into this browser, checks competing writes and STOP, reloads, and erases them. It never creates a key or connects to a server.</p>
+<div id="status">Ready.</div>
+<button id="start">1. Test 25 competing writes</button>
+<button id="reload">2. Reload this page</button>
+<button id="verify">3. Verify after reload + erase</button>
+<button id="erase">Erase test data now</button>
+<div id="results" aria-live="polite"></div>
+<p class="small">Important: A passed test demonstrates only this browser's IndexedDB features on this test website. It does not prove durability after phone loss, security of private keys, transactions across devices, or live Pocket readiness. Strict durability is a hint, not a disk guarantee.</p>
+<script>
+/**
+ * MEKU Pocket — isolated Stage 7 browser-only IndexedDB adapter.
+ *
+ * WARNING: Not approved for mainnet or custody. IndexedDB is LOCAL TO THIS
+ * browser origin/device, may be evicted, and provides NO multi-device locking,
+ * signer safety, network evidence, or independently authenticated owner proof.
+ * Strict IDB durability is only a browser hint, not a crash-proof guarantee.
+ *
+ * Compatible with createOneShotAttemptJournal({store,...}) from Stage 4.
+ * The updater MUST be synchronous; all updates to a given owner are serialized
+ * by native IndexedDB readwrite transactions on the SAME object store.
+ */
+
+const DEFAULT_NAME = 'meku-pocket-local-journal-stage7';
+const STORE = 'owner-records';
+
+class JournalStorageError extends Error {
+  constructor(code, cause) {
+    super(code, cause === undefined ? undefined : { cause });
+    this.name = 'JournalStorageError';
+    this.code = code;
+  }
+}
+
+function fail(code, cause) { throw new JournalStorageError(code, cause); }
+function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+function checkKey(ownerKey) {
+  if (typeof ownerKey !== 'string' || !/^MEKU_POCKET_OWNER_V1:[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(ownerKey))
+    fail('INVALID_OWNER_KEY');
+  return ownerKey;
+}
+function close(db) { try { db?.close(); } catch {} }
+function openDatabase(indexedDB, dbName) {
+  return new Promise((resolve, reject) => {
+    let req, settled = false;
+    const rejectOnce = (code, cause) => {
+      if (settled) return;
+      settled = true;
+      reject(new JournalStorageError(code, cause));
+    };
+    try { req = indexedDB.open(dbName, 1); }
+    catch (e) { rejectOnce('DB_OPEN_FAILED', e); return; }
+    req.onupgradeneeded = () => {
+      try {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      } catch (e) { rejectOnce('DB_UPGRADE_FAILED', e); try { req.transaction?.abort(); } catch {} }
+    };
+    req.onblocked = () => rejectOnce('DB_BLOCKED');
+    req.onerror = () => rejectOnce('DB_OPEN_FAILED', req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (settled) { close(db); return; }
+      settled = true;
+      db.onversionchange = () => close(db);
+      resolve(db);
+    };
+  });
+}
+
+/**
+ * @param {object} opts
+ * @param {IDBFactory} opts.indexedDB A real IDBFactory (injected for tests).
+ * @param {string} opts.dbName Same origin and dbName must be used by every tab.
+ * @param {boolean} opts.requireStrictHint If true, refuse when browser rejects
+ *   the strict durability transaction option. The hint does not guarantee flush.
+ */
+function createIndexedDBAtomicJournalStore({
+  indexedDB = globalThis.indexedDB,
+  dbName = DEFAULT_NAME,
+  requireStrictHint = true,
+} = {}) {
+  if (!indexedDB || typeof indexedDB.open !== 'function') fail('INDEXEDDB_UNAVAILABLE');
+  if (typeof dbName !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(dbName)) fail('INVALID_DATABASE_NAME');
+  if (typeof requireStrictHint !== 'boolean') fail('INVALID_OPTIONS');
+
+  function transact(ownerKey, mode, updater) {
+    checkKey(ownerKey);
+    return openDatabase(indexedDB, dbName).then(db => new Promise((resolve, reject) => {
+      let tx, outcome, done = false, cause;
+      const rejectOnce = (code, err) => {
+        if (done) return;
+        done = true;
+        close(db);
+        reject(err instanceof Error && err.code && code === 'UPDATE_REJECTED' ? err :
+          new JournalStorageError(code, err));
+      };
+      try {
+        // A readonly transaction does not need the strict durability hint.
+        tx = mode === 'readwrite' && requireStrictHint
+          ? db.transaction(STORE, mode, { durability: 'strict' })
+          : db.transaction(STORE, mode);
+        if (mode === 'readwrite' && requireStrictHint && tx.durability !== 'strict')
+          fail('STRICT_HINT_NOT_CONFIRMED');
+      } catch (e) {
+        if (tx) try { tx.abort(); } catch {}
+        rejectOnce(e?.code === 'STRICT_HINT_NOT_CONFIRMED' ? e.code : 'TRANSACTION_OPEN_FAILED', e);
+        return;
+      }
+      tx.onabort = () => rejectOnce(cause ? 'UPDATE_REJECTED' : 'TRANSACTION_ABORTED', cause || tx.error);
+      tx.onerror = () => { /* allow abort handler to settle, never accept partial success */ };
+      tx.oncomplete = () => {
+        if (done) return;
+        done = true;
+        close(db);
+        resolve(outcome);
+      };
+      try {
+        const request = tx.objectStore(STORE).get(ownerKey);
+        request.onerror = () => { cause = request.error || new Error('DB_GET_FAILED'); try { tx.abort(); } catch {} };
+        request.onsuccess = () => {
+          if (done) return;
+          try {
+            const current = request.result === undefined ? null : request.result;
+            if (mode === 'readonly') {
+              outcome = current;
+              return;
+            }
+            // CRITICAL: do not await inside an IDB transaction.
+            // Native IDB readwrite transactions are serialized on this store.
+            const result = updater(current);
+            if (!isObj(result) || !Object.hasOwn(result, 'next') ||
+                !Object.hasOwn(result, 'reply') ||
+                result.next === null || result.next === undefined ||
+                (result.next && typeof result.next.then === 'function'))
+              fail('INVALID_UPDATER_RESULT');
+            outcome = result.reply;
+            const put = tx.objectStore(STORE).put(result.next, ownerKey);
+            put.onerror = () => { cause = put.error || new Error('DB_PUT_FAILED'); try { tx.abort(); } catch {} };
+          } catch (e) {
+            cause = e;
+            try { tx.abort(); } catch { rejectOnce('TRANSACTION_ABORT_FAILED', e); }
+          }
+        };
+      } catch (e) {
+        cause = e;
+        try { tx.abort(); } catch { rejectOnce('TRANSACTION_ABORT_FAILED', e); }
+      }
+    }));
+  }
+
+  return Object.freeze({
+    read(ownerKey) { return transact(ownerKey, 'readonly'); },
+    atomicUpdate(ownerKey, updater) {
+      if (typeof updater !== 'function') fail('INVALID_UPDATER');
+      return transact(ownerKey, 'readwrite', updater);
+    },
+  });
+}
+
+ 
+// Public, disposable counter demo only. No wallet, keys, network or signing.
+const N=25, DB_NAME='meku-pocket-idb-race-test-20261103-v1';
+const KEY='MEKU_POCKET_OWNER_V1:'+'1'.repeat(32);
+const MARKER='meku-pocket-idb-race-reload-test-v1';
+const status=document.querySelector('#status'), results=document.querySelector('#results');
+function clear(){results.textContent='';}
+function line(msg,ok){const n=document.createElement('div');n.className=ok?'pass':'fail';n.textContent=(ok?'PASS — ':'FAIL — ')+msg;results.appendChild(n);}
+function show(msg){status.textContent=msg;}
+function testStore(){return createIndexedDBAtomicJournalStore({indexedDB:window.indexedDB,dbName:DB_NAME,requireStrictHint:true});}
+const buttons=['start','reload','verify','erase'];
+function busy(b){for(const id of buttons)document.getElementById(id).disabled=b;}
+function deleteDB(){return new Promise((resolve,reject)=>{const req=indexedDB.deleteDatabase(DB_NAME);req.onsuccess=()=>resolve(true);req.onerror=()=>reject(req.error);req.onblocked=()=>reject(new Error('Close other tabs using this test page first'));});}
+document.getElementById('start').onclick=async()=>{
+  busy(true);clear();show('Running real IndexedDB checks on this browser…');
+  try {
+    const store=testStore();
+    await store.atomicUpdate(KEY,()=>({next:{schema:1,count:0,stopped:false},reply:true}));
+    line('IndexedDB accepted strict durability hint (still not guaranteed crash-proof)',true);
+    const many=Array.from({length:N},()=>testStore());
+    await Promise.all(many.map(s=>s.atomicUpdate(KEY,current=>({
+      next:{schema:1,count:(current?.count??0)+1,stopped:false},reply:true
+    }))));
+    const after=await store.read(KEY);
+    if(after?.count!==N)throw Error('Expected 25 updates; got '+String(after?.count));
+    line('25 concurrent updates preserved without losing a count',true);
+    let rejected=false;
+    try {await store.atomicUpdate(KEY,()=>{throw Error('test-abort');});}catch{rejected=true;}
+    if(!rejected||(await store.read(KEY))?.count!==N)throw Error('Aborted update changed the counter');
+    line('An aborted update changed no saved counter',true);
+    await store.atomicUpdate(KEY,old=>({next:{...old,stopped:true},reply:true}));
+    let stopBlocked=false;
+    try {await store.atomicUpdate(KEY,old=>{if(old.stopped)throw Error('STOP_ACTIVE');return {next:old,reply:true};});}catch{stopBlocked=true;}
+    if(!stopBlocked)throw Error('STOP did not block a new attempt');
+    line('STOP blocked a new simulated write',true);
+    sessionStorage.setItem(MARKER,'ready');
+    show('Step 1 complete. Now tap 2 Reload this page.');
+  }catch(e){line(e?.code||e?.message||'Unknown browser error',false);show('Test failed; no wallet or funds involved. Screenshot this result.');}
+  finally{busy(false);}
+};
+document.getElementById('reload').onclick=()=>location.reload();
+document.getElementById('verify').onclick=async()=>{
+  busy(true);clear();show('Checking saved test data and erasing it…');
+  try{
+    if(sessionStorage.getItem(MARKER)!=='ready')throw Error('Step 1 was not completed in this tab');
+    const store=testStore();
+    const row=await store.read(KEY);
+    if(row?.count!==N||row?.stopped!==true)throw Error('Reload did not preserve the test record and STOP');
+    line('25 committed counter updates survived Safari page reload',true);
+    line('STOP state survived Safari page reload',true);
+    await deleteDB();
+    sessionStorage.removeItem(MARKER);
+    line('Disposable IndexedDB test database deleted',true);
+    show('ALL BROWSER CHECKS PASSED. Screenshot this page.');
+  }catch(e){line(e?.code||e?.message||'Unknown error',false);show('Check could not finish. Tap Erase test data now, then screenshot.');}
+  finally{busy(false);}
+};
+document.getElementById('erase').onclick=async()=>{busy(true);try{await deleteDB();sessionStorage.removeItem(MARKER);clear();show('Test data erased. Nothing remains in this demo database.')}catch(e){show('Erase blocked: '+String(e?.message||e));}finally{busy(false)}};
+if(sessionStorage.getItem(MARKER)==='ready')show('Page reloaded. Tap 3 Verify after reload + erase.');
+else show('Ready. Start with Step 1. No wallet or private keys are used.');
+
+</script></body></html>

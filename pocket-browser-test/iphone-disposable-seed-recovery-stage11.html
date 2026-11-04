@@ -1,0 +1,156 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'">
+<title>MEKU Pocket Stage 11 — Disposable Recovery</title>
+<style>
+:root{color-scheme:light}*{box-sizing:border-box}body{font:16px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:white;color:#151515;margin:0;padding:24px 18px 80px;max-width:760px;margin-inline:auto}.brand{display:inline-block;background:#ff6000;color:#fff;font-size:12px;letter-spacing:.08em;font-weight:800;padding:7px 12px;border-radius:8px}h1{font-size:29px;line-height:1.12;margin:18px 0}h2{font-size:21px;margin:10px 0}.sub{color:#555}.warning{border:1px solid #ffb28c;background:#fff1e9;padding:16px;margin:18px 0;border-radius:12px;font-weight:650}.pane{border:1px solid #dadada;border-radius:16px;padding:18px;margin:22px 0}.btn{border:none;border-radius:12px;background:#ff6000;color:white;padding:14px 18px;min-height:48px;font-size:16px;font-weight:800;cursor:pointer;width:100%;margin-bottom:9px}.btn:disabled{opacity:.5}.btn.secondary{color:#202020;background:#f1f1f1}.words{font-size:18px;font-weight:750;line-height:1.75;word-spacing:.3rem;padding:14px;border-radius:12px;background:#f6f6f6;overflow-wrap:anywhere}.address{font-size:13px;font-weight:700;overflow-wrap:anywhere;background:#f6f6f6;padding:12px;border-radius:10px}label{display:block;font-weight:750;margin:12px 0 6px}textarea,input{width:100%;padding:13px;border:1px solid #999;border-radius:10px;font:16px/1.4 ui-monospace,SFMono-Regular,monospace}textarea{height:130px;resize:vertical}.status{margin:12px 0;font-weight:800;overflow-wrap:anywhere}.pass{color:#21693a}.fail{color:#a52626}.note{font-size:13px;color:#666}#generated[hidden],#result[hidden]{display:none}
+</style></head><body>
+<div class="brand">MEKU POCKET · TEST LAB</div><h1>Stage 11: disposable recovery check</h1>
+<p class="sub">Create throwaway 12-word test data. Write it down privately, reload the page, then check it in a fresh session. No wallet account or money is created.</p>
+<div class="warning">TEST WORDS ONLY. NEVER enter words from an actual wallet, even an empty one. Unaudited demonstration code — never use for funds. Do NOT share any test words in chat.</div>
+<section class="pane"><h2>1 · Create throwaway test words</h2><p>This page needs Safari over HTTPS. It uses local browser memory only.</p><button id="generate" class="btn" type="button">Generate disposable test words</button>
+<div id="generated" hidden><p class="note">Temporary throwaway words, NOT FOR MONEY. Write both the words and public address down, then reload.</p><div id="words" class="words"></div><label>Expected test public address</label><div id="address" class="address"></div></div>
+<p id="generate-status" class="status" aria-live="polite"></p></section>
+<section class="pane"><h2>2 · Restore after a clean reload</h2><p class="note">Only type the disposable words this exact test created. Never use existing wallet recovery words.</p>
+<label for="restore-words">Throwaway 12 test words</label><textarea id="restore-words" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Disposable test words ONLY"></textarea>
+<label for="expected">Expected test public address</label><input id="expected" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="44" placeholder="Public address recorded in Step 1">
+<button id="restore" class="btn" type="button">Check test-only recovery</button><button id="clear" class="btn secondary" type="button">Clear the test screen</button>
+<div id="result" hidden aria-live="polite"><p id="restore-status" class="status"></p><p id="restore-address" class="address"></p></div></section>
+<p class="note">No external JavaScript, no network requests, no browser storage, no transaction signing. Memory cannot be guaranteed wiped; a reload is NOT proof of recovery on a different physical device. No funds. No real phrases.</p>
+<script>
+/**
+ * MEKU POCKET — Stage 10 SAFARI CRYPTO DIAGNOSTIC ONLY.
+ * UNREVIEWED BIP39 / SLIP-0010 REFERENCE IMPLEMENTATION.
+ * NEVER USE FOR REAL SEEDS, WALLETS, PRIVATE KEYS OR FUNDS.
+ * Does not expose a signing method or transaction construction.
+ * Tests browser native WebCrypto against published PUBLIC fixture.
+ */
+const TEST_ONLY_PATH = "m/44'/501'/0'/0'";
+const TEST_ONLY_MESSAGE = 'MEKU POCKET STAGE 10 PUBLIC DIAGNOSTIC - NO FUNDS';
+const TEST_PKCS8_PREFIX = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const encoder = new TextEncoder();
+const toBytes = x => x instanceof Uint8Array ? x : new Uint8Array(x);
+function checkWords(words) {
+  if(!Array.isArray(words) || words.length !== 2048 || new Set(words).size !== 2048 || words[0] !== 'abandon' || words[2047] !== 'zoo') throw Error('INVALID_BIP39_WORDLIST');
+}
+function bitsOf(bytes) {return Array.from(bytes, v=>v.toString(2).padStart(8,'0')).join('');}
+function concat(...args) {const n=args.reduce((a,b)=>a+b.length,0), out=new Uint8Array(n);let i=0;for(const a of args){out.set(a,i);i+=a.length;}return out;}
+async function diagnosticEntropyToWords(entropy,words, cryptoObj=crypto) {
+  checkWords(words);
+  if(!(entropy instanceof Uint8Array) || entropy.length!==16) throw Error('128_BITS_REQUIRED');
+  const hash=toBytes(await cryptoObj.subtle.digest('SHA-256',entropy));
+  const bits=bitsOf(entropy)+bitsOf(hash).slice(0,4);
+  return Array.from({length:12},(_,i)=>words[parseInt(bits.slice(i*11,i*11+11),2)]).join(' ');
+}
+async function diagnosticWordsToEntropy(phrase,words, cryptoObj=crypto) {
+  checkWords(words);
+  if(typeof phrase!=='string'||phrase.length>220||!/^([a-z]+ ){11}[a-z]+$/.test(phrase))throw Error('INVALID_12_WORD_FORMAT');
+  const dictionary=new Map(words.map((w,i)=>[w,i]));
+  const tokens=phrase.split(' ');
+  const indices=tokens.map(w=>dictionary.get(w));
+  if(indices.some(i=>i===undefined))throw Error('UNKNOWN_BIP39_WORD');
+  const bits=indices.map(i=>i.toString(2).padStart(11,'0')).join('');
+  const entropy=new Uint8Array(Array.from({length:16},(_,i)=>parseInt(bits.slice(i*8,i*8+8),2)));
+  const hash=toBytes(await cryptoObj.subtle.digest('SHA-256',entropy));
+  if(bits.slice(128)!==bitsOf(hash).slice(0,4))throw Error('INVALID_BIP39_CHECKSUM');
+  return entropy;
+}
+async function hmac512(key,data,cryptoObj) {
+  const k=await cryptoObj.subtle.importKey('raw',toBytes(key),{name:'HMAC',hash:'SHA-512'},false,['sign']);
+  return toBytes(await cryptoObj.subtle.sign('HMAC',k,data));
+}
+async function derivedSeed(phrase,words,cryptoObj) {
+  await diagnosticWordsToEntropy(phrase,words,cryptoObj);
+  const k=await cryptoObj.subtle.importKey('raw',encoder.encode(phrase.normalize('NFKD')),'PBKDF2',false,['deriveBits']);
+  return toBytes(await cryptoObj.subtle.deriveBits({name:'PBKDF2',hash:'SHA-512',salt:encoder.encode('mnemonic'),iterations:2048},k,512));
+}
+function base58(bytes) {
+  let val=0n; for(const n of bytes)val=val*256n+BigInt(n);
+  let s=''; while(val>0n){s=ALPHABET[Number(val%58n)]+s;val/=58n;}
+  for(const n of bytes){if(n!==0)break;s='1'+s;}
+  return s;
+}
+function fromB64url(b64) {
+  const raw=atob(b64.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-b64.length%4)%4));
+  return Uint8Array.from(raw,c=>c.charCodeAt(0));
+}
+async function diagnosticAddressAndSignature(phrase,words,cryptoObj=crypto,path=TEST_ONLY_PATH) {
+  if(path!==TEST_ONLY_PATH)throw Error('UNAPPROVED_TEST_PATH');
+  const seed=await derivedSeed(phrase,words,cryptoObj);
+  let master=await hmac512(encoder.encode('ed25519 seed'),seed,cryptoObj);
+  for(const index of [44,501,0,0]) {
+    const number=new Uint8Array(4);new DataView(number.buffer).setUint32(0,index+0x80000000,false);
+    master=await hmac512(master.slice(32),concat(new Uint8Array([0]),master.slice(0,32),number),cryptoObj);
+  }
+  const pkcs8=concat(TEST_PKCS8_PREFIX,master.slice(0,32));
+  // Temporary extractable key is ONLY used to derive x (public key) in the diagnostic.
+  // In production, this design and its dependency choices require a full external review.
+  const key=await cryptoObj.subtle.importKey('pkcs8',pkcs8,{name:'Ed25519'},true,['sign']);
+  const jwk=await cryptoObj.subtle.exportKey('jwk',key);
+  if(jwk.kty!=='OKP'||jwk.crv!=='Ed25519'||typeof jwk.x!=='string')throw Error('PUBLIC_KEY_EXTRACTION_FAILED');
+  const pub=fromB64url(jwk.x);
+  if(pub.length!==32)throw Error('INVALID_PUBLIC_KEY_SIZE');
+  const verifier=await cryptoObj.subtle.importKey('raw',pub,{name:'Ed25519'},false,['verify']);
+  const fixed=encoder.encode(TEST_ONLY_MESSAGE);
+  const sig=toBytes(await cryptoObj.subtle.sign('Ed25519',key,fixed));
+  const matches=await cryptoObj.subtle.verify('Ed25519',verifier,sig,fixed);
+  const changedDenied=!(await cryptoObj.subtle.verify('Ed25519',verifier,sig,encoder.encode(TEST_ONLY_MESSAGE+' changed')));
+  // Neither private key nor mnemonic is exposed in the result; test use only.
+  if(!matches || !changedDenied || sig.length!==64)throw Error('FIXED_MESSAGE_SIGNATURE_FAILED');
+  return Object.freeze({publicAddress:base58(pub),path:TEST_ONLY_PATH,fixedSignatureValid:true,changedMessageDenied:true,testOnly:true,canSpend:false});
+}
+async function diagnosticRandomRoundTrip(words,cryptoObj=crypto) {
+  checkWords(words);
+  const entropy=new Uint8Array(16);cryptoObj.getRandomValues(entropy);
+  const phrase=await diagnosticEntropyToWords(entropy,words,cryptoObj);
+  const entropyBack=await diagnosticWordsToEntropy(phrase,words,cryptoObj);
+  if(entropy.some((v,i)=>v!==entropyBack[i]))throw Error('ENTROPY_ROUND_TRIP_FAILED');
+  const first=await diagnosticAddressAndSignature(phrase,words,cryptoObj);
+  const second=await diagnosticAddressAndSignature(phrase,words,cryptoObj);
+  if(first.publicAddress!==second.publicAddress)throw Error('DIAGNOSTIC_RECOVERY_MISMATCH');
+  return Object.freeze({addressPreview:first.publicAddress.slice(0,7)+'…'+first.publicAddress.slice(-7),sameAddress:true,validSignature:first.fixedSignatureValid,changedMessageDenied:first.changedMessageDenied,wordsCount:12,testOnly:true,canSpend:false});
+}
+
+const WORDLIST_STRING="abandon\nability\nable\nabout\nabove\nabsent\nabsorb\nabstract\nabsurd\nabuse\naccess\naccident\naccount\naccuse\nachieve\nacid\nacoustic\nacquire\nacross\nact\naction\nactor\nactress\nactual\nadapt\nadd\naddict\naddress\nadjust\nadmit\nadult\nadvance\nadvice\naerobic\naffair\nafford\nafraid\nagain\nage\nagent\nagree\nahead\naim\nair\nairport\naisle\nalarm\nalbum\nalcohol\nalert\nalien\nall\nalley\nallow\nalmost\nalone\nalpha\nalready\nalso\nalter\nalways\namateur\namazing\namong\namount\namused\nanalyst\nanchor\nancient\nanger\nangle\nangry\nanimal\nankle\nannounce\nannual\nanother\nanswer\nantenna\nantique\nanxiety\nany\napart\napology\nappear\napple\napprove\napril\narch\narctic\narea\narena\nargue\narm\narmed\narmor\narmy\naround\narrange\narrest\narrive\narrow\nart\nartefact\nartist\nartwork\nask\naspect\nassault\nasset\nassist\nassume\nasthma\nathlete\natom\nattack\nattend\nattitude\nattract\nauction\naudit\naugust\naunt\nauthor\nauto\nautumn\naverage\navocado\navoid\nawake\naware\naway\nawesome\nawful\nawkward\naxis\nbaby\nbachelor\nbacon\nbadge\nbag\nbalance\nbalcony\nball\nbamboo\nbanana\nbanner\nbar\nbarely\nbargain\nbarrel\nbase\nbasic\nbasket\nbattle\nbeach\nbean\nbeauty\nbecause\nbecome\nbeef\nbefore\nbegin\nbehave\nbehind\nbelieve\nbelow\nbelt\nbench\nbenefit\nbest\nbetray\nbetter\nbetween\nbeyond\nbicycle\nbid\nbike\nbind\nbiology\nbird\nbirth\nbitter\nblack\nblade\nblame\nblanket\nblast\nbleak\nbless\nblind\nblood\nblossom\nblouse\nblue\nblur\nblush\nboard\nboat\nbody\nboil\nbomb\nbone\nbonus\nbook\nboost\nborder\nboring\nborrow\nboss\nbottom\nbounce\nbox\nboy\nbracket\nbrain\nbrand\nbrass\nbrave\nbread\nbreeze\nbrick\nbridge\nbrief\nbright\nbring\nbrisk\nbroccoli\nbroken\nbronze\nbroom\nbrother\nbrown\nbrush\nbubble\nbuddy\nbudget\nbuffalo\nbuild\nbulb\nbulk\nbullet\nbundle\nbunker\nburden\nburger\nburst\nbus\nbusiness\nbusy\nbutter\nbuyer\nbuzz\ncabbage\ncabin\ncable\ncactus\ncage\ncake\ncall\ncalm\ncamera\ncamp\ncan\ncanal\ncancel\ncandy\ncannon\ncanoe\ncanvas\ncanyon\ncapable\ncapital\ncaptain\ncar\ncarbon\ncard\ncargo\ncarpet\ncarry\ncart\ncase\ncash\ncasino\ncastle\ncasual\ncat\ncatalog\ncatch\ncategory\ncattle\ncaught\ncause\ncaution\ncave\nceiling\ncelery\ncement\ncensus\ncentury\ncereal\ncertain\nchair\nchalk\nchampion\nchange\nchaos\nchapter\ncharge\nchase\nchat\ncheap\ncheck\ncheese\nchef\ncherry\nchest\nchicken\nchief\nchild\nchimney\nchoice\nchoose\nchronic\nchuckle\nchunk\nchurn\ncigar\ncinnamon\ncircle\ncitizen\ncity\ncivil\nclaim\nclap\nclarify\nclaw\nclay\nclean\nclerk\nclever\nclick\nclient\ncliff\nclimb\nclinic\nclip\nclock\nclog\nclose\ncloth\ncloud\nclown\nclub\nclump\ncluster\nclutch\ncoach\ncoast\ncoconut\ncode\ncoffee\ncoil\ncoin\ncollect\ncolor\ncolumn\ncombine\ncome\ncomfort\ncomic\ncommon\ncompany\nconcert\nconduct\nconfirm\ncongress\nconnect\nconsider\ncontrol\nconvince\ncook\ncool\ncopper\ncopy\ncoral\ncore\ncorn\ncorrect\ncost\ncotton\ncouch\ncountry\ncouple\ncourse\ncousin\ncover\ncoyote\ncrack\ncradle\ncraft\ncram\ncrane\ncrash\ncrater\ncrawl\ncrazy\ncream\ncredit\ncreek\ncrew\ncricket\ncrime\ncrisp\ncritic\ncrop\ncross\ncrouch\ncrowd\ncrucial\ncruel\ncruise\ncrumble\ncrunch\ncrush\ncry\ncrystal\ncube\nculture\ncup\ncupboard\ncurious\ncurrent\ncurtain\ncurve\ncushion\ncustom\ncute\ncycle\ndad\ndamage\ndamp\ndance\ndanger\ndaring\ndash\ndaughter\ndawn\nday\ndeal\ndebate\ndebris\ndecade\ndecember\ndecide\ndecline\ndecorate\ndecrease\ndeer\ndefense\ndefine\ndefy\ndegree\ndelay\ndeliver\ndemand\ndemise\ndenial\ndentist\ndeny\ndepart\ndepend\ndeposit\ndepth\ndeputy\nderive\ndescribe\ndesert\ndesign\ndesk\ndespair\ndestroy\ndetail\ndetect\ndevelop\ndevice\ndevote\ndiagram\ndial\ndiamond\ndiary\ndice\ndiesel\ndiet\ndiffer\ndigital\ndignity\ndilemma\ndinner\ndinosaur\ndirect\ndirt\ndisagree\ndiscover\ndisease\ndish\ndismiss\ndisorder\ndisplay\ndistance\ndivert\ndivide\ndivorce\ndizzy\ndoctor\ndocument\ndog\ndoll\ndolphin\ndomain\ndonate\ndonkey\ndonor\ndoor\ndose\ndouble\ndove\ndraft\ndragon\ndrama\ndrastic\ndraw\ndream\ndress\ndrift\ndrill\ndrink\ndrip\ndrive\ndrop\ndrum\ndry\nduck\ndumb\ndune\nduring\ndust\ndutch\nduty\ndwarf\ndynamic\neager\neagle\nearly\nearn\nearth\neasily\neast\neasy\necho\necology\neconomy\nedge\nedit\neducate\neffort\negg\neight\neither\nelbow\nelder\nelectric\nelegant\nelement\nelephant\nelevator\nelite\nelse\nembark\nembody\nembrace\nemerge\nemotion\nemploy\nempower\nempty\nenable\nenact\nend\nendless\nendorse\nenemy\nenergy\nenforce\nengage\nengine\nenhance\nenjoy\nenlist\nenough\nenrich\nenroll\nensure\nenter\nentire\nentry\nenvelope\nepisode\nequal\nequip\nera\nerase\nerode\nerosion\nerror\nerupt\nescape\nessay\nessence\nestate\neternal\nethics\nevidence\nevil\nevoke\nevolve\nexact\nexample\nexcess\nexchange\nexcite\nexclude\nexcuse\nexecute\nexercise\nexhaust\nexhibit\nexile\nexist\nexit\nexotic\nexpand\nexpect\nexpire\nexplain\nexpose\nexpress\nextend\nextra\neye\neyebrow\nfabric\nface\nfaculty\nfade\nfaint\nfaith\nfall\nfalse\nfame\nfamily\nfamous\nfan\nfancy\nfantasy\nfarm\nfashion\nfat\nfatal\nfather\nfatigue\nfault\nfavorite\nfeature\nfebruary\nfederal\nfee\nfeed\nfeel\nfemale\nfence\nfestival\nfetch\nfever\nfew\nfiber\nfiction\nfield\nfigure\nfile\nfilm\nfilter\nfinal\nfind\nfine\nfinger\nfinish\nfire\nfirm\nfirst\nfiscal\nfish\nfit\nfitness\nfix\nflag\nflame\nflash\nflat\nflavor\nflee\nflight\nflip\nfloat\nflock\nfloor\nflower\nfluid\nflush\nfly\nfoam\nfocus\nfog\nfoil\nfold\nfollow\nfood\nfoot\nforce\nforest\nforget\nfork\nfortune\nforum\nforward\nfossil\nfoster\nfound\nfox\nfragile\nframe\nfrequent\nfresh\nfriend\nfringe\nfrog\nfront\nfrost\nfrown\nfrozen\nfruit\nfuel\nfun\nfunny\nfurnace\nfury\nfuture\ngadget\ngain\ngalaxy\ngallery\ngame\ngap\ngarage\ngarbage\ngarden\ngarlic\ngarment\ngas\ngasp\ngate\ngather\ngauge\ngaze\ngeneral\ngenius\ngenre\ngentle\ngenuine\ngesture\nghost\ngiant\ngift\ngiggle\nginger\ngiraffe\ngirl\ngive\nglad\nglance\nglare\nglass\nglide\nglimpse\nglobe\ngloom\nglory\nglove\nglow\nglue\ngoat\ngoddess\ngold\ngood\ngoose\ngorilla\ngospel\ngossip\ngovern\ngown\ngrab\ngrace\ngrain\ngrant\ngrape\ngrass\ngravity\ngreat\ngreen\ngrid\ngrief\ngrit\ngrocery\ngroup\ngrow\ngrunt\nguard\nguess\nguide\nguilt\nguitar\ngun\ngym\nhabit\nhair\nhalf\nhammer\nhamster\nhand\nhappy\nharbor\nhard\nharsh\nharvest\nhat\nhave\nhawk\nhazard\nhead\nhealth\nheart\nheavy\nhedgehog\nheight\nhello\nhelmet\nhelp\nhen\nhero\nhidden\nhigh\nhill\nhint\nhip\nhire\nhistory\nhobby\nhockey\nhold\nhole\nholiday\nhollow\nhome\nhoney\nhood\nhope\nhorn\nhorror\nhorse\nhospital\nhost\nhotel\nhour\nhover\nhub\nhuge\nhuman\nhumble\nhumor\nhundred\nhungry\nhunt\nhurdle\nhurry\nhurt\nhusband\nhybrid\nice\nicon\nidea\nidentify\nidle\nignore\nill\nillegal\nillness\nimage\nimitate\nimmense\nimmune\nimpact\nimpose\nimprove\nimpulse\ninch\ninclude\nincome\nincrease\nindex\nindicate\nindoor\nindustry\ninfant\ninflict\ninform\ninhale\ninherit\ninitial\ninject\ninjury\ninmate\ninner\ninnocent\ninput\ninquiry\ninsane\ninsect\ninside\ninspire\ninstall\nintact\ninterest\ninto\ninvest\ninvite\ninvolve\niron\nisland\nisolate\nissue\nitem\nivory\njacket\njaguar\njar\njazz\njealous\njeans\njelly\njewel\njob\njoin\njoke\njourney\njoy\njudge\njuice\njump\njungle\njunior\njunk\njust\nkangaroo\nkeen\nkeep\nketchup\nkey\nkick\nkid\nkidney\nkind\nkingdom\nkiss\nkit\nkitchen\nkite\nkitten\nkiwi\nknee\nknife\nknock\nknow\nlab\nlabel\nlabor\nladder\nlady\nlake\nlamp\nlanguage\nlaptop\nlarge\nlater\nlatin\nlaugh\nlaundry\nlava\nlaw\nlawn\nlawsuit\nlayer\nlazy\nleader\nleaf\nlearn\nleave\nlecture\nleft\nleg\nlegal\nlegend\nleisure\nlemon\nlend\nlength\nlens\nleopard\nlesson\nletter\nlevel\nliar\nliberty\nlibrary\nlicense\nlife\nlift\nlight\nlike\nlimb\nlimit\nlink\nlion\nliquid\nlist\nlittle\nlive\nlizard\nload\nloan\nlobster\nlocal\nlock\nlogic\nlonely\nlong\nloop\nlottery\nloud\nlounge\nlove\nloyal\nlucky\nluggage\nlumber\nlunar\nlunch\nluxury\nlyrics\nmachine\nmad\nmagic\nmagnet\nmaid\nmail\nmain\nmajor\nmake\nmammal\nman\nmanage\nmandate\nmango\nmansion\nmanual\nmaple\nmarble\nmarch\nmargin\nmarine\nmarket\nmarriage\nmask\nmass\nmaster\nmatch\nmaterial\nmath\nmatrix\nmatter\nmaximum\nmaze\nmeadow\nmean\nmeasure\nmeat\nmechanic\nmedal\nmedia\nmelody\nmelt\nmember\nmemory\nmention\nmenu\nmercy\nmerge\nmerit\nmerry\nmesh\nmessage\nmetal\nmethod\nmiddle\nmidnight\nmilk\nmillion\nmimic\nmind\nminimum\nminor\nminute\nmiracle\nmirror\nmisery\nmiss\nmistake\nmix\nmixed\nmixture\nmobile\nmodel\nmodify\nmom\nmoment\nmonitor\nmonkey\nmonster\nmonth\nmoon\nmoral\nmore\nmorning\nmosquito\nmother\nmotion\nmotor\nmountain\nmouse\nmove\nmovie\nmuch\nmuffin\nmule\nmultiply\nmuscle\nmuseum\nmushroom\nmusic\nmust\nmutual\nmyself\nmystery\nmyth\nnaive\nname\nnapkin\nnarrow\nnasty\nnation\nnature\nnear\nneck\nneed\nnegative\nneglect\nneither\nnephew\nnerve\nnest\nnet\nnetwork\nneutral\nnever\nnews\nnext\nnice\nnight\nnoble\nnoise\nnominee\nnoodle\nnormal\nnorth\nnose\nnotable\nnote\nnothing\nnotice\nnovel\nnow\nnuclear\nnumber\nnurse\nnut\noak\nobey\nobject\noblige\nobscure\nobserve\nobtain\nobvious\noccur\nocean\noctober\nodor\noff\noffer\noffice\noften\noil\nokay\nold\nolive\nolympic\nomit\nonce\none\nonion\nonline\nonly\nopen\nopera\nopinion\noppose\noption\norange\norbit\norchard\norder\nordinary\norgan\norient\noriginal\norphan\nostrich\nother\noutdoor\nouter\noutput\noutside\noval\noven\nover\nown\nowner\noxygen\noyster\nozone\npact\npaddle\npage\npair\npalace\npalm\npanda\npanel\npanic\npanther\npaper\nparade\nparent\npark\nparrot\nparty\npass\npatch\npath\npatient\npatrol\npattern\npause\npave\npayment\npeace\npeanut\npear\npeasant\npelican\npen\npenalty\npencil\npeople\npepper\nperfect\npermit\nperson\npet\nphone\nphoto\nphrase\nphysical\npiano\npicnic\npicture\npiece\npig\npigeon\npill\npilot\npink\npioneer\npipe\npistol\npitch\npizza\nplace\nplanet\nplastic\nplate\nplay\nplease\npledge\npluck\nplug\nplunge\npoem\npoet\npoint\npolar\npole\npolice\npond\npony\npool\npopular\nportion\nposition\npossible\npost\npotato\npottery\npoverty\npowder\npower\npractice\npraise\npredict\nprefer\nprepare\npresent\npretty\nprevent\nprice\npride\nprimary\nprint\npriority\nprison\nprivate\nprize\nproblem\nprocess\nproduce\nprofit\nprogram\nproject\npromote\nproof\nproperty\nprosper\nprotect\nproud\nprovide\npublic\npudding\npull\npulp\npulse\npumpkin\npunch\npupil\npuppy\npurchase\npurity\npurpose\npurse\npush\nput\npuzzle\npyramid\nquality\nquantum\nquarter\nquestion\nquick\nquit\nquiz\nquote\nrabbit\nraccoon\nrace\nrack\nradar\nradio\nrail\nrain\nraise\nrally\nramp\nranch\nrandom\nrange\nrapid\nrare\nrate\nrather\nraven\nraw\nrazor\nready\nreal\nreason\nrebel\nrebuild\nrecall\nreceive\nrecipe\nrecord\nrecycle\nreduce\nreflect\nreform\nrefuse\nregion\nregret\nregular\nreject\nrelax\nrelease\nrelief\nrely\nremain\nremember\nremind\nremove\nrender\nrenew\nrent\nreopen\nrepair\nrepeat\nreplace\nreport\nrequire\nrescue\nresemble\nresist\nresource\nresponse\nresult\nretire\nretreat\nreturn\nreunion\nreveal\nreview\nreward\nrhythm\nrib\nribbon\nrice\nrich\nride\nridge\nrifle\nright\nrigid\nring\nriot\nripple\nrisk\nritual\nrival\nriver\nroad\nroast\nrobot\nrobust\nrocket\nromance\nroof\nrookie\nroom\nrose\nrotate\nrough\nround\nroute\nroyal\nrubber\nrude\nrug\nrule\nrun\nrunway\nrural\nsad\nsaddle\nsadness\nsafe\nsail\nsalad\nsalmon\nsalon\nsalt\nsalute\nsame\nsample\nsand\nsatisfy\nsatoshi\nsauce\nsausage\nsave\nsay\nscale\nscan\nscare\nscatter\nscene\nscheme\nschool\nscience\nscissors\nscorpion\nscout\nscrap\nscreen\nscript\nscrub\nsea\nsearch\nseason\nseat\nsecond\nsecret\nsection\nsecurity\nseed\nseek\nsegment\nselect\nsell\nseminar\nsenior\nsense\nsentence\nseries\nservice\nsession\nsettle\nsetup\nseven\nshadow\nshaft\nshallow\nshare\nshed\nshell\nsheriff\nshield\nshift\nshine\nship\nshiver\nshock\nshoe\nshoot\nshop\nshort\nshoulder\nshove\nshrimp\nshrug\nshuffle\nshy\nsibling\nsick\nside\nsiege\nsight\nsign\nsilent\nsilk\nsilly\nsilver\nsimilar\nsimple\nsince\nsing\nsiren\nsister\nsituate\nsix\nsize\nskate\nsketch\nski\nskill\nskin\nskirt\nskull\nslab\nslam\nsleep\nslender\nslice\nslide\nslight\nslim\nslogan\nslot\nslow\nslush\nsmall\nsmart\nsmile\nsmoke\nsmooth\nsnack\nsnake\nsnap\nsniff\nsnow\nsoap\nsoccer\nsocial\nsock\nsoda\nsoft\nsolar\nsoldier\nsolid\nsolution\nsolve\nsomeone\nsong\nsoon\nsorry\nsort\nsoul\nsound\nsoup\nsource\nsouth\nspace\nspare\nspatial\nspawn\nspeak\nspecial\nspeed\nspell\nspend\nsphere\nspice\nspider\nspike\nspin\nspirit\nsplit\nspoil\nsponsor\nspoon\nsport\nspot\nspray\nspread\nspring\nspy\nsquare\nsqueeze\nsquirrel\nstable\nstadium\nstaff\nstage\nstairs\nstamp\nstand\nstart\nstate\nstay\nsteak\nsteel\nstem\nstep\nstereo\nstick\nstill\nsting\nstock\nstomach\nstone\nstool\nstory\nstove\nstrategy\nstreet\nstrike\nstrong\nstruggle\nstudent\nstuff\nstumble\nstyle\nsubject\nsubmit\nsubway\nsuccess\nsuch\nsudden\nsuffer\nsugar\nsuggest\nsuit\nsummer\nsun\nsunny\nsunset\nsuper\nsupply\nsupreme\nsure\nsurface\nsurge\nsurprise\nsurround\nsurvey\nsuspect\nsustain\nswallow\nswamp\nswap\nswarm\nswear\nsweet\nswift\nswim\nswing\nswitch\nsword\nsymbol\nsymptom\nsyrup\nsystem\ntable\ntackle\ntag\ntail\ntalent\ntalk\ntank\ntape\ntarget\ntask\ntaste\ntattoo\ntaxi\nteach\nteam\ntell\nten\ntenant\ntennis\ntent\nterm\ntest\ntext\nthank\nthat\ntheme\nthen\ntheory\nthere\nthey\nthing\nthis\nthought\nthree\nthrive\nthrow\nthumb\nthunder\nticket\ntide\ntiger\ntilt\ntimber\ntime\ntiny\ntip\ntired\ntissue\ntitle\ntoast\ntobacco\ntoday\ntoddler\ntoe\ntogether\ntoilet\ntoken\ntomato\ntomorrow\ntone\ntongue\ntonight\ntool\ntooth\ntop\ntopic\ntopple\ntorch\ntornado\ntortoise\ntoss\ntotal\ntourist\ntoward\ntower\ntown\ntoy\ntrack\ntrade\ntraffic\ntragic\ntrain\ntransfer\ntrap\ntrash\ntravel\ntray\ntreat\ntree\ntrend\ntrial\ntribe\ntrick\ntrigger\ntrim\ntrip\ntrophy\ntrouble\ntruck\ntrue\ntruly\ntrumpet\ntrust\ntruth\ntry\ntube\ntuition\ntumble\ntuna\ntunnel\nturkey\nturn\nturtle\ntwelve\ntwenty\ntwice\ntwin\ntwist\ntwo\ntype\ntypical\nugly\numbrella\nunable\nunaware\nuncle\nuncover\nunder\nundo\nunfair\nunfold\nunhappy\nuniform\nunique\nunit\nuniverse\nunknown\nunlock\nuntil\nunusual\nunveil\nupdate\nupgrade\nuphold\nupon\nupper\nupset\nurban\nurge\nusage\nuse\nused\nuseful\nuseless\nusual\nutility\nvacant\nvacuum\nvague\nvalid\nvalley\nvalve\nvan\nvanish\nvapor\nvarious\nvast\nvault\nvehicle\nvelvet\nvendor\nventure\nvenue\nverb\nverify\nversion\nvery\nvessel\nveteran\nviable\nvibrant\nvicious\nvictory\nvideo\nview\nvillage\nvintage\nviolin\nvirtual\nvirus\nvisa\nvisit\nvisual\nvital\nvivid\nvocal\nvoice\nvoid\nvolcano\nvolume\nvote\nvoyage\nwage\nwagon\nwait\nwalk\nwall\nwalnut\nwant\nwarfare\nwarm\nwarrior\nwash\nwasp\nwaste\nwater\nwave\nway\nwealth\nweapon\nwear\nweasel\nweather\nweb\nwedding\nweekend\nweird\nwelcome\nwest\nwet\nwhale\nwhat\nwheat\nwheel\nwhen\nwhere\nwhip\nwhisper\nwide\nwidth\nwife\nwild\nwill\nwin\nwindow\nwine\nwing\nwink\nwinner\nwinter\nwire\nwisdom\nwise\nwish\nwitness\nwolf\nwoman\nwonder\nwood\nwool\nword\nwork\nworld\nworry\nworth\nwrap\nwreck\nwrestle\nwrist\nwrite\nwrong\nyard\nyear\nyellow\nyou\nyoung\nyouth\nzebra\nzero\nzone\nzoo";
+
+const WORDS=WORDLIST_STRING.split('\n');
+const $=id=>document.getElementById(id);
+const clearInput=()=>{$('restore-words').value='';$('expected').value='';};
+function showFail(message){$('result').hidden=false;$('restore-status').className='status fail';$('restore-status').textContent='FAIL — '+message;$('restore-address').textContent='No wallet was created.'}
+async function createDisposable(){
+ $('generate').disabled=true;$('generated').hidden=true;$('words').textContent='';$('address').textContent='';$('generate-status').textContent='Checking secure browser features…';
+ try{
+  if(location.protocol!=='https:'||!isSecureContext||!crypto?.subtle||!crypto?.getRandomValues)throw Error('SECURE_HTTPS_REQUIRED');
+  const entropy=new Uint8Array(16);crypto.getRandomValues(entropy);
+  const phrase=await diagnosticEntropyToWords(entropy,WORDS);
+  const derived=await diagnosticAddressAndSignature(phrase,WORDS);
+  if(!derived.fixedSignatureValid||!derived.changedMessageDenied||derived.canSpend!==false)throw Error('TEST_SIGNATURE_FAILED');
+  $('words').textContent=phrase;$('address').textContent=derived.publicAddress;$('generated').hidden=false;
+  $('generate-status').className='status pass';$('generate-status').textContent='PASS — Temporary phrase and public address created. Record them, then reload.';
+ }catch(e){$('generate-status').className='status fail';$('generate-status').textContent='FAIL — '+String(e.message||e)}
+ finally{$('generate').disabled=false}
+}
+async function checkRecovery(){
+ $('restore').disabled=true;$('result').hidden=true;
+ const phrase=$('restore-words').value.trim().toLowerCase().replace(/\s+/g,' ');
+ const expected=$('expected').value.trim();
+ clearInput(); // Do not keep any phrase in form elements, or in storage.
+ try{
+  if(location.protocol!=='https:'||!isSecureContext)throw Error('SECURE_HTTPS_REQUIRED');
+  if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(expected))throw Error('INVALID_EXPECTED_ADDRESS');
+  const validated=await diagnosticWordsToEntropy(phrase,WORDS);
+  if(validated.length!==16)throw Error('INVALID_TEST_WORDS');
+  const derived=await diagnosticAddressAndSignature(phrase,WORDS);
+  if(derived.publicAddress!==expected)throw Error('PUBLIC_ADDRESS_MISMATCH');
+  if(!derived.fixedSignatureValid||!derived.changedMessageDenied||derived.canSpend!==false)throw Error('SIGNATURE_CHECK_FAILED');
+  $('result').hidden=false;$('restore-status').className='status pass';$('restore-status').textContent='PASS — Test phrase restored the same public address with a valid fixed-message signature.';
+  $('restore-address').textContent='Public test address: '+derived.publicAddress+'. No wallet was created.';
+ }catch(e){showFail(String(e.message||e))}
+ finally{$('restore').disabled=false}
+}
+function clearScreen(){clearInput();$('generated').hidden=true;$('words').textContent='';$('address').textContent='';$('generate-status').textContent='';$('result').hidden=true;$('restore-status').textContent='';$('restore-address').textContent='';}
+$('generate').addEventListener('click',createDisposable);
+$('restore').addEventListener('click',checkRecovery);
+$('clear').addEventListener('click',clearScreen);
+
+</script></body></html>

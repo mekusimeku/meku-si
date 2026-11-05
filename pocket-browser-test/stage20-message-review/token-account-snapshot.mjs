@@ -60,15 +60,18 @@ export function validateTokenAccountSnapshot(review,rpcResponse) {
  */
 export async function readTokenAccountSnapshot(review,{fetchFn=globalThis.fetch,endpoint='https://api.mainnet-beta.solana.com'}={}) {
   checkReview(review);
+  // Snapshot all expected identities before the first await: hostile caller code
+  // must not swap the destination wallet while the RPC request is in flight.
+  const locked=Object.freeze({...review,requires:Object.freeze([...review.requires])});
   if(endpoint!=='https://api.mainnet-beta.solana.com' || typeof fetchFn!=='function')deny('UNAPPROVED_RPC');
   const ac=new AbortController();const timer=setTimeout(()=>ac.abort(),12000);
   try {
-    const body=JSON.stringify({jsonrpc:'2.0',id:20,method:'getMultipleAccounts',params:[[review.sourceTokenAccount,review.destinationTokenAccount],{commitment:'finalized',encoding:'jsonParsed'}]});
+    const body=JSON.stringify({jsonrpc:'2.0',id:20,method:'getMultipleAccounts',params:[[locked.sourceTokenAccount,locked.destinationTokenAccount],{commitment:'finalized',encoding:'jsonParsed'}]});
     const resp=await fetchFn(endpoint,{method:'POST',headers:{'content-type':'application/json'},body,signal:ac.signal});
     if(!resp || resp.ok!==true || typeof resp.text!=='function')deny('RPC_UNAVAILABLE');
     const raw=await resp.text();
     if(typeof raw!=='string'||raw.length>60000)deny('RPC_RESPONSE_TOO_LARGE');
     let value;try{value=JSON.parse(raw);}catch{deny('BAD_RPC_RESPONSE');}
-    return validateTokenAccountSnapshot(review,value);
+    return validateTokenAccountSnapshot(locked,value);
   } finally {clearTimeout(timer);}
 }

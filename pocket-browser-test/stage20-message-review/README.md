@@ -32,7 +32,7 @@ The expected amount and owner must come from a trusted server/owner confirmation
 node --test pocket-browser-test/stage20-message-review/*.test.mjs
 ```
 
-56 local Node 22 tests passed: **40** unsigned raw-message tests and **16** read-only Token-2022 account response tests. The first decoder test run had two **test fixture byte offset** mistakes, corrected the tests, not the decoder. GitHub CI must independently confirm the exact pushed source and tests before recording a stage checkpoint. No main branch changes and no deployment are authorized.
+57 local Node 22 tests passed: **40** unsigned raw-message tests and **17** read-only Token-2022 account response tests, including a race where the caller changes the expected destination while an RPC request is in flight. The first decoder test run had two **test fixture byte offset** mistakes, corrected the tests, not the decoder. GitHub CI must independently confirm the exact pushed source and tests before recording a stage checkpoint. No main branch changes and no deployment are authorized.
 
 Protocol references (checked November 5, 2026):
 - https://solana.com/docs/core/transactions/versioned-transactions

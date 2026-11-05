@@ -15,6 +15,7 @@ const ENVELOPE_KEYS = Object.freeze(['type', 'version', 'issuedAt', 'intent']);
 const TYPE = 'MEKU_POCKET_PREVIEW_REQUEST_V1';
 const BASE_URL = /^https:\/\/[a-z0-9][a-z0-9.-]*?(?::443)?$/;
 const MAX_AGE_MS = 60_000;
+const MAX_SEEN_REQUESTS = 128; // Fail closed before a hostile sender consumes unbounded memory.
 const FUTURE_TOLERANCE_MS = 5_000;
 
 export class ReviewBoundaryError extends Error {
@@ -57,13 +58,23 @@ function nonce16() {
  */
 export function createPreviewOnlyGate({trustedRequestOrigin, expectedSource, clock = Date.now} = {}) {
   const trusted = trimApprovedOrigin(trustedRequestOrigin);
-  if (!expectedSource || typeof clock !== 'function') deny('INVALID_BOUNDARY_CONFIG');
+  if (!expectedSource || !['object', 'function'].includes(typeof expectedSource) || typeof clock !== 'function')
+    deny('INVALID_BOUNDARY_CONFIG');
   const seen = new Set();
   let stopped = false;
-  let current = null;
+  let current = null; // { preview, issuedAt }; never a signing or approval credential.
+
+  // The caller must refresh the displayed review from getPreview() before any user action.
+  // This cannot by itself dismiss a static UI that never calls us again.
+  function clearStalePreview() {
+    if (!current) return;
+    const now = clock();
+    if (!Number.isSafeInteger(now) || now - current.issuedAt > MAX_AGE_MS) current = null;
+  }
 
   function accept(event) {
     if (stopped) deny('STOP_ACTIVE');
+    clearStalePreview();
     if (current) deny('REVIEW_IN_PROGRESS');
     if (!event || event.origin !== trusted || event.source !== expectedSource)
       deny('UNTRUSTED_MESSAGE_SOURCE');
@@ -75,12 +86,15 @@ export function createPreviewOnlyGate({trustedRequestOrigin, expectedSource, clo
         data.issuedAt < 0 || data.issuedAt > now + FUTURE_TOLERANCE_MS || now - data.issuedAt > MAX_AGE_MS)
       deny('EXPIRED_OR_INVALID_REQUEST_TIME');
     const draft = data.intent;
-    const expected = draft?.asset === 'MEKU SI' ? MEKU_KEYS : SOL_KEYS;
+    // Reject accessors before reading asset; a fake direct-call event may contain getters.
+    if (!plainRecord(draft)) deny('UNEXPECTED_INTENT_FIELDS');
+    const expected = draft.asset === 'MEKU SI' ? MEKU_KEYS : SOL_KEYS;
     if (!exactKeys(draft, expected)) deny('UNEXPECTED_INTENT_FIELDS');
     let intent;
     try { intent = createTransferIntent(draft); }
     catch (error) { deny(error instanceof PocketTransferError ? error.code : 'INVALID_INTENT'); }
     if (seen.has(intent.requestId)) deny('DUPLICATE_REQUEST');
+    if (seen.size >= MAX_SEEN_REQUESTS) deny('SESSION_REQUEST_LIMIT');
     const nonce = nonce16();
     const preview = Object.freeze({
       status: 'REVIEW_ONLY_NO_AUTHORITY',
@@ -92,11 +106,11 @@ export function createPreviewOnlyGate({trustedRequestOrigin, expectedSource, clo
       nonce, // UI session marker, NOT a signing challenge or authorization token.
     });
     seen.add(intent.requestId);
-    current = preview;
+    current = { preview, issuedAt: data.issuedAt };
     return structuredClone(preview);
   }
   function dismiss() { current = null; return 'DISMISSED_NO_APPROVAL'; }
   function stop() { current = null; stopped = true; return 'STOPPED_NO_SIGNING'; }
-  function getPreview() { return current ? structuredClone(current) : null; }
+  function getPreview() { clearStalePreview(); return current ? structuredClone(current.preview) : null; }
   return Object.freeze({ accept, dismiss, stop, getPreview });
 }

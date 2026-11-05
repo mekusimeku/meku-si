@@ -33,3 +33,13 @@ node --test review-origin-gate.test.mjs
 ## Next approved technical work
 
 The founder approved the Stage 13 separate signer design; that is not approval to move money or publish a live wallet. Original Pocket v9 source recovery remains the primary integration block. The three upstream source tag manifests for `@scure/bip39@2.4.0`, `@noble/curves@2.4.0`, and `@noble/hashes@2.4.0` were checked previously, but npm registry DNS is blocked in this environment. No npm tarball lockfile/integrity was verified; do not ship an unaudited crypto dependency.
+
+
+## November 5, 2026: review-only hardening update (supersedes the older 15-test count)
+
+- **Six additional local tests** now cover expiry of old views, fresh-after-expiry requests, replay denial after expiry, bounded request history, rejection of getter-backed intent fields, invalid source-window config and lack of any signing API. Existing 15 tests remain intact: **21/21 PASS**; separately reran **336/336 PASS** inherited Stage 11 synthetic/reference tests (**357/357 combined local tests**, not live wallet testing).
+- Once a review's request timestamp exceeds 60 seconds, `getPreview()` or the next `accept()` drops it. **This is lazy expiry, not a background timer.** A future host UI must poll or refresh and remove any displayed stale content; no real signer exists here.
+- After 128 unique request IDs in one session, new previews fail closed with `SESSION_REQUEST_LIMIT`. This is only an in-memory guard; a reload clears the history and cannot replace authenticated durable cross-device replay prevention.
+- Reject non-record or getter-backed intents *before reading asset*. Reject primitive `expectedSource` configuration. These checks are useful for hostile direct-call tests, but are not proof of browser MessageEvent authenticity or a security audit.
+- The original transfer-preflight file is unchanged. A read-only GitHub workflow is proposed to run this isolated test file; do not claim GitHub CI PASS until a matching run completes.
+- **No wallet keys, user approval, signatures, network calls, transactions, or live Pocket integration. Do NOT deploy as a real wallet.**

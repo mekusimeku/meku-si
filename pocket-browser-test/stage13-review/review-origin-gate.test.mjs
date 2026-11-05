@@ -92,3 +92,55 @@ test('only reviewed source functions imported; transfer preflight unchanged',()=
   assert.equal(typeof gate().stop,'function');
   assert.deepEqual(Object.keys(gate()).sort(),['accept','dismiss','getPreview','stop']);
 });
+
+// Hardened view-only boundary regressions. These are NOT wallet-signing tests.
+test('preview expires after original request timestamp window, not after dismiss', () => {
+  let now = NOW;
+  const g = createPreviewOnlyGate({trustedRequestOrigin: ORIGIN, expectedSource: SOURCE, clock: () => now});
+  const preview = g.accept(event());
+  assert.equal(g.getPreview().requestId, preview.requestId);
+  now = NOW + 60_000;
+  assert.ok(g.getPreview(), 'preview at the exact 60-second limit may still be shown');
+  now += 1;
+  assert.equal(g.getPreview(), null, 'old preview must not remain active');
+});
+test('after expiry, new fresh request works but old request ID cannot be replayed', () => {
+  let now = NOW;
+  const g = createPreviewOnlyGate({trustedRequestOrigin: ORIGIN, expectedSource: SOURCE, clock: () => now});
+  g.accept(event());
+  now += 60_001;
+  const fresh = {...envelope({...mkSol(), requestId:'pocket-req-20261104-003'}), issuedAt: now};
+  assert.equal(g.accept(event(fresh)).requestId, 'pocket-req-20261104-003');
+  g.dismiss();
+  shouldFail(() => g.accept(event(fresh)), 'DUPLICATE_REQUEST');
+  const old = {...envelope(), issuedAt: now};
+  shouldFail(() => g.accept(event(old)), 'DUPLICATE_REQUEST');
+});
+test('session replay history is bounded and fails closed, including after dismiss', () => {
+  const g = gate();
+  for (let i = 0; i < 128; i++) {
+    const id = `stage13-bounded-${String(i).padStart(3,'0')}`;
+    assert.equal(g.accept(event(envelope({...mkSol(), requestId:id}))).requestId, id);
+    g.dismiss();
+  }
+  shouldFail(() => g.accept(event(envelope({...mkSol(), requestId:'stage13-bounded-129'}))), 'SESSION_REQUEST_LIMIT');
+  shouldFail(() => g.accept(event(envelope({...mkSol(), requestId:'stage13-bounded-000'}))), 'DUPLICATE_REQUEST');
+});
+test('malicious accessor on intent.asset is rejected without invoking getter', () => {
+  let accessed = 0;
+  const malicious = {...mkSol()};
+  Object.defineProperty(malicious, 'asset', {enumerable:true, get(){accessed++;return 'SOL';}});
+  shouldFail(() => gate().accept(event(envelope(malicious))), 'UNEXPECTED_INTENT_FIELDS');
+  assert.equal(accessed, 0);
+});
+test('missing or primitive trusted WindowProxy configuration fails closed', () => {
+  for(const value of [null,'window-proxy',42,true])
+    shouldFail(() => createPreviewOnlyGate({trustedRequestOrigin:ORIGIN, expectedSource:value}),'INVALID_BOUNDARY_CONFIG');
+});
+test('only view-only methods remain available after hardening', () => {
+  const g=gate();
+  assert.deepEqual(Object.keys(g).sort(), ['accept','dismiss','getPreview','stop']);
+  assert.equal(typeof g.sign, 'undefined');
+  assert.equal(typeof g.approve, 'undefined');
+  assert.equal(typeof g.broadcast, 'undefined');
+});

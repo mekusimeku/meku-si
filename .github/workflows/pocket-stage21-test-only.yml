@@ -1,0 +1,20 @@
+name: Pocket Stage 21 Finalized Receipt Proof TEST ONLY
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/stage21-finality/**'
+      - '.github/workflows/pocket-stage21-test-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  finalized-receipt-review-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check strict legacy transaction decoder and offline finalized-receipt proof (no live transactions)
+        run: node --test pocket-browser-test/stage20-message-review/*.test.mjs pocket-browser-test/stage21-finality/*.test.mjs

@@ -1,0 +1,19 @@
+name: Pocket v9 Exact-Commit Source Recovery Tool (TEST ONLY)
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/source-recovery/**'
+      - '.github/workflows/pocket-v9-source-recovery-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source-export-test-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax and disposable Git archive recovery
+        run: |
+          bash -n pocket-browser-test/source-recovery/recover-exact-v9.sh
+          python3 -m unittest -v pocket-browser-test/source-recovery/test_recovery.py

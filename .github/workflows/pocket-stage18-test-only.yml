@@ -1,0 +1,29 @@
+name: Pocket Stage 18 Published Crypto Tarball Gate Test Only
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/stage18-crypto-artifacts/**'
+      - '.github/workflows/pocket-stage18-test-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  published-npm-artifacts-test-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check policy failures without network
+        run: node --test pocket-browser-test/stage18-crypto-artifacts/test-policy.mjs
+      - name: Verify real published npm tarball bytes and exact dependency lock
+        run: node pocket-browser-test/stage18-crypto-artifacts/verify-published.mjs pocket-browser-test/stage18-crypto-artifacts/artifact-report
+      - name: Save non-secret lockfile and artifact hash evidence for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-stage18-published-artifact-evidence
+          path: pocket-browser-test/stage18-crypto-artifacts/artifact-report/
+          if-no-files-found: error
+          retention-days: 30

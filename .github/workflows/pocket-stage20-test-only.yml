@@ -20,5 +20,7 @@ jobs:
         run: |
           node --check pocket-browser-test/stage20-message-review/review-message.mjs
           node --check pocket-browser-test/stage20-message-review/review-message.test.mjs
+          node --check pocket-browser-test/stage20-message-review/token-account-snapshot.mjs
+          node --check pocket-browser-test/stage20-message-review/token-account-snapshot.test.mjs
       - name: Run strict unsigned legacy message review tests (NO SIGNING OR RPC)
-        run: node --test pocket-browser-test/stage20-message-review/review-message.test.mjs
+        run: node --test pocket-browser-test/stage20-message-review/*.test.mjs

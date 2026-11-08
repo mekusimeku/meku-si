@@ -1,6 +1,8 @@
 # MEKU Reality Engine — reference contract
 
-Status: **implemented and unit-tested as a simulation**. Not deployed to `meku.farm`. Not a Mainnet payment system.
+Status: **isolated staging lab, handler-tested**. Not deployed to `meku.farm`. Not a Mainnet payment system.
+
+The public MCP server in `screenshot-magic-5054` is unchanged and still exposes only the original three tools. Paid tools stay off that server. This branch runs a separate test MCP over HTTP with durable sqlite state.
 
 The live MCP server in `screenshot-magic-5054` still exposes only:
 

@@ -7,6 +7,8 @@ import {
   type Receipt,
   type ToolResult,
 } from "./engine.ts";
+import { openLabStore, type LabDisk } from "./lab-store.ts";
+import { screenReceipt } from "./receipt-verify.ts";
 
 export type LabAgent = {
   token: string;
@@ -47,13 +49,31 @@ export class LabSession {
   private readonly clockBox: { value: number };
   private idempotency = new Map<string, Idempotent>();
   private lock: Promise<void> = Promise.resolve();
+  private store: ReturnType<typeof openLabStore> | null = null;
 
   constructor(engine: RealityEngine, clockBox: { value: number }) {
     this.engine = engine;
     this.clockBox = clockBox;
   }
 
-  static open(start = 1_762_560_000_000): LabSession {
+  static open(startOrOptions: number | { dbPath?: string; start?: number } = 1_762_560_000_000): LabSession {
+    const options = typeof startOrOptions === "number" ? { start: startOrOptions } : startOrOptions;
+    const start = options.start ?? 1_762_560_000_000;
+    if (options.dbPath) {
+      const store = openLabStore(options.dbPath);
+      const loaded = store.load();
+      if (loaded) {
+        const session = LabSession.restore(loaded.snapshot, loaded.agents, loaded.humans, loaded.clock);
+        session.store = store;
+        return session;
+      }
+      const clockBox = { value: start };
+      const session = new LabSession(new RealityEngine(() => clockBox.value), clockBox);
+      session.store = store;
+      session.seed();
+      session.persist();
+      return session;
+    }
     const clockBox = { value: start };
     const session = new LabSession(new RealityEngine(() => clockBox.value), clockBox);
     session.seed();
@@ -119,6 +139,18 @@ export class LabSession {
 
   advance(ms: number) {
     this.clockBox.value += ms;
+    this.persist();
+  }
+
+  private persist() {
+    if (!this.store) return;
+    const disk: LabDisk = {
+      snapshot: this.engine.snapshot(),
+      clock: this.clockBox.value,
+      agents: [...this.agents.values()],
+      humans: [...this.humans.values()],
+    };
+    this.store.save(disk);
   }
 
   exportState() {
@@ -150,6 +182,7 @@ export class LabSession {
     try {
       return await fn();
     } finally {
+      this.persist();
       release();
     }
   }
@@ -194,6 +227,8 @@ export class LabSession {
     if (agent.readOnly && name !== "meku_search_humans") {
       return rpcResponse(body.id ?? null, toolError("This read-only key permits only meku_search_humans."));
     }
+    const invalid = validateToolArgs(name, args);
+    if (invalid) return rpcResponse(body.id ?? null, null, -32602, invalid);
     const idempotencyKey = typeof args.idempotencyKey === "string" ? args.idempotencyKey : "";
     if (idempotencyKey) {
       const cached = this.idempotency.get(`${agent.agentId}:${name}:${idempotencyKey}`);
@@ -265,9 +300,19 @@ export class LabSession {
     }
     const invoiceId = typeof args.invoiceId === "string" ? args.invoiceId : "";
     const invoice = this.engine.snapshot().invoices.find((item) => item.id === invoiceId);
-    if (!invoice || !invoice.quote) return toolText({ ok: false, code: "INVOICE_MISSING", fundsMoved: false });
+    if (!invoice || !invoice.quote) return toolText({ ok: false, code: "INVOICE_MISSING", fundsMoved: false, productionProof: false });
+    if (invoice.keyId !== agent.keyId || invoice.agentId !== agent.agentId) {
+      return toolText({ ok: false, code: "INVOICE_NOT_OWNED", fundsMoved: false, productionProof: false });
+    }
     const mode = typeof args.mode === "string" ? args.mode : "simulated-finalized";
     const receipt = labReceipt(invoice.id, invoice.quote, mode);
+    const screened = screenReceipt(receipt, "test-lab");
+    if (!screened.ok) {
+      return toolText({ ok: false, code: screened.code, fundsMoved: false, productionProof: false });
+    }
+    if (this.store && !this.store.claimReceipt(receipt.signature, invoice.id, agent.agentId)) {
+      return toolText({ ok: false, code: "REPLAYED_SIGNATURE", fundsMoved: false, productionProof: false });
+    }
     const settled = this.engine.submitReceipt(invoice.id, receipt, plan === "INTELLIGENCE" ? Number(args.enterpriseMissionCap) : undefined);
     return toolText({
       ok: settled.ok,
@@ -276,6 +321,7 @@ export class LabSession {
       environment: "TEST",
       invoiceId,
       fundsMoved: false,
+      productionProof: false,
       note: "Simulated settlement. Not a Mainnet receipt.",
     });
   }
@@ -293,6 +339,9 @@ export class LabSession {
     }
     const missionId = typeof body.missionId === "string" ? body.missionId : "";
     const action = typeof body.action === "string" ? body.action : "";
+    if (!roleAllows(human.role, action)) {
+      return Response.json({ ok: false, code: "ROLE_FORBIDDEN", environment: "TEST" }, { status: 403 });
+    }
     if (action === "stop") {
       if (human.role !== "operator") return Response.json({ ok: false, code: "STOP_FORBIDDEN" }, { status: 403 });
       const keyId = typeof body.keyId === "string" ? body.keyId : "";
@@ -318,19 +367,30 @@ export class LabSession {
       return Response.json(result.ok ? { ok: true, state: result.mission.state, environment: "TEST" } : { ok: false, code: result.code, environment: "TEST" });
     }
     if (action === "fund") {
-      const keyId = typeof body.keyId === "string" ? body.keyId : "";
-      const funded = this.engine.fundMission(keyId, missionId);
+      const mission = this.engine.snapshot().missions.find((item) => item.id === missionId);
+      if (!mission) return Response.json({ ok: false, code: "NOT_FOUND", environment: "TEST", fundsMoved: false });
+      if (typeof body.keyId === "string" && body.keyId !== mission.keyId) {
+        return Response.json({ ok: false, code: "FUNDING_NOT_OWNED", environment: "TEST", fundsMoved: false });
+      }
+      const funded = this.engine.fundMission(mission.keyId, missionId);
       if (!funded.ok) return Response.json({ ok: false, code: funded.code, environment: "TEST", fundsMoved: false });
       const quote = quoteForCents(funded.invoice.priceCents, this.clockBox.value, `lab_fund_${funded.invoice.id}`);
       const attached = this.engine.attachQuote(funded.invoice.id, quote);
-      if (!attached.ok) return Response.json({ ok: false, code: attached.code, fundsMoved: false });
-      const paid = this.engine.submitReceipt(funded.invoice.id, labReceipt(funded.invoice.id, quote, "simulated-finalized"));
+      if (!attached.ok) return Response.json({ ok: false, code: attached.code, fundsMoved: false, productionProof: false });
+      const receipt = labReceipt(funded.invoice.id, quote, "simulated-finalized");
+      const screened = screenReceipt(receipt, "test-lab");
+      if (!screened.ok) return Response.json({ ok: false, code: screened.code, productionProof: false, fundsMoved: false });
+      if (this.store && !this.store.claimReceipt(receipt.signature, funded.invoice.id, mission.ownerAgentId)) {
+        return Response.json({ ok: false, code: "REPLAYED_SIGNATURE", fundsMoved: false, productionProof: false });
+      }
+      const paid = this.engine.submitReceipt(funded.invoice.id, receipt);
       return Response.json({
         ok: paid.ok,
         code: paid.ok ? "MISSION_FUNDED" : paid.code,
         disclosed: funded.disclosed,
         environment: "TEST",
         fundsMoved: false,
+        productionProof: false,
       });
     }
     return Response.json({ ok: false, code: "UNKNOWN_ACTION" }, { status: 400 });
@@ -366,20 +426,136 @@ function toolError(message: string) {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
+function roleAllows(role: LabHuman["role"], action: string) {
+  if (role === "worker") return action === "accept" || action === "reject" || action === "evidence";
+  if (role === "reviewer") return action === "review";
+  if (role === "operator") return action === "fund" || action === "stop";
+  return false;
+}
+
+const TASK_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", minLength: 4, maxLength: 120 },
+    action: { type: "string", minLength: 4, maxLength: 200 },
+    description: { type: "string", minLength: 20, maxLength: 2000 },
+    country: { type: "string", maxLength: 80 },
+    region: { type: "string", maxLength: 80 },
+    skills: { type: "array", items: { type: "string", maxLength: 40 }, maxItems: 10 },
+    deliverable: { type: "string", maxLength: 200 },
+    timeframe: { type: "string", maxLength: 120 },
+    budgetCents: { type: "integer", minimum: 0, maximum: 100_000_000 },
+    idempotencyKey: { type: "string", maxLength: 80 },
+  },
+  required: ["title", "action", "description"],
+  additionalProperties: false,
+};
+
+const SEARCH_SCHEMA = {
+  type: "object",
+  properties: {
+    country: { type: "string", maxLength: 80 },
+    region: { type: "string", maxLength: 80 },
+    skills: { type: "array", items: { type: "string", maxLength: 40 }, maxItems: 10 },
+  },
+  additionalProperties: false,
+};
+
+const REPORT_SCHEMA = {
+  type: "object",
+  properties: { id: { type: "string", minLength: 4, maxLength: 80 } },
+  required: ["id"],
+  additionalProperties: false,
+};
+
+const QUOTE_SCHEMA = {
+  type: "object",
+  properties: {
+    plan: { type: "string", enum: ["AGENT", "OPERATOR", "NETWORK", "INTELLIGENCE"] },
+    enterpriseMissionCap: { type: "integer", minimum: 1, maximum: 500 },
+    idempotencyKey: { type: "string", maxLength: 80 },
+  },
+  required: ["plan"],
+  additionalProperties: false,
+};
+
+const SETTLE_SCHEMA = {
+  type: "object",
+  properties: {
+    invoiceId: { type: "string", minLength: 4, maxLength: 80 },
+    mode: { type: "string", enum: ["simulated-finalized", "unknown", "wrong-mint", "replay"] },
+    enterpriseMissionCap: { type: "integer", minimum: 1, maximum: 500 },
+    idempotencyKey: { type: "string", maxLength: 80 },
+  },
+  required: ["invoiceId"],
+  additionalProperties: false,
+};
+
+const DELEGATE_SCHEMA = {
+  type: "object",
+  properties: {
+    agentId: { type: "string", minLength: 3, maxLength: 80 },
+    spendLimitCents: { type: ["integer", "string"] },
+    idempotencyKey: { type: "string", maxLength: 80 },
+  },
+  required: ["agentId", "spendLimitCents"],
+  additionalProperties: false,
+};
+
+const STOP_SCHEMA = { type: "object", properties: {}, additionalProperties: false };
+
 const TOOL_DEFS = [
-  ...["meku_search_humans", "meku_request_human", "meku_get_request_status"].map((name) => ({
-    name,
-    description: "Existing Human Cloud tool. Preserved. A request is not dispatch or payment.",
-  })),
-  ...CAPABILITIES.flatMap((name) => [
-    { name, description: "Reality Engine capability. Submits a review request. Does not dispatch, spend, or self-verify." },
-    { name: name.replace(".", "_"), description: "Underscore alias of the same capability." },
-  ]),
-  { name: "meku_market_quote", description: "TEST ONLY simulated Market Gate quote. No transaction is built." },
-  { name: "meku_market_settle", description: "TEST ONLY simulated receipt. Does not move Mainnet funds." },
-  { name: "meku_delegate", description: "Issue a child execution key. Unlimited spend is rejected." },
-  { name: "meku_stop", description: "STOP this key and its open missions." },
+  { name: "meku_search_humans", description: "Existing Human Cloud search. Aggregate counts only. Not dispatch.", inputSchema: SEARCH_SCHEMA },
+  { name: "meku_request_human", description: "Existing request tool. Creates a review request, not a mission dispatch or payment.", inputSchema: TASK_SCHEMA },
+  { name: "meku_get_request_status", description: "Existing status tool. Only the owning agent can read the request.", inputSchema: REPORT_SCHEMA },
+  ...CAPABILITIES.flatMap((name) => {
+    const schema = name === "meku.report" ? REPORT_SCHEMA : TASK_SCHEMA;
+    return [
+      { name, description: "Reality Engine capability. Does not dispatch, spend, or self-verify.", inputSchema: schema },
+      { name: name.replace(".", "_"), description: "Underscore alias of the same capability.", inputSchema: schema },
+    ];
+  }),
+  { name: "meku_market_quote", description: "TEST ONLY quote. No transaction is built or signed.", inputSchema: QUOTE_SCHEMA },
+  { name: "meku_market_settle", description: "TEST ONLY simulated receipt. Never a production payment proof.", inputSchema: SETTLE_SCHEMA },
+  { name: "meku_delegate", description: "Issue a child key. Unlimited spend is rejected.", inputSchema: DELEGATE_SCHEMA },
+  { name: "meku_stop", description: "STOP this key and its open missions.", inputSchema: STOP_SCHEMA },
 ];
+
+function validateToolArgs(name: string, args: Record<string, unknown>) {
+  const tool = TOOL_DEFS.find((item) => item.name === name);
+  if (!tool) return null;
+  return schemaError(tool.inputSchema, args);
+}
+
+function schemaError(schema: { properties?: Record<string, { type?: string | string[]; enum?: string[]; minLength?: number; maxLength?: number; minimum?: number; maximum?: number }>; required?: string[]; additionalProperties?: boolean }, args: Record<string, unknown>) {
+  if (schema.additionalProperties === false) {
+    for (const key of Object.keys(args)) {
+      if (!schema.properties || !Object.hasOwn(schema.properties, key)) return `Unexpected argument: ${key}`;
+    }
+  }
+  for (const key of schema.required ?? []) {
+    if (!Object.hasOwn(args, key)) return `Missing argument: ${key}`;
+  }
+  for (const [key, rule] of Object.entries(schema.properties ?? {})) {
+    if (!Object.hasOwn(args, key)) continue;
+    const value = args[key];
+    if (rule.enum && (typeof value !== "string" || !rule.enum.includes(value))) return `Invalid argument: ${key}`;
+    const types = Array.isArray(rule.type) ? rule.type : rule.type ? [rule.type] : [];
+    if (types.includes("string") && typeof value === "string") {
+      if (rule.minLength !== undefined && value.length < rule.minLength) return `Invalid argument: ${key}`;
+      if (rule.maxLength !== undefined && value.length > rule.maxLength) return `Invalid argument: ${key}`;
+      continue;
+    }
+    if (types.includes("integer") && typeof value === "number" && Number.isInteger(value)) {
+      if (rule.minimum !== undefined && value < rule.minimum) return `Invalid argument: ${key}`;
+      if (rule.maximum !== undefined && value > rule.maximum) return `Invalid argument: ${key}`;
+      continue;
+    }
+    if (types.includes("array") && Array.isArray(value)) continue;
+    if (types.length > 0) return `Invalid argument: ${key}`;
+  }
+  return null;
+}
 
 export async function readTool(response: Response): Promise<Record<string, unknown>> {
   const body = (await response.json()) as { result?: { content?: { text?: string }[] }; error?: { message?: string } };

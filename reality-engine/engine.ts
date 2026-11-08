@@ -133,6 +133,24 @@ export type ToolResult = {
 
 type StoredReceipt = Receipt & { invoiceIdBound: string };
 
+export type EngineSnapshot = {
+  seq: number;
+  keys: ExecutionKey[];
+  invoices: Invoice[];
+  receipts: StoredReceipt[];
+  missions: Mission[];
+  pha: { id: string; body: Record<string, unknown>; bodyHash: string; integrity: string }[];
+  audits: { at: number; event: string; actor: string; detail: string }[];
+  calls: { keyId: string; at: number }[];
+  production: {
+    subscribedAccounts: number;
+    grossPurchaseUsd: number;
+    missionFundingUsd: number;
+    platformFeeUsd: number;
+    burnedBaseUnits: string;
+  };
+};
+
 function feeSplit(budgetCents: number) {
   const platformFeeCents = Math.round((budgetCents * PLATFORM_FEE_BPS) / 10_000);
   return { platformFeeCents, workerCents: budgetCents - platformFeeCents, budgetCents };
@@ -184,10 +202,9 @@ export class RealityEngine {
     if (parent?.revoked || parent?.stopped) throw new Error("PARENT_NOT_ACTIVE");
     let spendLimitCents = input.spendLimitCents;
     if (parent) {
-      if (spendLimitCents < 0) throw new Error("CHILD_SPEND_INVALID");
+      if (!Number.isFinite(spendLimitCents) || spendLimitCents < 0) throw new Error("CHILD_UNLIMITED_FORBIDDEN");
       const parentRemaining = parent.spendLimitCents - parent.spentCents;
       if (spendLimitCents > parentRemaining) throw new Error("CHILD_EXCEEDS_PARENT");
-      if (!Number.isFinite(spendLimitCents)) throw new Error("CHILD_UNLIMITED_FORBIDDEN");
     }
     if (spendLimitCents < 0 || !Number.isFinite(spendLimitCents)) throw new Error("SPEND_INVALID");
     const key: ExecutionKey = {
@@ -715,6 +732,34 @@ export class RealityEngine {
       nextAction,
       detail: extra?.detail,
     };
+  }
+
+  snapshot(): EngineSnapshot {
+    return {
+      seq: this.seq,
+      keys: [...this.keys.values()],
+      invoices: [...this.invoices.values()],
+      receipts: [...this.receipts.values()],
+      missions: [...this.missions.values()],
+      pha: [...this.pha.values()],
+      audits: this.audits.map((entry) => ({ ...entry })),
+      calls: this.calls.map((entry) => ({ ...entry })),
+      production: { ...this.production },
+    };
+  }
+
+  static restore(data: EngineSnapshot, now: () => number = () => Date.now()): RealityEngine {
+    const engine = new RealityEngine(now);
+    engine.seq = data.seq;
+    engine.keys = new Map(data.keys.map((key) => [key.id, key]));
+    engine.invoices = new Map(data.invoices.map((invoice) => [invoice.id, invoice]));
+    engine.receipts = new Map(data.receipts.map((receipt) => [receipt.signature, receipt]));
+    engine.missions = new Map(data.missions.map((mission) => [mission.id, mission]));
+    engine.pha = new Map(data.pha.map((record) => [record.id, record]));
+    engine.audits = data.audits.map((entry) => ({ ...entry }));
+    engine.calls = data.calls.map((entry) => ({ ...entry }));
+    engine.production = { ...data.production };
+    return engine;
   }
 }
 

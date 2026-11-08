@@ -8,7 +8,13 @@ The live MCP server in `screenshot-magic-5054` still exposes only:
 - `meku_request_human`
 - `meku_get_request_status`
 
-This package does not replace those tools. Dot-named capabilities are the public contract. Underscore aliases exist for hosts that reject dots. Calling one creates a review request. It does not dispatch a person, spend funds, or mark evidence verified.
+That production file was not changed. Paid tools stay off the public server until a separate review. The isolated lab in this reference adds those three tools plus the six capabilities, market quote/settle, delegation, and STOP. It authenticates test bearer keys, persists by snapshot across a restart, and settles only simulated receipts.
+
+Run the handler acceptance:
+
+```bash
+node --experimental-strip-types --test reality-engine/lab-acceptance.test.ts
+```
 
 ## Plans (locked)
 

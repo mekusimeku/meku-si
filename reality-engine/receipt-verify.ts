@@ -40,22 +40,32 @@ export async function verifyProductionReceipt(
   reader: ChainReader,
 ) {
   const screened = screenReceipt(receipt, "production");
-  if (!screened.ok) return screened;
+  if (!screened.ok) return { ...screened, activatesAccount: false as const };
   const observed = await reader.read(receipt.signature);
   if (!observed || observed.signature !== receipt.signature) {
-    return { ok: false as const, code: "RECEIPT_NOT_ON_CHAIN", productionProof: false as const };
+    return { ok: false as const, code: "RECEIPT_NOT_ON_CHAIN", productionProof: false as const, activatesAccount: false as const };
   }
   if (!observed.finalized || observed.cluster !== SOLANA_CLUSTER) {
-    return { ok: false as const, code: "NOT_FINALIZED", productionProof: false as const };
+    return { ok: false as const, code: "NOT_FINALIZED", productionProof: false as const, activatesAccount: false as const };
   }
   if (observed.mint !== OFFICIAL_MINT || observed.mint !== expected.mint || receipt.mint !== OFFICIAL_MINT) {
-    return { ok: false as const, code: "WRONG_MINT", productionProof: false as const };
+    return { ok: false as const, code: "WRONG_MINT", productionProof: false as const, activatesAccount: false as const };
   }
   if (observed.amountBaseUnits !== expected.amountBaseUnits || observed.amountBaseUnits !== receipt.amountBaseUnits) {
-    return { ok: false as const, code: "AMOUNT_MISMATCH", productionProof: false as const };
+    return { ok: false as const, code: "AMOUNT_MISMATCH", productionProof: false as const, activatesAccount: false as const };
   }
   if (observed.destination !== expected.destination || observed.destination !== receipt.destination) {
-    return { ok: false as const, code: "DESTINATION_MISMATCH", productionProof: false as const };
+    return { ok: false as const, code: "DESTINATION_MISMATCH", productionProof: false as const, activatesAccount: false as const };
   }
-  return { ok: true as const, code: "CHAIN_VERIFIED", productionProof: true as const };
+  return {
+    ok: true as const,
+    code: "CHAIN_OBSERVATION_MATCHED",
+    productionProof: false as const,
+    activatesAccount: false as const,
+  };
+}
+
+/** A chain observation, including a test fixture, is not allowed to activate an account. */
+export function authorizeProductionAccount(_observation: { code: string }) {
+  return { activated: false as const, code: "PRODUCTION_ACTIVATION_DISABLED" as const };
 }

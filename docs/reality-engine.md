@@ -2,7 +2,9 @@
 
 Status: **isolated staging lab, handler-tested**. Not deployed to `meku.farm`. Not a Mainnet payment system.
 
-The public MCP server in `screenshot-magic-5054` is unchanged and still exposes only the original three tools. Paid tools stay off that server. This branch runs a separate test MCP over HTTP with durable sqlite state.
+The sqlite lab is not a Cloudflare Pages app. `node:sqlite` does not run on Pages. The Pages project `meku-core-git` already fails on main (`715de54`) and on this branch. GitHub's check payload has no build log (`output.text` is null), and the Cloudflare dashboard requires an account login this environment does not have. The live site `https://meku-core-git.pages.dev` still serves the older static CORE page. Staging for this lab is the GitHub Actions job `Reality lab`, not that Pages project.
+
+The six capabilities are prepared behind `MEKU_REALITY_TOOLS=lab` in `reality-engine/mcp-production-gate.ts`. The default list is the original three tools. `MEKU_PRODUCTION_PAYMENTS=1` forces the extra tools off. That gate is not wired into the live `mcp-server.ts`.
 
 The live MCP server in `screenshot-magic-5054` still exposes only:
 

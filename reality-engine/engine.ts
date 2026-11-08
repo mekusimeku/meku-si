@@ -734,6 +734,19 @@ export class RealityEngine {
     };
   }
 
+  reload(data: EngineSnapshot) {
+    const copy = structuredClone(data);
+    this.seq = copy.seq;
+    this.keys = new Map(copy.keys.map((key) => [key.id, key]));
+    this.invoices = new Map(copy.invoices.map((invoice) => [invoice.id, invoice]));
+    this.receipts = new Map(copy.receipts.map((receipt) => [receipt.signature, receipt]));
+    this.missions = new Map(copy.missions.map((mission) => [mission.id, mission]));
+    this.pha = new Map(copy.pha.map((record) => [record.id, record]));
+    this.audits = copy.audits.map((entry) => ({ ...entry }));
+    this.calls = copy.calls.map((entry) => ({ ...entry }));
+    this.production = { ...copy.production };
+  }
+
   snapshot(): EngineSnapshot {
     return {
       seq: this.seq,

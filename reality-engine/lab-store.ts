@@ -33,28 +33,51 @@ export function openLabStore(path: string) {
     "insert into lab_state (id, body) values (1, ?) on conflict(id) do update set body = excluded.body",
   );
   const claim = db.prepare("insert into lab_receipts (signature, invoice_id, agent_id) values (?, ?, ?)");
+  const readReceipt = db.prepare("select signature from lab_receipts where signature = ?");
+  let failWrites = 0;
+  let crashBeforeCommit = 0;
   return {
     load(): LabDisk | null {
       const row = readState.get() as { body: string } | undefined;
       if (!row) return null;
       return JSON.parse(row.body) as LabDisk;
     },
-    save(disk: LabDisk) {
-      db.exec("begin");
+    failNextSave() {
+      failWrites += 1;
+    },
+    crashNextCommit() {
+      crashBeforeCommit += 1;
+    },
+    hasReceipt(signature: string) {
+      return Boolean(readReceipt.get(signature));
+    },
+    /**
+     * Receipt insert and subscription snapshot commit together.
+     * A unique signature rolls both back. A crash before commit leaves neither.
+     */
+    save(disk: LabDisk, receipt?: { signature: string; invoiceId: string; agentId: string } | null) {
+      if (failWrites > 0) {
+        failWrites -= 1;
+        throw new Error("DISK_WRITE_FAILED");
+      }
+      db.exec("begin immediate");
       try {
+        if (receipt) claim.run(receipt.signature, receipt.invoiceId, receipt.agentId);
+        if (crashBeforeCommit > 0) {
+          crashBeforeCommit -= 1;
+          throw new Error("CRASH_BEFORE_COMMIT");
+        }
         writeState.run(JSON.stringify(disk));
         db.exec("commit");
+        return "ok" as const;
       } catch (error) {
-        db.exec("rollback");
+        try {
+          db.exec("rollback");
+        } catch {
+          /* already rolled back */
+        }
+        if (/unique/i.test(String(error))) return "replay" as const;
         throw error;
-      }
-    },
-    claimReceipt(signature: string, invoiceId: string, agentId: string) {
-      try {
-        claim.run(signature, invoiceId, agentId);
-        return true;
-      } catch {
-        return false;
       }
     },
   };

@@ -50,6 +50,8 @@ export class LabSession {
   private idempotency = new Map<string, Idempotent>();
   private lock: Promise<void> = Promise.resolve();
   private store: ReturnType<typeof openLabStore> | null = null;
+  private pendingClaim: { signature: string; invoiceId: string; agentId: string } | null = null;
+  private checkpoint: EngineSnapshot | null = null;
 
   constructor(engine: RealityEngine, clockBox: { value: number }) {
     this.engine = engine;
@@ -71,7 +73,7 @@ export class LabSession {
       const session = new LabSession(new RealityEngine(() => clockBox.value), clockBox);
       session.store = store;
       session.seed();
-      session.persist();
+      session.flush();
       return session;
     }
     const clockBox = { value: start };
@@ -139,18 +141,52 @@ export class LabSession {
 
   advance(ms: number) {
     this.clockBox.value += ms;
-    this.persist();
+    this.flush();
   }
 
-  private persist() {
-    if (!this.store) return;
-    const disk: LabDisk = {
+  failNextSave() {
+    this.store?.failNextSave();
+  }
+
+  crashNextCommit() {
+    this.store?.crashNextCommit();
+  }
+
+  private disk(): LabDisk {
+    return {
       snapshot: this.engine.snapshot(),
       clock: this.clockBox.value,
       agents: [...this.agents.values()],
       humans: [...this.humans.values()],
     };
-    this.store.save(disk);
+  }
+
+  private rollbackMemory() {
+    if (!this.checkpoint) return;
+    this.engine.reload(this.checkpoint);
+    this.pendingClaim = null;
+  }
+
+  private flush() {
+    if (!this.store) {
+      this.pendingClaim = null;
+      return "memory" as const;
+    }
+    const claim = this.pendingClaim;
+    this.pendingClaim = null;
+    const outcome = this.store.save(this.disk(), claim);
+    if (outcome === "replay") {
+      this.rollbackMemory();
+      return "replay" as const;
+    }
+    this.checkpoint = structuredClone(this.engine.snapshot());
+    return "ok" as const;
+  }
+
+  private bindReceipt(signature: string, invoiceId: string, agentId: string) {
+    if (!this.store) return "memory" as const;
+    this.pendingClaim = { signature, invoiceId, agentId };
+    return this.flush();
   }
 
   exportState() {
@@ -179,10 +215,16 @@ export class LabSession {
       release = resolve;
     });
     await previous;
+    this.checkpoint = structuredClone(this.engine.snapshot());
+    this.pendingClaim = null;
     try {
-      return await fn();
+      const value = await fn();
+      if (this.flush() === "replay") throw new Error("REPLAYED_SIGNATURE");
+      return value;
+    } catch (error) {
+      this.rollbackMemory();
+      throw error;
     } finally {
-      this.persist();
       release();
     }
   }
@@ -310,10 +352,10 @@ export class LabSession {
     if (!screened.ok) {
       return toolText({ ok: false, code: screened.code, fundsMoved: false, productionProof: false });
     }
-    if (this.store && !this.store.claimReceipt(receipt.signature, invoice.id, agent.agentId)) {
-      return toolText({ ok: false, code: "REPLAYED_SIGNATURE", fundsMoved: false, productionProof: false });
-    }
     const settled = this.engine.submitReceipt(invoice.id, receipt, plan === "INTELLIGENCE" ? Number(args.enterpriseMissionCap) : undefined);
+    if (settled.ok && this.bindReceipt(receipt.signature, invoice.id, agent.agentId) === "replay") {
+      return toolText({ ok: false, code: "REPLAYED_SIGNATURE", fundsMoved: false, productionProof: false, activated: false });
+    }
     return toolText({
       ok: settled.ok,
       code: settled.code,
@@ -380,10 +422,10 @@ export class LabSession {
       const receipt = labReceipt(funded.invoice.id, quote, "simulated-finalized");
       const screened = screenReceipt(receipt, "test-lab");
       if (!screened.ok) return Response.json({ ok: false, code: screened.code, productionProof: false, fundsMoved: false });
-      if (this.store && !this.store.claimReceipt(receipt.signature, funded.invoice.id, mission.ownerAgentId)) {
+      const paid = this.engine.submitReceipt(funded.invoice.id, receipt);
+      if (paid.ok && this.bindReceipt(receipt.signature, funded.invoice.id, mission.ownerAgentId) === "replay") {
         return Response.json({ ok: false, code: "REPLAYED_SIGNATURE", fundsMoved: false, productionProof: false });
       }
-      const paid = this.engine.submitReceipt(funded.invoice.id, receipt);
       return Response.json({
         ok: paid.ok,
         code: paid.ok ? "MISSION_FUNDED" : paid.code,

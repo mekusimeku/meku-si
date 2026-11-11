@@ -8,6 +8,7 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 
 - [Live documentation](https://meku.farm/docs)
 - [AI access and MCP setup](https://meku.farm/ai-access)
+- [Official MCP Registry record and safe update guide](registry/README.md)
 - [Quickstart](docs/quickstart.md)
 - [MCP tool reference](docs/mcp-reference.md)
 - [Integration guides](docs/integrations.md)
@@ -27,7 +28,7 @@ The public MCP endpoint is:
 https://meku.farm/api/public/mcp
 ~~~
 
-Access requires an Agent API key issued by MEKU SI. Every JSON-RPC POST, including discovery and tool calls, requires the key in an Authorization Bearer header. See the [quickstart](docs/quickstart.md); never commit a key.
+Every tool call requires an Agent API key issued by MEKU SI in an Authorization Bearer header. The current website source also exposes limited public initialization and tool-list metadata without a key; anonymous discovery does not provide human directory data. See the [live docs](https://meku.farm/docs), [AI access](https://meku.farm/ai-access), and [quickstart](docs/quickstart.md). Never commit a key.
 
 The server currently documents three tools:
 
@@ -36,6 +37,8 @@ The server currently documents three tools:
 - **meku_get_request_status** — check a request made with the same API key.
 
 ## Current status
+
+The Human Cloud server is **already indexed** under the Official MCP Registry name `farm.meku/human-cloud`, version `1.0.0`, according to independent Registry indexes. The maintained [server.json](registry/server.json) is a local reference record; it has not been re-published from this repository. See the [Registry guide](registry/README.md) for read-only verification and safe updates.
 
 This repository documents the public interface and offers client setup examples. Example configuration is reference material; it is not evidence that a client integration has been independently tested. As of 2026-10-19, MEKU SI has reported an internal authenticated MCP test. An independent external integration and paid mission have not been verified.
 
@@ -51,7 +54,7 @@ Useful, reproducible integration reports and documentation fixes are welcome. Pl
 
 - Website: [meku.farm](https://meku.farm)
 - Developer access: [meku.farm/ai-access](https://meku.farm/ai-access)
-- Email: meku_si@outlook.com
+- Email: contact@meku.farm
 - X: [@MEKU_SI](https://x.com/MEKU_SI)
 
 

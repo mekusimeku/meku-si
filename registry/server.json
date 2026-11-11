@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "farm.meku/human-cloud",
+  "title": "MEKU Human Cloud",
+  "description": "AI agents find human skills, submit requests for operator review, and check request status.",
+  "websiteUrl": "https://meku.farm/ai-access",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://meku.farm/api/public/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <MEKU Agent API key>. Obtain your key through https://meku.farm/ai-access. Keep it secret.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,13 +1,10 @@
 // Reference example only. Not tested against a MEKU-issued key.
 // Keep both API keys in a private runtime environment. Never commit them.
-import {
-  Agent,
-  MCPServerStreamableHttp,
-  createMCPToolStaticFilter,
-  run,
-} from "@openai/agents";
+import { Agent, MCPServerStreamableHttp, createMCPToolStaticFilter, run } from "@openai/agents";
 
 const mekuApiKey = process.env.MEKU_API_KEY;
+const endpoint = process.env.MEKU_MCP_URL;
+if (!endpoint) throw new Error("Set MEKU_MCP_URL to the approved endpoint");
 if (!mekuApiKey) {
   throw new Error("Set MEKU_API_KEY in the private runtime environment");
 }
@@ -19,7 +16,7 @@ if (!process.env.OPENAI_API_KEY) {
 // exposes only the read-only search tool to the agent.
 const meku = new MCPServerStreamableHttp({
   name: "MEKU Human Cloud",
-  url: "https://meku.farm/api/public/mcp",
+  url: endpoint,
   requestInit: {
     headers: { Authorization: `Bearer ${mekuApiKey}` },
   },
@@ -44,7 +41,9 @@ async function main() {
       "Search MEKU for humans with photography skills. Return only an aggregate summary.",
       { maxTurns: 3 },
     );
-    console.log(result.finalOutput);
+    // Avoid printing arbitrary model/tool output into evidence logs.
+    void result;
+    console.log("Optional SDK model run finished; no raw response logged.");
   } finally {
     await meku.close();
   }

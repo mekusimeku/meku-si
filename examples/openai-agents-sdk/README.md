@@ -22,7 +22,7 @@ This TypeScript example connects the local Agents SDK runtime to MEKU's remote S
 
 ## Data and consent
 
-The MEKU key is sent from your local runtime to MEKU. Your OpenAI key and the prompt/tool result are sent to the OpenAI model provider as part of the agent run. Review the data returned by MEKU before sharing it. Search may return personal information, so retain aggregate results only.
+The MEKU key is sent from your local runtime to MEKU. Your OpenAI key and the prompt/tool result are sent to the OpenAI model provider as part of the agent run. Review the data returned by MEKU before sharing it. The reviewed contract returns aggregates only; stop if unexpected private fields appear and retain no raw output.
 
 The sample does not expose the MEKU request tool, ask a human to perform work, or make a payment. A future request flow must add explicit agent-side human approval and still pass MEKU operator review. Human acceptance and any payment must be verified separately.
 
@@ -34,3 +34,14 @@ The sample does not expose the MEKU request tool, ask a human to perform work, o
 - Record the Agents SDK version, Node version, failure stage, and a redacted message. Do not label the example tested until another developer verifies it against an operator-issued MEKU key.
 
 See the [shared client guide](../../docs/integrations.md) and [official Agents SDK MCP guide](https://openai.github.io/openai-agents-js/guides/mcp/).
+
+## Search-only preparation
+
+Use the [verification guide](../../docs/first-contact-verification.md) first. Set
+**MEKU_MCP_URL** to the approved nonproduction endpoint and request a server-enforced
+search-only credential. A client tool filter is not server authorization. Hosted
+enforcement and this client integration remain unverified.
+
+The model-driven SDK example can incur provider charges. It is outside the zero-dollar
+verification path; the dependency-free verifier requires no model call. No provider
+requests were made during this work.

@@ -1,16 +1,16 @@
 # Client integration guides
 
-These are reference recipes based on each client's public MCP configuration and MEKU's published interface. None has been independently tested with a MEKU-issued key. The [live MEKU docs](https://meku.farm/docs) and [AI access page](https://meku.farm/ai-access) remain the source of truth.
+These are reference recipes based on each client's public MCP configuration and MEKU's published interface. None has been independently tested with a MEKU-issued key. The [source-reviewed contract](mcp-reference.md) and [verification procedure](first-contact-verification.md) distinguish implemented controls from unverified hosted behavior.
 
 The endpoint is **https://meku.farm/api/public/mcp**. An operator-issued Agent API key is required on every JSON-RPC POST, including initialization, discovery, and tool calls. Start with read-only **meku_search_humans**. The request tool is a write action and does not itself approve work or create payment.
 
-| Client | Setup | Status |
-| --- | --- | --- |
-| Cursor | Remote HTTP MCP with environment-backed bearer header | Reference only; not tested against MEKU |
-| Claude Code | Remote HTTP MCP in project **.mcp.json** | Reference only; not tested against MEKU |
-| OpenAI Agents SDK (TypeScript) | Local Streamable HTTP client; static allowlist exposes search only | Reference example; not tested against MEKU |
-| LangChain | Use the current MCP adapter and configure Authorization on every request | Guidance only; APIs vary by release |
-| n8n | MCP Client Tool with bearer header stored in credentials | UI fields vary by release; not tested |
+| Client                         | Setup                                                                    | Status                                     |
+| ------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------ |
+| Cursor                         | Remote HTTP MCP with environment-backed bearer header                    | Reference only; not tested against MEKU    |
+| Claude Code                    | Remote HTTP MCP in project **.mcp.json**                                 | Reference only; not tested against MEKU    |
+| OpenAI Agents SDK (TypeScript) | Local Streamable HTTP client; static allowlist exposes search only       | Reference example; not tested against MEKU |
+| LangChain                      | Use the current MCP adapter and configure Authorization on every request | Guidance only; APIs vary by release        |
+| n8n                            | MCP Client Tool with bearer header stored in credentials                 | UI fields vary by release; not tested      |
 
 ## Obtain and protect a key
 
@@ -18,14 +18,14 @@ Request access through [MEKU AI access](https://meku.farm/ai-access). Use only a
 
 ## Cursor
 
-Create project config at **.cursor/mcp.json** or user config at **~/.cursor/mcp.json**. Set **MEKU_API_KEY** in the environment that launches Cursor, then refresh the MCP connection. Cursor's remote HTTP config supports environment interpolation in headers; remote servers do not support **envFile**.
+Create project config at **.cursor/mcp.json** or user config at **~/.cursor/mcp.json**. Set **MEKU_MCP_URL** to the approved endpoint and **MEKU_API_KEY** in the environment that launches Cursor, then refresh the MCP connection. Cursor's remote HTTP config supports environment interpolation in headers; remote servers do not support **envFile**.
 
 The existing [Cursor config example](../examples/cursor/mcp.json) is safe to commit because it contains an environment reference, not a key.
 
     {
       "mcpServers": {
         "meku-human-cloud": {
-          "url": "https://meku.farm/api/public/mcp",
+          "url": "${env:MEKU_MCP_URL}",
           "headers": {
             "Authorization": "Bearer ${env:MEKU_API_KEY}"
           }
@@ -39,13 +39,13 @@ For detailed setup and safety notes, see the [Cursor example guide](../examples/
 
 ## Claude Code
 
-Set **MEKU_API_KEY** in the environment that launches Claude Code. Put the following in the project-root **.mcp.json**:
+Set **MEKU_MCP_URL** to the approved endpoint and **MEKU_API_KEY** in the environment that launches Claude Code. Put the following in the project-root **.mcp.json**:
 
     {
       "mcpServers": {
         "meku-human-cloud": {
           "type": "http",
-          "url": "https://meku.farm/api/public/mcp",
+          "url": "${MEKU_MCP_URL}",
           "headers": {
             "Authorization": "Bearer ${MEKU_API_KEY}"
           }
@@ -63,7 +63,7 @@ For setup and safety notes, see the [Claude Code example guide](../examples/clau
 
 The [example](../examples/openai-agents-sdk/read-only.ts) uses **MCPServerStreamableHttp** from the local Agents SDK runtime. It puts the MEKU bearer header in **requestInit** and applies a static allowlist containing only **meku_search_humans**. The MEKU key goes from the local runtime to MEKU; it is not configured as an OpenAI-hosted MCP credential. The prompt and tool result can still be sent to the model provider, so review returned data before sharing.
 
-Install **@openai/agents**, set **OPENAI_API_KEY** and **MEKU_API_KEY** in a private runtime environment, then run the file with your project's TypeScript runner. This read-only example does not expose the MEKU request tool. It has not been typechecked or tested against a MEKU-issued key. See the [official Agents SDK MCP guide](https://openai.github.io/openai-agents-js/guides/mcp/).
+Install **@openai/agents**, set **MEKU_MCP_URL**, **OPENAI_API_KEY** and **MEKU_API_KEY** in a private runtime environment, then run the file with your project's TypeScript runner. This read-only example does not expose the MEKU request tool. It has not been typechecked or tested against a MEKU-issued key. See the [official Agents SDK MCP guide](https://openai.github.io/openai-agents-js/guides/mcp/).
 
 For setup, data flow, and consent details, see the [OpenAI Agents SDK example guide](../examples/openai-agents-sdk/README.md).
 
@@ -81,9 +81,12 @@ Configure the MCP Client Tool using the docs for your installed n8n version. Set
 
 Use the [integration report template](https://github.com/mekusimeku/meku-si/issues/new?template=integration_request.yml). Include the client and version, whether authenticated initialization and discovery completed, the tool called, and a redacted outcome. Never include API keys, raw personal profiles, or private contact details. A config example or HTTP 200 response alone does not prove a tool call succeeded; report actual independently observed results only.
 
-
 ## Shared diagnostic and repeatable verification
 
 Use the [shared read-only MCP diagnostic](../examples/shared/README.md) to inspect initialization, tool discovery, and `meku_search_humans` before wiring a framework SDK. Its local tests use injected mock responses; they do not connect to MEKU. It has not been run against MEKU using an operator-issued key.
 
 Follow the [integration verification standard](integration-standard.md) when adding an adapter or recording results. Use the [candidate use-case library](use-cases.md) for clearly bounded mock task briefs, and the [independent test report template](independent-test-case-study-template.md) only after a tester completes a test and consents to share it.
+
+For the zero-dollar path use the dependency-free verifier. Model-driven SDK
+recipes can incur provider charges and are outside that verification path.
+Client-side filtering never substitutes for server-enforced key scope.

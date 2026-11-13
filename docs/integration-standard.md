@@ -1,6 +1,6 @@
 # MEKU integration standard
 
-Use this checklist when adding or reviewing a client, framework, workflow, or MCP-host integration. The [live MEKU documentation](https://meku.farm/docs) and [AI access page](https://meku.farm/ai-access) are authoritative; schemas and behavior can change.
+Use this checklist when adding or reviewing a client, framework, workflow, or MCP-host integration. Use the [source-reviewed contract](mcp-reference.md) and [bounded independent test](first-contact-verification.md). Confirm the exact deployed version separately; hosted enforcement is unverified.
 
 ## Start from the shared contract
 
@@ -50,7 +50,7 @@ Do not publish a success badge or claim compatibility based on a config snippet,
 If an authorized write test is later run:
 
 - [ ] Record who approved the exact submission and when, without publishing personal information.
-- [ ] Use only fields supported by the current schema and docs; see [known field mismatches](mcp-reference.md#meku_request_human).
+- [ ] Use only fields supported by the current schema and docs; see [the request contract](mcp-reference.md#meku_request_human).
 - [ ] Save the returned request ID securely and use the same API key for status lookup.
 - [ ] Treat `submitted`, `under_review`, or `approved` as workflow states only. Approval is not human acceptance, completion, or payment.
 - [ ] Verify human consent and completion separately through the documented operator process.
@@ -84,3 +84,9 @@ If an authorized write test is later run:
 5. Submit a redacted result with the [integration request template](https://github.com/mekusimeku/meku-si/issues/new?template=integration_request.yml).
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) and the existing [integration guides](integrations.md) for repository conventions.
+
+Search-only acceptance additionally requires exactly one discovered tool, explicit
+direct-tool and REST denials, aggregate-schema validation, and evidence that the
+same initially working credentials later fail because of expiry/revocation. The
+verifier uses intentionally invalid submission probes, never usable work. See
+the complete procedure for safe reports and outside tester attestation.

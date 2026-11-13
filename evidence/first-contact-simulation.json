@@ -1,0 +1,142 @@
+{
+  "mode": "SIMULATION ONLY",
+  "scenario": "Read public storefront hours",
+  "task": "Transcribe the hours on a public-facing storefront sign.",
+  "boundaries": [
+    "Stay in a public area; do not enter the property.",
+    "Do not photograph people, vehicle plates, or private information.",
+    "The person may decline without giving a reason."
+  ],
+  "status": "completed_in_simulation",
+  "paymentStatus": "SIMULATED_SUCCESS_NOT_PAID",
+  "paymentNote": "Illustrative result only. The MCP tools do not create or verify payment.",
+  "simulatedToolTrace": [
+    {
+      "tool": "meku_search_humans",
+      "called": false,
+      "simulated": true,
+      "result": {
+        "matching_humans": 2,
+        "note": "MOCK VALUE — not a live MEKU result"
+      }
+    },
+    {
+      "tool": "meku_request_human",
+      "called": false,
+      "simulated": true,
+      "result": {
+        "id": "SIMULATED-REQUEST-ID",
+        "status": "submitted"
+      }
+    },
+    {
+      "tool": "meku_get_request_status",
+      "called": false,
+      "simulated": true,
+      "result": {
+        "status": "approved"
+      }
+    }
+  ],
+  "events": [
+    {
+      "sequence": 1,
+      "step": "agent_identifies_human_only_task",
+      "task": "Transcribe the hours on a public-facing storefront sign."
+    },
+    {
+      "sequence": 2,
+      "step": "mock_capability_search",
+      "tool": "meku_search_humans",
+      "result": "MOCK VALUE — no people were searched or contacted",
+      "candidates": [
+        "SIMULATED-HUMAN-001",
+        "SIMULATED-HUMAN-002"
+      ]
+    },
+    {
+      "sequence": 3,
+      "step": "mission_prepared_in_simulation",
+      "title": "Read public storefront hours",
+      "task": "Transcribe the hours on a public-facing storefront sign.",
+      "skills": [
+        "local observation",
+        "transcription"
+      ],
+      "boundaries": [
+        "Stay in a public area; do not enter the property.",
+        "Do not photograph people, vehicle plates, or private information.",
+        "The person may decline without giving a reason."
+      ],
+      "note": "A local draft only; no mission or request exists on MEKU."
+    },
+    {
+      "sequence": 4,
+      "step": "requester_approves_simulated_request",
+      "note": "This is a simulator choice, not recorded user consent on MEKU."
+    },
+    {
+      "sequence": 5,
+      "step": "mock_request_submitted_for_operator_review",
+      "tool": "meku_request_human",
+      "requestId": "SIMULATED-REQUEST-ID"
+    },
+    {
+      "sequence": 6,
+      "step": "operator_approves_mock_request"
+    },
+    {
+      "sequence": 7,
+      "step": "agent_selects_synthetic_human",
+      "workerId": "SIMULATED-HUMAN-001",
+      "note": "Synthetic choice only; MEKU search does not return worker identities."
+    },
+    {
+      "sequence": 8,
+      "step": "selected_human_accepts_mock_work",
+      "workerId": "SIMULATED-HUMAN-001",
+      "note": "No real person was contacted; this is a mock decision."
+    },
+    {
+      "sequence": 9,
+      "step": "mock_status_checked",
+      "tool": "meku_get_request_status"
+    },
+    {
+      "sequence": 10,
+      "step": "mock_work_completed",
+      "workerId": "SIMULATED-HUMAN-001"
+    },
+    {
+      "sequence": 11,
+      "step": "proof_submitted_in_simulation",
+      "proofId": "SIMULATED-PROOF-001",
+      "evidence": "MOCK TEXT — no photo, visit, or real deliverable exists"
+    },
+    {
+      "sequence": 12,
+      "step": "proof_accepted_in_simulation",
+      "note": "This is a mock review result, not MEKU verification."
+    },
+    {
+      "sequence": 13,
+      "step": "simulated_payment_result",
+      "status": "SIMULATED_SUCCESS_NOT_PAID",
+      "asset": "MEKU SI",
+      "amount": null,
+      "transactionSignature": null,
+      "actualTransfer": false,
+      "note": "Illustrative result only. The MCP tools do not create or verify payment."
+    }
+  ],
+  "noNetwork": true,
+  "noRealRequest": true,
+  "noRealHuman": true,
+  "noProof": true,
+  "noPayment": true,
+  "availableMcpTools": [
+    "meku_search_humans",
+    "meku_request_human",
+    "meku_get_request_status"
+  ]
+}

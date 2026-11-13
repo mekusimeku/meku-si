@@ -36,21 +36,28 @@ const TOOL_NAMES = Object.freeze([
   "meku_request_human",
   "meku_get_request_status",
 ]);
+const MOCK_WORKERS = Object.freeze(["SIMULATED-HUMAN-001", "SIMULATED-HUMAN-002"]);
 
 /**
- * Run a deterministic local illustration of the Human Cloud handoff.
+ * Run a deterministic local illustration of an agent-to-human handoff.
  * This function makes no network requests and never calls MEKU.
+ * Every person, result, decision, proof item, and payment result is synthetic.
  */
 export function runSimulation({
   scenario = "storefront_hours",
   requesterApproves = true,
   operatorApproves = true,
+  humanSelection = 0,
   humanAccepts = true,
   workCompletes = true,
+  proofAccepted = true,
 } = {}) {
   const brief = SCENARIOS[scenario];
   if (!brief) {
     throw new Error(`Unknown scenario: ${scenario}. Choose: ${Object.keys(SCENARIOS).join(", ")}`);
+  }
+  if (!Number.isInteger(humanSelection) || !MOCK_WORKERS[humanSelection]) {
+    throw new Error(`humanSelection must be 0 or 1.`);
   }
 
   const events = [];
@@ -69,6 +76,15 @@ export function runSimulation({
   addEvent("mock_capability_search", {
     tool: TOOL_NAMES[0],
     result: "MOCK VALUE — no people were searched or contacted",
+    candidates: MOCK_WORKERS,
+  });
+
+  addEvent("mission_prepared_in_simulation", {
+    title: brief.title,
+    task: brief.task,
+    skills: brief.skills,
+    boundaries: brief.boundaries,
+    note: "A local draft only; no mission or request exists on MEKU.",
   });
 
   if (!requesterApproves) {
@@ -102,9 +118,16 @@ export function runSimulation({
   }
 
   addEvent("operator_approves_mock_request");
+  const selectedHuman = MOCK_WORKERS[humanSelection];
+  addEvent("agent_selects_synthetic_human", {
+    workerId: selectedHuman,
+    note: "Synthetic choice only; MEKU search does not return worker identities.",
+  });
+
   if (!humanAccepts) {
-    addEvent("human_declines_work", {
-      note: "A real person's choice is required; silence is not acceptance.",
+    addEvent("selected_human_declines_work", {
+      workerId: selectedHuman,
+      note: "No real person was contacted. A real person's choice is required.",
     });
     simulatedToolTrace.push({
       tool: TOOL_NAMES[2],
@@ -112,10 +135,12 @@ export function runSimulation({
       simulated: true,
       result: { status: "approved" },
     });
+    addEvent("mock_status_checked", { tool: TOOL_NAMES[2] });
     return makeReport("declined_by_human", brief, events, simulatedToolTrace);
   }
 
-  addEvent("human_accepts_mock_work", {
+  addEvent("selected_human_accepts_mock_work", {
+    workerId: selectedHuman,
     note: "No real person was contacted; this is a mock decision.",
   });
   simulatedToolTrace.push({
@@ -126,28 +151,55 @@ export function runSimulation({
   });
   addEvent("mock_status_checked", { tool: TOOL_NAMES[2] });
 
-  if (workCompletes) {
-    addEvent("mock_work_completed", { evidence: "SIMULATED — no deliverable exists" });
-    return makeReport("completed_in_simulation", brief, events, simulatedToolTrace);
+  if (!workCompletes) {
+    addEvent("mock_work_stops_before_completion");
+    return makeReport("accepted_in_simulation", brief, events, simulatedToolTrace);
   }
 
-  addEvent("mock_work_stops_before_completion");
-  return makeReport("accepted_in_simulation", brief, events, simulatedToolTrace);
+  addEvent("mock_work_completed", { workerId: selectedHuman });
+  addEvent("proof_submitted_in_simulation", {
+    proofId: "SIMULATED-PROOF-001",
+    evidence: "MOCK TEXT — no photo, visit, or real deliverable exists",
+  });
+
+  if (!proofAccepted) {
+    addEvent("proof_rejected_in_simulation", {
+      note: "No payment result is created when the mock proof is rejected.",
+    });
+    return makeReport("proof_rejected_in_simulation", brief, events, simulatedToolTrace);
+  }
+
+  addEvent("proof_accepted_in_simulation", {
+    note: "This is a mock review result, not MEKU verification.",
+  });
+  addEvent("simulated_payment_result", {
+    status: "SIMULATED_SUCCESS_NOT_PAID",
+    asset: "MEKU SI",
+    amount: null,
+    transactionSignature: null,
+    actualTransfer: false,
+    note: "Illustrative result only. The MCP tools do not create or verify payment.",
+  });
+  return makeReport("completed_in_simulation", brief, events, simulatedToolTrace);
 }
 
 function makeReport(status, brief, events, simulatedToolTrace) {
+  const paymentEvent = events.find((event) => event.step === "simulated_payment_result");
   return {
     mode: "SIMULATION ONLY",
     scenario: brief.title,
     task: brief.task,
     boundaries: brief.boundaries,
     status,
-    paymentStatus: "not_simulated",
-    paymentNote: "The MCP tools do not pay a person. This local example does not simulate payment.",
+    paymentStatus: paymentEvent?.status ?? "not_created",
+    paymentNote: paymentEvent?.note ?? "No simulated payment result was created.",
     simulatedToolTrace,
     events,
     noNetwork: true,
     noRealRequest: true,
+    noRealHuman: true,
+    noProof: true,
+    noPayment: true,
     availableMcpTools: TOOL_NAMES,
   };
 }

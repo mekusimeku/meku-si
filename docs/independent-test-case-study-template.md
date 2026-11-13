@@ -8,9 +8,21 @@ Use this page to record an external developer's test only after they have comple
 - **Client/framework and version:** [Exact name and version]
 - **Runtime and version:** [Language/runtime]
 - **Test date (UTC):** [Date and time]
-- **Environment:** [Local / staging / production; identify only what may be shared]
+- **Environment:** [Approved nonproduction site; this procedure never uses production]
 - **MEKU credential:** [Separate operator-issued test key; do not record its value]
 - **Evidence permission:** [What the tester agreed may be published]
+
+## Source and lifecycle evidence
+
+- **Exact public client/verifier commit:** [SHA]
+- **Exact server commit and build evidence:** [operator witness; do not infer from a URL]
+- **Migration prerequisites:** [0056/0057 verified by authorized environment owner]
+- **Key A:** [nonsecret label; active report then revoked report and operator witness time]
+- **Key B:** [nonsecret label; active report then expired report and operator witness time]
+- **Revoked/expired REST list, status and submission:** [all six lifecycle checks per key passed; link safe reports]
+- **Direct tool and REST denials:** [fixed safe check labels; no usable requests]
+- **Aggregate privacy check:** [passed / failed; do not attach raw private data]
+- **Outside tester confirmation:** [consented attestation and evidence link]
 
 ## Connection result
 
@@ -23,14 +35,16 @@ Use this page to record an external developer's test only after they have comple
 - **Evidence link or attachment:** [Public, redacted evidence]
 
 ## Reproduction
-1. [Client setup steps with key replaced by ``<redacted>``]
+
+1. [Client setup steps with key replaced by `<redacted>`]
 2. [Exact tool and non-sensitive arguments]
 3. [Observed response shape, with personal data removed]
 
 ## Problems and fixes
-| Problem | Evidence | Resolution or workaround | Still open? |
-| --- | --- | --- | --- |
-| [Observed issue] | [Redacted log excerpt] | [Change or none] | [Yes/No] |
+
+| Problem          | Evidence               | Resolution or workaround | Still open? |
+| ---------------- | ---------------------- | ------------------------ | ----------- |
+| [Observed issue] | [Redacted log excerpt] | [Change or none]         | [Yes/No]    |
 
 Do not describe a proposed fix as completed until the tester verifies it. Do not call a client “supported” based on setup instructions alone.
 

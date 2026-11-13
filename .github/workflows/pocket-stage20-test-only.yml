@@ -1,0 +1,26 @@
+name: Pocket Stage 20 Raw Message Review TEST ONLY
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/stage20-message-review/**'
+      - '.github/workflows/pocket-stage20-test-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  readonly-message-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check read-only parser and tests
+        run: |
+          node --check pocket-browser-test/stage20-message-review/review-message.mjs
+          node --check pocket-browser-test/stage20-message-review/review-message.test.mjs
+          node --check pocket-browser-test/stage20-message-review/token-account-snapshot.mjs
+          node --check pocket-browser-test/stage20-message-review/token-account-snapshot.test.mjs
+      - name: Run strict unsigned legacy message review tests (NO SIGNING OR RPC)
+        run: node --test pocket-browser-test/stage20-message-review/*.test.mjs

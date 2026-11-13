@@ -1,0 +1,22 @@
+name: Pocket Official Mint Read-Only Mainnet Check TEST ONLY
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/live-readonly-mint/**'
+      - '.github/workflows/pocket-mint-readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  readonly-mint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run fail-closed offline parsing tests
+        run: node --test pocket-browser-test/live-readonly-mint/test.mjs
+      - name: Read public finalized mint account only (NO signed transactions)
+        run: node pocket-browser-test/live-readonly-mint/inspect-mint.mjs

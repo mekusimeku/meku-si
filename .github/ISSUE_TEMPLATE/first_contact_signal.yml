@@ -1,0 +1,66 @@
+name: "MEKU First Contact public protocol report"
+description: "Share a safe public MCP connection check. No keys, payments or private user information."
+title: "[First Contact] Public MCP handshake report"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for independently checking the public MEKU Human Cloud interface.
+
+        First run https://meku.farm/first-contact.html or follow
+        https://github.com/mekusimeku/meku-si/blob/main/docs/first-contact-handshake.md.
+
+        This form is for public protocol discovery ONLY. Never paste an API key,
+        private account data, wallet secret, person-specific data or confidential logs.
+        A public handshake is not an authenticated agent integration or mission.
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result from your own test
+      options:
+        - Both public checks passed
+        - Initialize passed but tools/list did not
+        - Initialize did not pass
+        - Could not complete the test
+      description: "Report what your device actually observed; do not guess."
+    validations:
+      required: true
+  - type: input
+    id: when
+    attributes:
+      label: UTC test date
+      description: "An approximate UTC date/time is enough. Do not give your precise location."
+      placeholder: "2026-11-15 UTC"
+    validations:
+      required: true
+  - type: textarea
+    id: public_data
+    attributes:
+      label: Public protocol result
+      description: "Server name, protocol version, HTTP status codes and public tool names. No private data."
+      placeholder: |
+        Server: meku-human-cloud
+        Protocol: 2025-06-18
+        Initialize HTTP: ...
+        tools/list HTTP: ...
+        Public tool names: ...
+        Client-generated snapshot SHA-256 (optional): ...
+    validations:
+      required: true
+  - type: textarea
+    id: repeat
+    attributes:
+      label: How to repeat the test
+      description: "Client or browser used and steps another developer can safely follow. No private logs."
+      placeholder: "Used the public MEKU First Contact page, clicked Send signal, read the result..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Public report safety
+      options:
+        - label: "I removed API keys, cookies, wallet secrets, personal information and private outputs."
+          required: true
+        - label: "I understand this is a public client-observed check, not an independent security audit."
+          required: true

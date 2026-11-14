@@ -6,6 +6,7 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 
 ## Start here
 
+- **[Free live MCP connection lab — test the real server in your browser](https://meku.farm/mcp-lab.html)** (public, no key, downloadable test report)
 - [Live documentation](https://meku.farm/docs)
 - [AI access and MCP setup](https://meku.farm/ai-access)
 - [Public MCP test — five minutes, no API key](docs/public-mcp-five-minute-test.md)

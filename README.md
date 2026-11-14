@@ -6,7 +6,9 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 
 ## Start here
 
+- **[MEKU First Contact — send a real public AI-agent MCP signal](https://meku.farm/first-contact.html)** (live read-only handshake, local SHA-256 snapshot, no account or key)
 - **[Free live MCP connection lab — test the real server in your browser](https://meku.farm/mcp-lab.html)** (public, no key, downloadable test report)
+- [First Contact test instructions and open evidence format](docs/first-contact-handshake.md)
 - [Live documentation](https://meku.farm/docs)
 - [AI access and MCP setup](https://meku.farm/ai-access)
 - [Public MCP test — five minutes, no API key](docs/public-mcp-five-minute-test.md)

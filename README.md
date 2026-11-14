@@ -8,7 +8,8 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 
 - [Live documentation](https://meku.farm/docs)
 - [AI access and MCP setup](https://meku.farm/ai-access)
-- [Quickstart](docs/quickstart.md)
+- [Public MCP test — five minutes, no API key](docs/public-mcp-five-minute-test.md)
+- [Authenticated quickstart](docs/quickstart.md)
 - [MCP tool reference](docs/mcp-reference.md)
 - [Official MCP Registry listing](https://registry.modelcontextprotocol.io/v0/servers?search=meku) — `farm.meku/human-cloud`
 - [Integration guides](docs/integrations.md)
@@ -22,6 +23,8 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 - [Operations log](OPERATIONS.md)
 
 ## Connect
+
+**Try the [no-key public protocol check](docs/public-mcp-five-minute-test.md) before applying for a key.** You can independently confirm MCP initialization, tool metadata, and the boundary that prevents anonymous tool calls. These checks do not connect to any human record or create a request.
 
 The public MCP endpoint is:
 

@@ -2,6 +2,8 @@
 
 **No account, API key, wallet or payment required for these three checks.** This is a public-protocol test, not an authenticated developer integration or a mission.
 
+**Prefer a browser?** [Open the free MEKU MCP connection lab](https://meku.farm/mcp-lab.html) for three on-demand public protocol checks and an optional unauthenticated-denial check. The browser can save a small JSON report. No account, wallet or secret is needed. A passed public check is not an authenticated agent integration.
+
 MEKU SI's Human Cloud MCP endpoint is:
 
 ```text

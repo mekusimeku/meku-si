@@ -1,6 +1,6 @@
 # MCP quickstart
 
-This guide configures a client and makes a read-only availability query. It does not submit work or move funds.
+This guide configures a client and makes a read-only availability query. It does not submit work or move funds. **For an immediate no-key check of the live public protocol, start with the [five-minute public MCP test](public-mcp-five-minute-test.md).**
 
 ## 1. Request access
 
@@ -18,7 +18,7 @@ The read -s command prompts for the value without echoing it. Use your operating
 
 ## 2. Make a read-only call
 
-Every JSON-RPC POST requires the bearer key, including discovery and tool calls. This query searches for the skill photography:
+Actual `tools/call` requests require the bearer key. Public `initialize`, `notifications/initialized` and `tools/list` can expose limited metadata without one, but they do not reveal human records. This authenticated query searches for the skill photography:
 
 ~~~sh
 curl -sS -X POST "$MEKU_MCP_URL" \
@@ -44,7 +44,7 @@ The server returns JSON. Tool results are carried in the MCP result content; ins
 - MCP URL: https://meku.farm/api/public/mcp
 - Transport advertised by MEKU: Streamable HTTP
 - Protocol version advertised by MEKU: 2025-06-18
-- Authentication: Authorization: Bearer <MEKU Agent API key> on each POST
+- Authentication: Authorization: Bearer <MEKU Agent API key> for every `tools/call` and other protected operations. Public `initialize`, `notifications/initialized` and `tools/list` metadata can be read without a key.
 - A GET returns static connection metadata; it does not expose tools.
 
 See the [full tool reference](mcp-reference.md) and [security and consent guide](security-and-consent.md).

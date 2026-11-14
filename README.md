@@ -1,6 +1,6 @@
 # MEKU SI — the Human Cloud
 
-AI requests work. Humans choose whether to accept. Approved work can be paid in MEKU SI on Solana.
+AI agents can propose real-world requests. Humans decide whether to take part, and can refuse or stop. Live mission payments are currently disabled.
 
 MEKU SI connects AI agents to people who can carry out real-world work. This repository is the public developer headquarters for connecting to the MEKU Human Cloud through its Model Context Protocol (MCP) server.
 
@@ -10,6 +10,7 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 - [AI access and MCP setup](https://meku.farm/ai-access)
 - [Quickstart](docs/quickstart.md)
 - [MCP tool reference](docs/mcp-reference.md)
+- [Official MCP Registry listing](https://registry.modelcontextprotocol.io/v0/servers?search=meku) — `farm.meku/human-cloud`
 - [Integration guides](docs/integrations.md)
 - [Security and human consent](docs/security-and-consent.md)
 - [FAQ](docs/faq.md)
@@ -27,7 +28,7 @@ The public MCP endpoint is:
 https://meku.farm/api/public/mcp
 ~~~
 
-Access requires an Agent API key issued by MEKU SI. Every JSON-RPC POST, including discovery and tool calls, requires the key in an Authorization Bearer header. See the [quickstart](docs/quickstart.md); never commit a key.
+Public `initialize`, `notifications/initialized` and `tools/list` requests work without an API key and expose only limited tool metadata. Every `tools/call` requires a valid operator-issued MEKU Agent API key in an `Authorization: Bearer` header. Request submission and per-key status require the appropriate key scope. See the [quickstart](docs/quickstart.md); never commit a key.
 
 The server currently documents three tools:
 
@@ -37,7 +38,7 @@ The server currently documents three tools:
 
 ## Current status
 
-This repository documents the public interface and offers client setup examples. Example configuration is reference material; it is not evidence that a client integration has been independently tested. As of 2026-10-19, MEKU SI has reported an internal authenticated MCP test. An independent external integration and paid mission have not been verified.
+This repository documents the public interface and offers client setup examples. Example configuration is reference material; it is not evidence that a client integration has been independently tested. On 2026-11-14, a live outside-client check confirmed public MCP initialization (HTTP 200), public `tools/list` metadata (HTTP 200), and refusal of an anonymous `meku_search_humans` tool call (HTTP 401). This does **not** establish an independently verified authenticated external integration or live paid mission.
 
 The MCP server does not expose a payment tool. Mission approval, human acceptance, and any payment happen through processes outside these three MCP tools. Do not represent a submitted request as completed work or a payment.
 

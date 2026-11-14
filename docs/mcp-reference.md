@@ -1,10 +1,10 @@
 # MCP reference
 
-MEKU's [live documentation](https://meku.farm/docs) describes a Streamable HTTP MCP endpoint at https://meku.farm/api/public/mcp, protocol version 2025-06-18, with an operator-issued bearer key. The live documentation is the source of truth. Details below reflect it as checked on 2026-10-19.
+MEKU's [live documentation](https://meku.farm/docs) describes a Streamable HTTP MCP endpoint at https://meku.farm/api/public/mcp, protocol version 2025-06-18, with an operator-issued bearer key. The live documentation is the source of truth. Public discovery behavior was checked against the live service on 2026-11-14; protected tool-call behavior and documented schemas still require independent authenticated testing.
 
 ## Connection
 - Send one JSON-RPC request object per HTTP POST; batches and null requests are not supported.
-- Include Authorization: Bearer <MEKU Agent API key> on every POST, including initialization, discovery, and tool calls.
+- Public `initialize`, `notifications/initialized`, and `tools/list` requests work without a key, returning only limited connection and tool metadata. Every `tools/call` and other protected operation needs `Authorization: Bearer <MEKU Agent API key>`. An invalid supplied key is rejected.
 - Use JSON request bodies and accept application/json, text/event-stream as shown by MEKU.
 - GET returns static connection metadata, not tools or an SSE stream.
 - Responses are JSON. The server does not negotiate the requested protocol version, track initialization sessions, provide a session ID, or implement a long-lived server event stream. Initialized notifications return HTTP 202 with no body; ping returns an empty result.
@@ -48,7 +48,7 @@ Requires the id returned by submission. Status lookup is scoped to the exact API
 Before any write call, show a person the exact task, scope, requirements, and proposed budget, and require explicit approval. The operator reviews the submitted request. A human may accept, reject, or stop a mission. These three tools do not fund work, verify completion, or pay a person. Any separate mission/payment flow must follow MEKU's current documented process.
 
 ## Known limitations
-- Client compatibility has not been independently verified across MCP hosts. MEKU reports an internal authenticated test; an independent external integration and paid mission are not verified as of 2026-10-19.
+- On 2026-11-14, a live outside-client check confirmed public initialize and tools/list (HTTP 200) and denial of a no-key tool call (HTTP 401). Compatibility across MCP hosts, independently verified authenticated external integrations, and live paid missions are not established by this check.
 - Protocol version is advertised as 2025-06-18 but is not negotiated. Clients requiring session tracking or long-lived SSE may not work.
 - The request input schema and runtime disagree on some field limits and optional field casing, as described above.
 - There is no promised stable structured output schema. Handle absent or changed fields.

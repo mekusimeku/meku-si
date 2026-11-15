@@ -6,6 +6,7 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 
 ## Start here
 
+- **[MEKU A2UI 1.0 Human Override Lab — free public synthetic demo](https://meku-human-override-a2ui.mekusi-team.workers.dev/)** (REVOKE, REPLAY, PARTITION; no keys or live actions; [source](demos/a2ui-human-override/README.md))
 - **[MEKU Human Override Challenge — free OpenClaw skill](skills/meku-human-override/SKILL.md)** (public MCP checks and synthetic revoke, replay, partition test cases; no credentials or payments)
 - **[MEKU First Contact — send a real public AI-agent MCP signal](https://meku.farm/first-contact.html)** (live read-only handshake, local SHA-256 snapshot, no account or key)
 - **[Free live MCP connection lab — test the real server in your browser](https://meku.farm/mcp-lab.html)** (public, no key, downloadable test report)

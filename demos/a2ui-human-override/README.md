@@ -1,0 +1,46 @@
+# MEKU SI / A2UI 1.0 Human Override Lab
+
+**Status: public synthetic demo, not a security certification.** This is a standalone browser page designed for AI developers who want to study how human authority should constrain agent actions.
+
+## Try it
+
+- Previous hosted interactive challenge: https://huggingface.co/spaces/MEKU-SI/meku-human-override
+- Public source for this **A2UI protocol sample**: [index.html](index.html)
+- Free installable agent instructions: [MEKU Human Override skill](../../skills/meku-human-override/SKILL.md)
+- MEKU Human Cloud public MCP check: https://meku.farm/first-contact.html
+
+## What it does
+
+- Runs three **deterministic, local, synthetic** scenarios: REVOKE, REPLAY, PARTITION.
+- Checks the local simulation's final authority gate and records observed results; it does **not** connect to a real AI agent, live task, wallet, or payment.
+- Creates **A2UI v1.0** `createSurface` and `updateDataModel` JSON envelopes. It uses the documented Basic Catalog component shapes `Column` and `Text`.
+- Renders those envelopes with a small custom allowlisted projection instead of executing agent-delivered JS. **This is not Google's full A2UI SDK or compatibility renderer.**
+- Exports a JSON report with `LOCAL_SYNTHETIC`, `productionProof:false` and unrun scenarios marked `NOT_RUN`.
+
+## Safety boundary
+
+No public MCP `tools/call` is performed. There is no account login, telemetry, third-party script, cookie, session write, private data, bot posting, or wallet signing. The browser fetches nothing. The public site serves a static page.
+
+## A2UI
+
+A2UI is a JSON format for describing interactive agent interfaces; it is **not** an authorization or security engine. This demo shows a concrete link between a test outcome and A2UI messages. A deployed agent's behavior must be tested separately through its actual final execution gate.
+
+Protocol: https://a2ui.org/ and https://github.com/a2ui-project/a2ui/tree/main/specification/v1_0
+
+## Review and local test
+
+Run `index.html` in a modern browser, or serve it locally via any static server. No build or npm package is needed. Test each button and check its expected outputs:
+
+| Case | Local expected result | Fake action count |
+| --- | --- | --- |
+| REVOKE | ABORT | 0 |
+| REPLAY | EXECUTE then DENY | 1 |
+| PARTITION | DENY while offline, DENY after restore with stale permit | 0 |
+
+Inspect the generated A2UI JSON; it should contain a unique `surfaceId`, `version: "1.0"`, `createSurface` with a `root` component, and later `updateDataModel` envelopes. Download the report and inspect the `productionProof:false` marker.
+
+**Limits:** Only a toy sequential replay model is simulated. It does not test concurrency, distributed locks, cryptographic signatures, live partitions, remote agents, production execution paths, or payment safety. Do not infer those properties from a PASS.
+
+## Release path
+
+Source lives in a separate public GitHub folder and can be hosted on a separate static endpoint without changing the MEKU production website or Fable/Astra branches. A public demo launch requires hosted URL verification before marketing it as live.

@@ -26,6 +26,15 @@ jobs:
           set -euo pipefail
           npx --yes skills@1.8.1 add mekusimeku/meku-si --list | tee /tmp/meku-public-skills.txt
           grep -i 'meku-human-override' /tmp/meku-public-skills.txt
+      - name: Install MEKU skill into a temporary Codex workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/meku-skill-install-check
+          cd /tmp/meku-skill-install-check
+          npx --yes skills@1.8.1 add mekusimeku/meku-si --skill meku-human-override --agent codex --copy -y
+          test -f .agents/skills/meku-human-override/SKILL.md
+          grep -F 'name: meku-human-override' .agents/skills/meku-human-override/SKILL.md
       - name: Verify public raw skill file is reachable
         shell: bash
         run: |

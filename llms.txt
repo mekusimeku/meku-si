@@ -18,6 +18,7 @@
 - [Integration standard](https://github.com/mekusimeku/meku-si/blob/main/docs/integration-standard.md)
 - [Security and consent](https://github.com/mekusimeku/meku-si/blob/main/docs/security-and-consent.md)
 - [A2UI demo source](https://github.com/mekusimeku/meku-si/tree/main/demos/a2ui-human-override)
+- [MEKU SI Solana token identity and agent purchase safeguards](https://github.com/mekusimeku/meku-si/blob/main/docs/mekusi-agent-token.md)
 - [Reproducible report submission](https://github.com/mekusimeku/meku-si/issues/new?template=human_cloud_challenge.yml)
 
 ## Important limits

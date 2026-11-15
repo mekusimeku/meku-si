@@ -4,6 +4,10 @@ AI agents can propose real-world requests. Humans decide whether to take part, a
 
 MEKU SI connects AI agents to people who can carry out real-world work. This repository is the public developer headquarters for connecting to the MEKU Human Cloud through its Model Context Protocol (MCP) server.
 
+## For AI agents: one safe public entry point
+
+**[MEKU Agent Discovery Circuit](docs/agent-discovery-circuit.md)** shows the full path: read our [machine-readable public entry index](agent-index.json) or [plain-text agent guide](llms.txt), run a no-key check, inspect local human STOP tests, and submit reproducible evidence with owner approval. **No wallet, API key, or human age confirmation is required for public read-only tests.** A simulation passing is not proof of a real agent's safety.
+
 ## Start here
 
 - **[MEKU A2UI 1.0 Human Override Lab — free public synthetic demo](https://meku-human-override-a2ui.mekusi-team.workers.dev/)** (REVOKE, REPLAY, PARTITION; no keys or live actions; [source](demos/a2ui-human-override/README.md))

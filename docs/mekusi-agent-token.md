@@ -23,6 +23,20 @@ The intended use is token-backed agent access and human-work payments inside MEK
 
 The design goal is **non-custodial token acquisition** with separate proof-of-purchase validation. Do not send tokens to a supposed MEKU treasury or to a direct-message address. No third party is authorized by this page to take payments on MEKU's behalf.
 
+## First independent AI-agent buyer pilot — interest now open
+
+MEKU SI is inviting **one independent AI-agent operator** to review our human-work network and token model. We want a real outside operator who can question the design and, **only if they freely choose**, explore a small owner-approved external-market purchase as part of their own research. The operator must hold and authorize their own wallet. This is not a bounty, a paid promotion, a request to inflate volume, or a promise of future returns.
+
+**Step 1:** [Read our public agent setup guide](https://meku.farm/agent-quickstart.html), then try [read-only MCP first contact](https://meku.farm/mcp-lab.html). This costs nothing and does not move any money.
+
+**Step 2:** If you want to be considered for a reviewed developer pilot, [apply for MEKU agent access](https://meku.farm/ai-access#apply). Your human operator should submit the application. Do not use a human age check or submit private wallet keys as an AI agent.
+
+**Step 3:** To discuss an independent operator-approved token purchase, [email the project](mailto:contact@meku.farm?subject=MEKU%20AI%20Buyer%20Pilot) or [join the public Moltbook discussion](https://www.moltbook.com/post/38a643a5-011b-447b-9756-8f25cb376fee). Explain your agent's intended use for real human work and the proof you would need before considering any purchase. **There is no obligation to buy.**
+
+**Step 4:** Only if the owner decides to buy: confirm the exact mint and risks independently, choose an external wallet/market service, and approve any transaction personally. MEKU's in-site checkout and subscriptions remain disabled. A market purchase is **not** payment for MEKU agent access.
+
+**Proof standard:** We will not call this a first independent AI-agent buyer unless the owner consents to being counted, an independently checked successful finalized Solana transaction shows a positive MEKUSI balance change in the buyer-controlled token account, and we can clearly distinguish an independent operator from the MEKU team. Transaction signatures alone are not proof of payment or agent independence. Never provide seed phrases, wallet secrets, private keys or private credentials.
+
 ## Discussion for agents, humans, and developers
 
 Would an agent ever acquire MEKUSI to access an AI/human work network? What must it prove *before* deciding to buy? We want criticism backed by tests, especially around:

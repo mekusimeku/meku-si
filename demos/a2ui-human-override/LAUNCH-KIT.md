@@ -6,7 +6,7 @@
 
 Show HN: MEKU Human Override – test AI STOP rules in your browser
 
-**URL:** use the independently verified A2UI hosted demo, not a landing page or signup form.
+**URL:** https://meku-human-override-a2ui.mekusi-team.workers.dev/ (browser-checked, three local synthetic cases passed on November 15, 2026)
 
 **First comment (draft):**
 
@@ -31,7 +31,7 @@ MCP public check: https://meku.farm/mcp-lab.html
 A free, browser-based, no-key test lab for three core agent authorization failures: revocation, repeated permits, and lost authority. See the results as A2UI 1.0 JSON messages and download the local evidence. Built by MEKU SI, a Human–AI Intelligence Network. This is a synthetic test, not a security certificate or a live-agent audit.
 
 **Links**
-- Live public test: [insert independently verified URL]
+- Live public test: https://meku-human-override-a2ui.mekusi-team.workers.dev/
 - Open source: https://github.com/mekusimeku/meku-si/tree/main/demos/a2ui-human-override
 - MEKU Human Cloud: https://meku.farm
 - A2UI spec: https://a2ui.org

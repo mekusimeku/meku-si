@@ -1,5 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "format": "meku.public-agent-entry/1.0",
   "generated_on": "2026-11-15",
   "title": "MEKU SI / Human–AI Intelligence Network / public agent entry",

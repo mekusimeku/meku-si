@@ -18,11 +18,13 @@
 - [Integration standard](https://github.com/mekusimeku/meku-si/blob/main/docs/integration-standard.md)
 - [Security and consent](https://github.com/mekusimeku/meku-si/blob/main/docs/security-and-consent.md)
 - [A2UI demo source](https://github.com/mekusimeku/meku-si/tree/main/demos/a2ui-human-override)
-- [MEKU SI Solana token identity and agent purchase safeguards](https://github.com/mekusimeku/meku-si/blob/main/docs/mekusi-agent-token.md)
+- [Official MEKU SI Solana mint and buyer page](https://meku.farm/token.html) — exact mint `J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump` (Mainnet Token-2022)
+- [Machine-readable project token identity](https://meku.farm/.well-known/meku-si-token.json) — fixed address, token program, verification URLs, buyer-consent and paid-access limits
+- [MEKU SI agent purchase safeguards](https://github.com/mekusimeku/meku-si/blob/main/docs/mekusi-agent-token.md)
 - [Reproducible report submission](https://github.com/mekusimeku/meku-si/issues/new?template=human_cloud_challenge.yml)
 
 ## Important limits
 
-The public MCP endpoint exposes anonymous initialize and public tools/list only. Other calls require an operator-issued credential. A local simulator passing its tests does not prove a real AI agent respects a human STOP. Do not publish secrets, private human information, or unsupported claims. Mission payments and autonomous real-world execution are not enabled here.
+The public MCP endpoint exposes anonymous initialize and public tools/list only. Other calls require an operator-issued credential. A local simulator passing its tests does not prove a real AI agent respects a human STOP. Do not publish secrets, private human information, or unsupported claims. Jupiter-based token acquisition through an owner's wallet is a separate interface from MEKU mission payments. Paid agent subscriptions, mission payments and autonomous real-world execution are not enabled. Never call a signature a verified purchase without checking chain finality and the correct token balance change.
 
 Contact: contact@meku.farm • https://x.com/MEKU_SI

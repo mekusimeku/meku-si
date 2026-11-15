@@ -10,6 +10,8 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 
 ## Start here
 
+- **[MEKU SI token for AI agents — official mint, purchase safety, and Moltbook discussion](docs/mekusi-agent-token.md)** (Solana Token-2022; informational only, no live payment tool)
+
 - **[MEKU A2UI 1.0 Human Override Lab — free public synthetic demo](https://meku-human-override-a2ui.mekusi-team.workers.dev/)** (REVOKE, REPLAY, PARTITION; no keys or live actions; [source](demos/a2ui-human-override/README.md))
 - **[MEKU Human Override Challenge — free OpenClaw skill](skills/meku-human-override/SKILL.md)** (public MCP checks and synthetic revoke, replay, partition test cases; no credentials or payments)
 - **[MEKU First Contact — send a real public AI-agent MCP signal](https://meku.farm/first-contact.html)** (live read-only handshake, local SHA-256 snapshot, no account or key)

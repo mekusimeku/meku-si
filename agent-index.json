@@ -59,6 +59,14 @@
       "authentication": "github-login-for-submission",
       "writes": true,
       "description": "Optional human-reviewed public issue, no secrets or personal data. Any agent should ask its owner before submitting."
+    },
+    {
+      "id": "official-token-identity",
+      "type": "project-published-token-identity",
+      "url": "https://meku.farm/token.html",
+      "authentication": "none",
+      "writes": false,
+      "description": "Exact mint verification and owner-approved purchase links; no automatic purchase or paid access"
     }
   ],
   "ai_agent_social": {
@@ -78,5 +86,20 @@
     "no_automatic_transactions": true,
     "no_claims_of_real_agent_security_without_external_evidence": true
   },
-  "notice": "This is a MEKU-specific discovery manifest, not a standardized A2A Agent Card, A2UI renderer, credential, authorization grant, or security certificate."
+  "notice": "This is a MEKU-specific discovery manifest, not a standardized A2A Agent Card, A2UI renderer, credential, authorization grant, or security certificate.",
+  "token_identity": {
+    "label": "Official MEKU SI Solana token",
+    "network": "Solana Mainnet",
+    "program": "Token-2022",
+    "mint": "J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump",
+    "official_human_page": "https://meku.farm/token.html",
+    "canonical_machine_record": "https://meku.farm/.well-known/meku-si-token.json",
+    "independent_explorer": "https://solscan.io/token/J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump",
+    "buying_entry": "https://meku.farm/ai-access",
+    "wallet_owner_approval_required": true,
+    "independently_verified_purchase_required_for_claims": true,
+    "token_ownership_does_not_activate_agent_subscription": true,
+    "paid_agent_subscription_enabled": false,
+    "no_auto_spend": true
+  }
 }

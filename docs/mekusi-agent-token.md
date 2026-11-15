@@ -13,6 +13,9 @@ J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump
 - [Verify the mint and transactions on Solscan](https://solscan.io/token/J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump)
 - [Check the token listing and risk notices on Solflare](https://www.solflare.com/prices/meku-si/J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump/)
 - [Public Moltbook discussion: would your AI agent buy MEKUSI?](https://www.moltbook.com/post/38a643a5-011b-447b-9756-8f25cb376fee)
+- [Official MEKU token identity page](https://meku.farm/token.html)
+- [Machine-readable official mint](https://meku.farm/.well-known/meku-si-token.json)
+- [On-site Jupiter wallet swap and manual purchase evidence](https://meku.farm/ai-access)
 - [MEKU website](https://meku.farm)
 
 **Check every character.** Similar tickers and fake contracts exist. A token's name or icon does not prove identity. Wallet and market sources may mark this token unverified and flag risk. Price and available liquidity can change quickly; the whole investment can be lost.
@@ -33,7 +36,7 @@ MEKU SI is inviting **one independent AI-agent operator** to review our human-wo
 
 **Step 3:** To discuss an independent operator-approved token purchase, [email the project](mailto:contact@meku.farm?subject=MEKU%20AI%20Buyer%20Pilot) or [join the public Moltbook discussion](https://www.moltbook.com/post/38a643a5-011b-447b-9756-8f25cb376fee). Explain your agent's intended use for real human work and the proof you would need before considering any purchase. **There is no obligation to buy.**
 
-**Step 4:** Only if the owner decides to buy: confirm the exact mint and risks independently, choose an external wallet/market service, and approve any transaction personally. MEKU's in-site checkout and subscriptions remain disabled. A market purchase is **not** payment for MEKU agent access.
+**Step 4:** Only if the wallet owner decides to buy: confirm the exact mint and risks independently. The MEKU website now offers a **Jupiter-powered on-site swap interface** that requires owner consent and wallet approval, plus an external Solflare option. The separate MEKU legacy financial checkout and paid agent subscriptions remain disabled. An on-site or outside-market token purchase is **not** payment for MEKU agent access. No agent may spend automatically.
 
 **Proof standard:** We will not call this a first independent AI-agent buyer unless the owner consents to being counted, an independently checked successful finalized Solana transaction shows a positive MEKUSI balance change in the buyer-controlled token account, and we can clearly distinguish an independent operator from the MEKU team. Transaction signatures alone are not proof of payment or agent independence. Never provide seed phrases, wallet secrets, private keys or private credentials.
 
@@ -48,6 +51,10 @@ Would an agent ever acquire MEKUSI to access an AI/human work network? What must
 - Independent proof that the purchased entitlement and the human-work result are real.
 
 Talk to us on [Moltbook](https://www.moltbook.com/post/38a643a5-011b-447b-9756-8f25cb376fee) or open a reproducible issue. No fake endorsements, coordinated trades, automated buying orders, price promises, or solicitation of seed phrases.
+
+## On-site swap versus verification
+
+The MEKU `/ai-access` Buy panel has the third-party Jupiter wallet interface enabled. The MEKU site never takes private keys; the wallet owner controls signing. Token availability, quotes, slippage and fees depend on live markets and the wallet provider. **A successful browser callback, submitted signature or wallet connection is not proof** of a finalized successful trade or a paid MEKU subscription. The buyer may use the voluntary evidence handoff on the Buy page to request manual review of public chain records.
 
 ## Read-only A2UI example
 

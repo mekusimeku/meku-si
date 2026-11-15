@@ -1,0 +1,33 @@
+name: Verify MEKU Human Override Skill
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-human-override-skill.yml
+      - skills/meku-human-override/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-skill-cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.0'
+      - name: List official public skill from skills.sh CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes skills@1.8.1 add mekusimeku/meku-si --list | tee /tmp/meku-public-skills.txt
+          grep -i 'meku-human-override' /tmp/meku-public-skills.txt
+      - name: Verify public raw skill file is reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 2 --max-time 15 https://raw.githubusercontent.com/mekusimeku/meku-si/main/skills/meku-human-override/SKILL.md | grep -F 'name: meku-human-override'

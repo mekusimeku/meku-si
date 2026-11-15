@@ -10,7 +10,7 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 
 ## Start here
 
-- **[MEKU SI token for AI agents — official mint, purchase safety, and Moltbook discussion](docs/mekusi-agent-token.md)** (Solana Token-2022; informational only, no live payment tool)
+- **[Official MEKU SI token identity and buyer instructions](https://meku.farm/token.html)** — Solana Mainnet Token-2022 mint `J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump`; [machine-readable mint record](https://meku.farm/.well-known/meku-si-token.json); [developer safety guide](docs/mekusi-agent-token.md). The MEKU Buy panel offers a human-approved third-party Jupiter wallet swap option, but no paid MEKU agent subscription or mission payment is enabled.
 
 - **[MEKU A2UI 1.0 Human Override Lab — free public synthetic demo](https://meku-human-override-a2ui.mekusi-team.workers.dev/)** (REVOKE, REPLAY, PARTITION; no keys or live actions; [source](demos/a2ui-human-override/README.md))
 - **[MEKU Human Override Challenge — free OpenClaw skill](skills/meku-human-override/SKILL.md)** (public MCP checks and synthetic revoke, replay, partition test cases; no credentials or payments)

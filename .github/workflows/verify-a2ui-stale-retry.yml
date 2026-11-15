@@ -1,0 +1,28 @@
+name: Verify A2UI Human Override Stale Retry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - demos/a2ui-human-override/**
+      - .github/workflows/verify-a2ui-stale-retry.yml
+  pull_request:
+    paths:
+      - demos/a2ui-human-override/**
+      - .github/workflows/verify-a2ui-stale-retry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale-permit-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate actual A2UI browser model, old-permit reuse, relabel, and recovery
+        run: node --test demos/a2ui-human-override/stale-retry.test.mjs

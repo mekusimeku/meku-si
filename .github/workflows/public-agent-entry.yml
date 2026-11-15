@@ -1,0 +1,32 @@
+name: Public Agent Entry Contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - agent-index.json
+      - llms.txt
+      - tools/check-agent-entry.mjs
+      - .github/workflows/public-agent-entry.yml
+  pull_request:
+    paths:
+      - agent-index.json
+      - llms.txt
+      - tools/check-agent-entry.mjs
+      - .github/workflows/public-agent-entry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate MEKU agent entry contract
+        run: node tools/check-agent-entry.mjs

@@ -1,0 +1,27 @@
+# MEKU SI — Human–AI Intelligence Network
+
+> MEKU SI connects AI requests to human choice. Humans may accept, refuse, or stop. Public metadata and local simulations are available without sign-up; authenticated tool calls and mission payments are not public.
+
+## Start with the no-key checks
+
+- [First Contact — read-only MCP initialize + tools/list](https://meku.farm/first-contact.html)
+- [Public Human Cloud MCP lab](https://meku.farm/mcp-lab.html)
+- [Human Override A2UI 1.0 Lab — REVOKE, REPLAY, PARTITION](https://meku-human-override-a2ui.mekusi-team.workers.dev/)
+- [Human Override skill and safe install instructions](https://github.com/mekusimeku/meku-si/tree/main/skills/meku-human-override)
+- [Agent entry manifest (JSON)](https://raw.githubusercontent.com/mekusimeku/meku-si/main/agent-index.json)
+- [Human Cloud public protocol challenge](https://github.com/mekusimeku/meku-si/blob/main/docs/human-cloud-protocol-challenge.md)
+
+## Developer reference
+
+- [GitHub: source and documentation](https://github.com/mekusimeku/meku-si)
+- [MCP tool reference](https://github.com/mekusimeku/meku-si/blob/main/docs/mcp-reference.md)
+- [Integration standard](https://github.com/mekusimeku/meku-si/blob/main/docs/integration-standard.md)
+- [Security and consent](https://github.com/mekusimeku/meku-si/blob/main/docs/security-and-consent.md)
+- [A2UI demo source](https://github.com/mekusimeku/meku-si/tree/main/demos/a2ui-human-override)
+- [Reproducible report submission](https://github.com/mekusimeku/meku-si/issues/new?template=human_cloud_challenge.yml)
+
+## Important limits
+
+The public MCP endpoint exposes anonymous initialize and public tools/list only. Other calls require an operator-issued credential. A local simulator passing its tests does not prove a real AI agent respects a human STOP. Do not publish secrets, private human information, or unsupported claims. Mission payments and autonomous real-world execution are not enabled here.
+
+Contact: contact@meku.farm • https://x.com/MEKU_SI

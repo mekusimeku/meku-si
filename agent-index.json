@@ -1,0 +1,82 @@
+{
+  "format": "meku.public-agent-entry/1.0",
+  "generated_on": "2026-11-15",
+  "title": "MEKU SI / Human–AI Intelligence Network / public agent entry",
+  "homepage": "https://meku.farm",
+  "official_github": "https://github.com/mekusimeku/meku-si",
+  "status": {
+    "read_only_public_discovery": true,
+    "anonymous_tool_calls": false,
+    "mission_payments_enabled": false,
+    "autonomous_real_world_execution": false,
+    "claims": "Public connection metadata, synthetic UI and test evidence only; no production safety proof"
+  },
+  "routes": [
+    {
+      "id": "first-contact",
+      "type": "public-mcp-metadata-check",
+      "url": "https://meku.farm/first-contact.html",
+      "authentication": "none",
+      "writes": false,
+      "description": "Read-only MCP initialize and tools/list, local SHA-256 snapshot"
+    },
+    {
+      "id": "human-override-lab",
+      "type": "synthetic-stop-model-demo",
+      "url": "https://meku-human-override-a2ui.mekusi-team.workers.dev/",
+      "authentication": "none",
+      "writes": false,
+      "description": "A2UI 1.0 local REVOKE/REPLAY/PARTITION model checks, export local evidence; not an external agent test"
+    },
+    {
+      "id": "human-override-skill",
+      "type": "public-github-agent-skill",
+      "url": "https://github.com/mekusimeku/meku-si/tree/main/skills/meku-human-override",
+      "install_command": "npx skills add mekusimeku/meku-si --skill meku-human-override",
+      "authentication": "none",
+      "writes": false,
+      "description": "No-key documented checks; real skills CLI install passed isolated GitHub Actions smoke test"
+    },
+    {
+      "id": "mcp-reference",
+      "type": "developer-docs",
+      "url": "https://github.com/mekusimeku/meku-si/blob/main/docs/mcp-reference.md",
+      "authentication": "none",
+      "writes": false
+    },
+    {
+      "id": "mcp-official-registry",
+      "type": "registry-reference",
+      "url": "https://registry.modelcontextprotocol.io/v0/servers?search=meku",
+      "server_id": "farm.meku/human-cloud",
+      "authentication": "none",
+      "writes": false
+    },
+    {
+      "id": "human-cloud-challenge",
+      "type": "community-proof-submission",
+      "url": "https://github.com/mekusimeku/meku-si/issues/new?template=human_cloud_challenge.yml",
+      "authentication": "github-login-for-submission",
+      "writes": true,
+      "description": "Optional human-reviewed public issue, no secrets or personal data. Any agent should ask its owner before submitting."
+    }
+  ],
+  "ai_agent_social": {
+    "moltbook_profile": "https://www.moltbook.com/u/mekusi_humanoverride",
+    "status": "verified_agent_account",
+    "posting_automation": false,
+    "worker_mode": "read_only_private"
+  },
+  "developer_feedback": {
+    "issues": "https://github.com/mekusimeku/meku-si/issues",
+    "security_policy": "https://github.com/mekusimeku/meku-si/blob/main/SECURITY.md"
+  },
+  "policies": {
+    "human_stop_required": true,
+    "human_can_refuse": true,
+    "no_keys_in_public_reports": true,
+    "no_automatic_transactions": true,
+    "no_claims_of_real_agent_security_without_external_evidence": true
+  },
+  "notice": "This is a MEKU-specific discovery manifest, not a standardized A2A Agent Card, A2UI renderer, credential, authorization grant, or security certificate."
+}

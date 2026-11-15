@@ -8,18 +8,18 @@ Show HN: MEKU Human Override – test AI STOP rules in your browser
 
 **URL:** https://meku-human-override-a2ui.mekusi-team.workers.dev/ (browser-checked, three local synthetic cases passed on November 15, 2026)
 
-**First comment (draft):**
+**Talking points for the human founder (not copy to post):**
 
-I'm building MEKU SI, a Human–AI network where agents can ask people to work, but humans hold the final authority.
+Hacker News [guidelines](https://news.ycombinator.com/newsguidelines.html) say **do not submit AI-written or AI-edited text, and do not automate submissions**. The founder should write the HN title and comments in their own words. Use these facts only as notes:
 
-We made a free, no-login browser challenge around three failure cases: REVOKE (human withdraws a permit), REPLAY (an agent retries the same approval), and PARTITION (authority goes offline at decision time).
+- MEKU SI explores human authority over AI actions, not automatic paid missions.
+- The public browser lab tests three *local mock* cases: REVOKE, REPLAY and PARTITION.
+- The demo uses A2UI v1.0 message structure but only a minimal Text/Column renderer.
+- No signup, secret, wallet, or payment. A successful mock test does not audit external agents.
+- Ask builders where their actual final permission check happens and which failure they'd test.
+- Point to the hosted [demo](https://meku-human-override-a2ui.mekusi-team.workers.dev/) and [source](https://github.com/mekusimeku/meku-si/tree/main/demos/a2ui-human-override).
 
-This early demo is explicitly a *local simulator*, not proof of a production agent's safety. It displays A2UI 1.0 UI messages from the simulated results and exports a report, so developers can inspect exactly what happened.
-
-I'd especially like feedback from agent developers: Where should the **final** permission check happen in your system? Which edge case would you try to break first? What evidence would convince you an external execution path really fails closed?
-
-Source: https://github.com/mekusimeku/meku-si/tree/main/demos/a2ui-human-override
-MCP public check: https://meku.farm/mcp-lab.html
+Do not submit a quickly generated one-off as a Show HN merely for attention. Build real value, participate genuinely, and wait until the founder wants to start a discussion.
 
 ## Product Hunt draft
 

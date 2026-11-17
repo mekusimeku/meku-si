@@ -1,0 +1,22 @@
+name: Pocket Stage 14 Durable Claim Test Only
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/stage14-durable-journal/**'
+      - '.github/workflows/pocket-stage14-durable-test-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  durable-claim-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Standard-library SQLite one-shot test (NO network)
+        env:
+          PYTHONWARNINGS: error
+        run: python -m unittest discover -s pocket-browser-test/stage14-durable-journal -p 'test_*.py' -v

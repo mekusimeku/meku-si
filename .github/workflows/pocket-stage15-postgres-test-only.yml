@@ -1,0 +1,31 @@
+name: Pocket Stage 15 PostgreSQL Durable Claim Test Only
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/stage15-postgres/**'
+      - '.github/workflows/pocket-stage15-postgres-test-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  postgres-test-only:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pocket_ci
+          POSTGRES_PASSWORD: test_only_not_real
+          POSTGRES_DB: pocket_ci
+        options: >-
+          --health-cmd "pg_isready -U pocket_ci -d pocket_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: PostgreSQL 12-process claim/STOP test (no real funds)
+        shell: bash
+        env:
+          POCKET_CI_PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash pocket-browser-test/stage15-postgres/ci-race.sh

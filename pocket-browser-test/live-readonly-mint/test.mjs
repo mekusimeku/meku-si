@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {validateMintSnapshot,inspectLiveMint} from './inspect-mint.mjs';
+const owner='TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+const sample=()=>({jsonrpc:'2.0',result:{context:{slot:1234},value:{owner,executable:false,data:{program:'spl-token-2022',parsed:{type:'mint',info:{isInitialized:true,decimals:6,supply:'1000000',extensions:[{extension:'metadataPointer'}]}}}}}});
+test('accept exact parsed owner, decimals, finalized-like rpc structure; no send permission',()=>{const s=validateMintSnapshot(sample());assert.equal(s.transferApproval,'BLOCKED_PENDING_INDEPENDENT_REVIEW');assert.equal(s.extensions[0],'metadataPointer')});
+test('reject wrong token program',()=>{const s=sample();s.result.value.owner='TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';assert.throws(()=>validateMintSnapshot(s))});
+test('reject wrong decimals',()=>{const s=sample();s.result.value.data.parsed.info.decimals=9;assert.throws(()=>validateMintSnapshot(s))});
+test('reject missing or opaque account',()=>{const s=sample();s.result.value.data=['base64blob','base64'];assert.throws(()=>validateMintSnapshot(s))});
+test('reject duplicate extension entries',()=>{const s=sample();s.result.value.data.parsed.info.extensions.push({extension:'metadataPointer'});assert.throws(()=>validateMintSnapshot(s))});
+test('reject rpc error or missing slot',()=>{const s=sample();delete s.result.context.slot;assert.throws(()=>validateMintSnapshot(s));assert.throws(()=>validateMintSnapshot({jsonrpc:'2.0',error:{code:1}}))});
+test('deny off-mainnet endpoint before fetch',async()=>{await assert.rejects(()=>inspectLiveMint({endpoint:'https://example.com',fetchFn:()=>{throw Error('should not call')}}),/UNAPPROVED_ENDPOINT/)});

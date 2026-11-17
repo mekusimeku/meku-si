@@ -1,0 +1,24 @@
+name: Pocket Stage 19 Local Vault Candidate Test Only
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/stage19-vault/**'
+      - '.github/workflows/pocket-stage19-test-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vault-candidate-test-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify test-only local vault crypto and state gates
+        run: node --test pocket-browser-test/stage19-vault/vault-core.test.mjs
+      - name: Check installed headless Chrome
+        run: command -v google-chrome || command -v chromium || exit 1
+      - name: Verify disposable IndexedDB + WebCrypto in real headless Chrome
+        run: node pocket-browser-test/stage19-vault/browser-ci.mjs

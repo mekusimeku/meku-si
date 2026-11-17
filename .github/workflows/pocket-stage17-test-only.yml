@@ -1,0 +1,33 @@
+name: Pocket Stage 17 Fixture Auth-to-Postgres Test Only
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/stage17-auth-gateway/**'
+      - '.github/workflows/pocket-stage17-test-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fixture-auth-postgresql-test-only:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pocket_ci
+          POSTGRES_USER: pocket_ci
+          POSTGRES_PASSWORD: stage17_postgres_test_only
+        options: >-
+          --health-cmd "pg_isready -U pocket_ci -d pocket_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Authenticate synthetic identity and exercise PostgreSQL claim gate
+        env:
+          POCKET_CI_PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash pocket-browser-test/stage17-auth-gateway/ci-test.sh

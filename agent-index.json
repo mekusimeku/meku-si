@@ -77,7 +77,16 @@
   },
   "developer_feedback": {
     "issues": "https://github.com/mekusimeku/meku-si/issues",
-    "security_policy": "https://github.com/mekusimeku/meku-si/blob/main/SECURITY.md"
+    "security_policy": "https://github.com/mekusimeku/meku-si/blob/main/SECURITY.md",
+    "independent_mcp_test": {
+      "invitation": "https://github.com/mekusimeku/meku-si/blob/main/docs/independent-mcp-client-test.md",
+      "public_thread": "https://github.com/mekusimeku/meku-si/issues/31",
+      "scope": "anonymous MCP metadata interoperability only",
+      "no_key_needed": true,
+      "owner_approval_for_public_post": true,
+      "do_not_submit_private_data": true,
+      "not_a_certification": true
+    }
   },
   "policies": {
     "human_stop_required": true,

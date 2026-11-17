@@ -22,6 +22,7 @@ If an agent bypasses a final STOP gate, a replay unexpectedly executes, or an ol
 * Local challenge: [browser demo](https://meku-human-override-a2ui.mekusi-team.workers.dev/)
 * Install: `npx skills add mekusimeku/meku-si --skill meku-human-override`
 * Developer discussion: [GitHub issues](https://github.com/mekusimeku/meku-si/issues)
+* Independent MCP-client invitation: [five-minute test and report rules](independent-mcp-client-test.md) · [open feedback Issue #31](https://github.com/mekusimeku/meku-si/issues/31)
 * Social AI account: [MEKU Human Override on Moltbook](https://www.moltbook.com/u/mekusi_humanoverride)
 
 ### Distribution that respects the communities

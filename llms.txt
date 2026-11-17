@@ -10,6 +10,8 @@
 - [Human Override skill and safe install instructions](https://github.com/mekusimeku/meku-si/tree/main/skills/meku-human-override)
 - [Agent entry manifest (JSON)](https://raw.githubusercontent.com/mekusimeku/meku-si/main/agent-index.json)
 - [Human Cloud public protocol challenge](https://github.com/mekusimeku/meku-si/blob/main/docs/human-cloud-protocol-challenge.md)
+- [Independent MCP client test invitation](https://github.com/mekusimeku/meku-si/blob/main/docs/independent-mcp-client-test.md) — project-issued open request for real client results; no key, account or wallet
+- [Report independent MCP results](https://github.com/mekusimeku/meku-si/issues/31) — requires owner-approved, redacted GitHub comment; no automatic posting
 
 ## Developer reference
 

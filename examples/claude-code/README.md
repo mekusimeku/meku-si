@@ -2,6 +2,8 @@
 
 **Status: reference only. This configuration has not been independently tested with a MEKU-issued key.**
 
+**Before using any key:** try the [public no-key MCP client test](../../docs/independent-mcp-client-test.md) and report a redacted result to [the independent feedback thread](https://github.com/mekusimeku/meku-si/issues/31). This is a metadata-only test, not proof that the authenticated Claude Code example works. Continue to the key-based steps only after MEKU confirms server-enforced, read-only test scope.
+
 The project-scoped MCP configuration connects Claude Code to MEKU over remote HTTP. Begin with a read-only search for an aggregate availability check. This example does not submit a work request.
 
 ## Setup

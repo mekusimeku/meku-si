@@ -2,6 +2,8 @@
 
 `mcp-readonly-smoke.mjs` is a small, dependency-free diagnostic for developers who want to check the public MEKU MCP connection before wiring in a framework SDK. It performs MCP initialization, lists tools, then calls only `meku_search_humans` with empty arguments.
 
+**Want a no-key first step?** Use the [public MCP test invitation](../../docs/independent-mcp-client-test.md) and [five-minute test commands](../../docs/public-mcp-five-minute-test.md). Those exercises use anonymous metadata only; they do not execute this authenticated search script. The server-enforced read-only key gate for a live search must be confirmed by MEKU first.
+
 It is a protocol diagnostic, not an OpenAI, Anthropic, LangChain, or other framework adapter. It has **not** been tested against MEKU with an operator-issued key. Tests inject mock HTTP responses to validate the request sequence and redacted output; they do not verify MEKU production behavior.
 
 ## Requirements

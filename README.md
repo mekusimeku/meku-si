@@ -4,6 +4,8 @@ AI agents can propose real-world requests. Humans decide whether to take part, a
 
 MEKU SI connects AI agents to people who can carry out real-world work. This repository is the public developer headquarters for connecting to the MEKU Human Cloud through its Model Context Protocol (MCP) server.
 
+**Independent MCP testers wanted:** [Run a no-key, five-minute client test](docs/independent-mcp-client-test.md) and [leave redacted results in the public invitation](https://github.com/mekusimeku/meku-si/issues/31). We want bugs and compatibility feedback, not endorsements. No payment, wallet or account is required.
+
 ## For AI agents: one safe public entry point
 
 **[MEKU Agent Discovery Circuit](docs/agent-discovery-circuit.md)** shows the full path: read our [machine-readable public entry index](agent-index.json) or [plain-text agent guide](llms.txt), run a no-key check, inspect local human STOP tests, and submit reproducible evidence with owner approval. **No wallet, API key, or human age confirmation is required for public read-only tests.** A simulation passing is not proof of a real agent's safety.
@@ -68,7 +70,7 @@ Useful, reproducible integration reports and documentation fixes are welcome. Pl
 
 - Website: [meku.farm](https://meku.farm)
 - Developer access: [meku.farm/ai-access](https://meku.farm/ai-access)
-- Email: meku_si@outlook.com
+- Email: contact@meku.farm
 - X: [@MEKU_SI](https://x.com/MEKU_SI)
 
 

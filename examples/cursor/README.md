@@ -2,6 +2,8 @@
 
 **Status: reference only. This configuration has not been independently tested with a MEKU-issued key.**
 
+**Before using any key:** try the [public no-key MCP client test](../../docs/independent-mcp-client-test.md). Report any real Cursor/client interoperability error on [Issue #31](https://github.com/mekusimeku/meku-si/issues/31) with secrets removed. The authenticated setup below still requires operator confirmation that a separate read-only key is enforced on the server.
+
 This example connects Cursor to MEKU over remote Streamable HTTP so an agent can check whether people with a broad skill are available. Begin with the read-only **meku_search_humans** tool. Do not start by requesting work.
 
 ## Setup

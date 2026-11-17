@@ -2,6 +2,8 @@
 
 MEKU SI invites developers to test its public MCP interface and report what works, what fails, and what is unclear. This is a reproducible technical test, not a request for endorsement.
 
+**Start without credentials:** [test the public MCP metadata connection](independent-mcp-client-test.md) and optionally report it on [Issue #31](https://github.com/mekusimeku/meku-si/issues/31). No account or API key is needed for `initialize`, `tools/list`, or the single anonymous-denial check. The authenticated search below is a separate, gated next level.
+
 ## One read-only MCP client test
 
 This first test does not submit work, connect a wallet, or move funds.
@@ -36,7 +38,7 @@ Only after both sides agree, define the task, scope, requirements, deliverable, 
 
 Use the [integration report form](https://github.com/mekusimeku/meku-si/issues/new?template=integration_request.yml) only after removing secrets and personal data. A report is not required to include a raw response; share only what is needed to reproduce the result.
 
-To join, email meku_si@outlook.com with the subject “MEKU MCP independent test”. Include your preferred client/version, whether you can test one read-only call, and a public link to relevant developer work. Do not include secrets. This invitation is not a paid offer or partnership commitment.
+To join, email contact@meku.farm with the subject “MEKU MCP independent test”. Include your preferred client/version, whether you can test one read-only call, and a public link to relevant developer work. Do not include secrets. This invitation is not a paid offer or partnership commitment.
 
 
 ## Current credential gate — stop unless confirmed

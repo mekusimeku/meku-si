@@ -16,6 +16,8 @@ Public MCP endpoint: https://meku.farm/api/public/mcp
 Official source and full documentation: https://github.com/mekusimeku/meku-si  
 Live no-key MCP lab: https://meku.farm/mcp-lab.html  
 Public First Contact: https://meku.farm/first-contact.html
+Independent developer test invitation: https://github.com/mekusimeku/meku-si/blob/main/docs/independent-mcp-client-test.md
+Public feedback thread (human-approved reports only): https://github.com/mekusimeku/meku-si/issues/31
 
 ## Safety first
 

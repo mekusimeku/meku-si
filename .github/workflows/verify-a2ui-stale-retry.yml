@@ -26,3 +26,5 @@ jobs:
           node-version: '22'
       - name: Validate actual A2UI browser model, old-permit reuse, relabel, and recovery
         run: node --test demos/a2ui-human-override/stale-retry.test.mjs
+      - name: Worker source of record matches deployed module and token identity rules
+        run: node --test demos/a2ui-human-override/worker/worker.test.mjs

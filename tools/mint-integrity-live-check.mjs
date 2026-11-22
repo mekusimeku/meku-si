@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // MEKU SI Official Mint Integrity — read-only live check of the twelve public endpoints.
 // Intended to be called by the existing daily "MEKU SI Official Mint Integrity Watch";
-// it does not schedule itself. GET requests only: no keys, no wallet, no writes, no paid APIs.
+// it does not schedule itself (run instructions: docs/mint-integrity-watch.md). GET requests only: no keys,
+// no wallet, no writes, no paid APIs.
 //
 // Each endpoint is reported as:
 //   PASS    verified correct from the live response body
@@ -21,6 +22,10 @@ const MAX_BODY = 2 * 1024 * 1024;
 // 8–9 are the deployed Worker's output; 10–11 are this repo's files (CI checks they match). Endpoint 12 pins
 // sha256(post.title + "\n" + post.content), because the API JSON also carries changing counters. Until a
 // reviewer records that pin (the --json output shows "observedSha256" for it), endpoint 12 is UNKNOWN, never PASS.
+// Endpoint 12 pin: full post read 2026-11-22 via Cloudflare URL Scanner (raw API body 2,391 bytes, HTTP 200,
+// created = updated = 2026-11-15T06:53:05.606Z, author mekusi_humanoverride); only the official mint, labelled
+// Token-2022, risk disclosure present, no buyer claim. Founder wording note: "Planned paid tiers are not all live
+// production features" understates rule B (no paid tier is live); a Moltbook edit would change this pin.
 export const APPROVED_SHA256 = {
   1: "b691dfb042635dcd2c255a3fdb1cf04ee381592dbafe71b9869dfae8da77ad35",
   2: "c7ae1551ab614abc9cbbb0762ceefb4a4c7b0fb3631e9174ac371a5e95847b16",
@@ -33,7 +38,7 @@ export const APPROVED_SHA256 = {
   9: "a26f305aa84f35818597e2c2427aaaf3aa32e139a43eca8986f671973f88a1d8",
   10: "a5328633eaab423d72934664c61ceece46a4d37580bb931335d41e7f5deab1ab",
   11: "c806d13073d51512800ea24c35d25fbaf191bab4a6aa4177825210524baba26e",
-  12: null,
+  12: "1095d4b6d3774cadd69ccbdfba51636c55afd8a1d41d5d716d03b430e0d61c99",
 };
 // Usage: node tools/mint-integrity-live-check.mjs [--json]
 
@@ -55,7 +60,7 @@ const RULE = {
 // Assertive claims only; headings and rules such as "we will not call this a first independent buyer unless…" are allowed.
 const FALSE_CLAIM = /\b(we (have|now have|welcomed|confirmed|onboarded)|has (its|our) first|[1-9]\d*) (our |an? |its )?(first )?(verified |independent )+(ai[- ]agent )?buyers?\b|\bverified buyers?\s*:\s*[1-9]|subscriptions? (are|is) (now )?live|paid agent (access|subscriptions?) (is|are) (now )?live/i;
 
-const FALSE_CLAIM_2 = /\bfirst (verified |independent )+(ai[- ]agent )?buyers? (has|have|is|was|arrived|confirmed|purchased|bought)\b|\b(we['’]ve|we have) (got|gotten|had) (our |an? )?(first )?(verified |independent )+buyers?\b|\b(subscriptions?|paid agent access) (went|has gone|is going|have gone) live\b|\b(paid |agent )*subscriptions? (are|is|have|has) (now )?(active|available|open|launched|enabled|live)\b|\bsubscriptions?\s*:\s*(live|active|on)\b|\bagent access (is|has) (now )?(live|launched|active|open)\b|\bfirst (ai[- ]agent |verified |independent )*buyers? (has|have|is|was|arrived|confirmed|purchased|bought|verified)\b|\bpaid agent access (has )?(launched|is active|is available)\b|\b(token|holding|owning)(?:(?!\bnot\b|n['’]t\b|\bnever\b|\bno\b|\bwithout\b)[^.]){0,30}\b(unlocks?|grants?|gives?|gets?|receives?|provides?|includes?) (you )?(paid )?agent access\b/i;
+const FALSE_CLAIM_2 = /\bfirst (verified |independent )+(ai[- ]agent )?buyers? (has|have|is|was|arrived|confirmed|purchased|bought)\b|\b(we['’]ve|we have) (got|gotten|had) (our |an? )?(first )?(verified |independent )+buyers?\b|\bwe (just |now |finally )?(got|have|gained|welcomed|confirmed|onboarded|landed) (our |an? |the )?(first )?(verified |independent )+(ai[- ]agent )?buyers?\b|\b(subscriptions?|paid agent access) (went|has gone|is going|have gone) live\b|\b(paid |agent )*subscriptions? (are|is|have|has) (now )?(active|available|open|launched|enabled|live)\b|\bsubscriptions?\s*:\s*(live|active|on)\b|\bagent access (is|has) (now )?(live|launched|active|open)\b|\bfirst (ai[- ]agent |verified |independent )*buyers? (has|have|is|was|arrived|confirmed|purchased|bought|verified)\b|\bpaid agent access (has )?(launched|is active|is available)\b|\b(token|holding|owning)(?:(?!\bnot\b|n['’]t\b|\bnever\b|\bno\b|\bwithout\b)[^.]){0,30}\b(unlocks?|grants?|gives?|gets?|receives?|provides?|includes?) (you )?(paid )?agent access\b/i;
 // A required statement does not count when its own wording negates it.
 const NEGATED = /\b((is|are)?n['’]?o?t (required|needed|necessary)|unnecessary|optional|no longer|is proof|is sufficient|is enough|not insufficient)\b/i;
 const NEGATED_BEFORE = /\b(no|without|skip|never)\s+$/i;
@@ -72,34 +77,45 @@ function enablingFlags(v, path = "") {
 }
 const duplicateKey = (body, keys) => keys.find((k) => (body.match(new RegExp(`"${k}"\\s*:`, "g")) ?? []).length > 1);
 
+// Exact media type, then end or parameters: "application/jsonx" or "text/html-evil" do not match.
+function CT(...types) {
+  const alt = types.map((t) => t.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")).join("|");
+  return new RegExp(`^\\s*(?:${alt})\\s*(?:;|$)`, "i");
+}
+
 // kind: identity = full token identity record; reference = shows mint only (no rule repetition required)
 export const ENDPOINTS = [
-  { n: 1, url: "https://meku.farm/token.html", type: /text\/html/, kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
-  { n: 2, url: "https://meku.farm/.well-known/meku-si-token.json", type: /application\/json/, kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"],
+  { n: 1, url: "https://meku.farm/token.html", type: CT("text/html"), kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
+  { n: 2, url: "https://meku.farm/.well-known/meku-si-token.json", type: CT("application/json"), kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"],
     json: (j) => j.asset?.mint === MINT && j.asset?.tokenProgram === "Token-2022" && j.asset?.network === "mainnet-beta" && j.access?.agentSubscriptionsLive === false,
     keys: ["mint", "tokenProgram", "network", "agentSubscriptionsLive", "buyingTokenAloneGrantsAgentSubscription", "walletOwnerApprovalRequired", "signatureAloneIsNotProof"] },
-  { n: 3, url: "https://meku.farm/llms.txt", type: /text\/plain/, kind: "identity", rules: ["noAccess", "notLive"] },
-  { n: 4, url: "https://meku.farm/agent-quickstart.html", type: /text\/html/, kind: "identity", rules: ["noAccess", "notLive", "evidence"] },
-  { n: 5, url: "https://meku.farm/mcp-lab.html", type: /text\/html/, kind: "reference", rules: [] },
-  { n: 6, url: "https://meku.farm/first-contact.html", type: /text\/html/, kind: "reference", rules: [] },
-  { n: 7, url: "https://meku.farm/.well-known/meku-first-contact.json", type: /application\/json/, kind: "reference", rules: ["noAccess"],
+  { n: 3, url: "https://meku.farm/llms.txt", type: CT("text/plain"), kind: "identity", rules: ["noAccess", "notLive"] },
+  { n: 4, url: "https://meku.farm/agent-quickstart.html", type: CT("text/html"), kind: "identity", rules: ["noAccess", "notLive", "evidence"] },
+  { n: 5, url: "https://meku.farm/mcp-lab.html", type: CT("text/html"), kind: "reference", rules: [] },
+  { n: 6, url: "https://meku.farm/first-contact.html", type: CT("text/html"), kind: "reference", rules: [] },
+  { n: 7, url: "https://meku.farm/.well-known/meku-first-contact.json", type: CT("application/json"), kind: "reference", rules: ["noAccess"],
     json: (j) => j.networkReference?.listedSiteAddress === MINT && j.networkReference?.tokenProgram === "Token-2022" && j.safety?.realMissionPaymentsEnabled === false,
     keys: ["listedSiteAddress", "tokenProgram", "realMissionPaymentsEnabled"] },
-  { n: 8, url: `${W}/token.json`, type: /application\/json/, kind: "identity", rules: ["notLive"],
+  { n: 8, url: `${W}/token.json`, type: CT("application/json"), kind: "identity", rules: ["notLive"],
     // Fixed record: must equal the approved Worker object exactly (no extra, missing or changed fields).
     json: (j) => JSON.stringify(j) === JSON.stringify({ schemaVersion: "meku-a2ui-token-reference-v1", label: "MEKU SI", network: "Solana Mainnet", program: "Token-2022", mint: MINT, canonical: "https://meku.farm/.well-known/meku-si-token.json", human: "https://meku.farm/token.html", safetyLabReadOnly: true, agentSubscriptionsLive: false }),
     keys: ["mint", "program", "network", "agentSubscriptionsLive"] },
-  { n: 9, url: `${W}/llms.txt`, type: /text\/plain/, kind: "identity", rules: ["noAccess", "approval"] },
-  { n: 10, url: "https://github.com/mekusimeku/meku-si/blob/main/docs/mekusi-agent-token.md", fetch: `${GH}/docs/mekusi-agent-token.md`, type: /text\/plain/, kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
-  { n: 11, url: "https://github.com/mekusimeku/meku-si/blob/main/agent-index.json", fetch: `${GH}/agent-index.json`, type: /text\/plain|application\/json/, kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
+  { n: 9, url: `${W}/llms.txt`, type: CT("text/plain"), kind: "identity", rules: ["noAccess", "approval"] },
+  { n: 10, url: "https://github.com/mekusimeku/meku-si/blob/main/docs/mekusi-agent-token.md", fetch: `${GH}/docs/mekusi-agent-token.md`, type: CT("text/plain"), kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
+  { n: 11, url: "https://github.com/mekusimeku/meku-si/blob/main/agent-index.json", fetch: `${GH}/agent-index.json`, type: CT("text/plain", "application/json"), kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
   // Moltbook pages are client-rendered shells; the public post API is the only full-body source. Never written to.
-  { n: 12, url: `https://www.moltbook.com/post/${MOLT_ID}`, fetch: `https://www.moltbook.com/api/v1/posts/${MOLT_ID}`, type: /application\/json/, kind: "reference", rules: [], moltbook: true },
+  { n: 12, url: `https://www.moltbook.com/post/${MOLT_ID}`, fetch: `https://www.moltbook.com/api/v1/posts/${MOLT_ID}`, type: CT("application/json"), kind: "reference", rules: [], moltbook: true },
 ];
 
+const B58 = "1-9A-HJ-NP-Za-km-z";
+// Whole base58 tokens only: a neighbouring base58 character on either side means it is part of a longer token.
+const LOOKALIKE = new RegExp(`(?<![${B58}])J5h8[${B58}]{36,}(?![${B58}])`, "g");
+const PUMP = new RegExp(`(?<![${B58}])[${B58}]{28,44}pump(?![${B58}])`, "g");
+// JSON escapes are decoded first, so "...:\\nJ5h8..." in a raw JSON body is read as a line break plus the mint.
+const unescape = (t) => t.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\[nrtbf"\\/]/g, " ");
 function addresses(text) {
-  const near = new Set(text.match(/J5h8[1-9A-HJ-NP-Za-km-z]{36,44}/g) ?? []);
-  for (const a of text.match(/[1-9A-HJ-NP-Za-km-z]{32,44}pump\b/g) ?? []) near.add(a);
-  return [...near];
+  const t = unescape(text);
+  return [...new Set([...(t.match(LOOKALIKE) ?? []), ...(t.match(PUMP) ?? [])])];
 }
 
 /** Pure evaluation of one fetched response; exported for offline tests. */
@@ -110,18 +126,19 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   if (status === 429 || status === 403 || status === 503 || status >= 500) return r("UNKNOWN", `HTTP ${status} (rate limit, challenge or outage)`);
   if (status !== 200) return r("UNKNOWN", `HTTP ${status}`);
   if (typeof body !== "string") return r("UNKNOWN", "no response body");
-  if (body.length > MAX_BODY) return r("UNKNOWN", `body larger than ${MAX_BODY} bytes, not evaluated`);
+  // Wrong mints are searched in the raw body first (attributes, redirected or oversized bodies included), so
+  // nothing later — size limit, redirect, challenge marker — can turn a confirmed wrong mint into UNKNOWN.
+  const rawWrong = addresses(body.length > MAX_BODY ? body.slice(0, MAX_BODY) : body).filter((a) => a !== MINT);
+  if (rawWrong.length) return r("FAIL", `non-official mint-like address: ${rawWrong.join(", ")}`);
+  if (body.length > MAX_BODY) return r("UNKNOWN", `body larger than ${MAX_BODY} bytes, not fully evaluated`);
   if (finalUrl) {
     const want = new URL(ep.fetch ?? ep.url);
     let got; try { got = new URL(finalUrl); } catch { got = null; }
     if (!got || got.origin !== want.origin || got.pathname !== want.pathname) return r("UNKNOWN", `redirected away from the requested URL: ${finalUrl}`);
   }
-  // Wrong mints are searched in the raw body first, so attributes (href, data-*) and planted markers can't hide them.
-  const rawWrong = addresses(body).filter((a) => a !== MINT);
-  if (rawWrong.length) return r("FAIL", `non-official mint-like address: ${rawWrong.join(", ")}`);
-  // Only a real interstitial counts; Cloudflare's injected /cdn-cgi/challenge-platform/ script on normal pages does not.
-  // A page that carries the official mint is graded, not excused as a challenge (a marker can't hide a FAIL).
-  if (!body.includes(MINT) && /<title>\s*Just a moment\.\.\.|id="challenge-form"|cf-chl-widget/i.test(body)) return r("UNKNOWN", "bot challenge page");
+  // Only a real interstitial counts: its title, no official mint, and a small body. Lone markers such as
+  // cf-chl-widget or the injected /cdn-cgi/challenge-platform/ script never excuse a page from grading.
+  if (!body.includes(MINT) && body.length < 65536 && /<title>\s*Just a moment\.\.\.\s*<\/title>/i.test(body)) return r("UNKNOWN", "bot challenge page");
   let text = body;
   if (ep.moltbook) {
     let j; try { j = JSON.parse(body); } catch { return r("UNKNOWN", "Moltbook API did not return JSON"); }
@@ -154,6 +171,7 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   const pin = APPROVED_SHA256[ep.n];
   const got = createHash("sha256").update(pinned).digest("hex");
   if (!pin) return { ...r("UNKNOWN", "official mint present and no failure found, but no approved snapshot is pinned yet"), observedSha256: got };
+  if (!finalUrl) return { ...r("UNKNOWN", "final URL not reported, so the response origin is unverified"), observedSha256: got };
   if (got !== pin) return { ...r("UNKNOWN", `content differs from approved snapshot (sha256 ${got.slice(0, 12)}…); review it, then update APPROVED_SHA256`), observedSha256: got };
   return r("PASS", "live body equals approved snapshot and all checks pass");
 }
@@ -165,7 +183,7 @@ async function fetchOne(ep) {
       headers: { "user-agent": "MEKU-SI-mint-integrity-check/1 (+https://meku.farm; read-only)", accept: "*/*" },
       signal: AbortSignal.timeout(20000),
     });
-    return { status: res.status, contentType: res.headers.get("content-type"), finalUrl: res.url, body: await res.text() };
+    return { status: res.status, contentType: res.headers.get("content-type"), finalUrl: res.url, body: new TextDecoder("utf-8", { ignoreBOM: true }).decode(await res.arrayBuffer()) };
   } catch (e) {
     return { error: String(e?.message ?? e) };
   }

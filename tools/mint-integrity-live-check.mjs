@@ -22,10 +22,12 @@ const MAX_BODY = 2 * 1024 * 1024;
 // 8–9 are the deployed Worker's output; 10–11 are this repo's files (CI checks they match). Endpoint 12 pins
 // sha256(post.title + "\n" + post.content), because the API JSON also carries changing counters. Until a
 // reviewer records that pin (the --json output shows "observedSha256" for it), endpoint 12 is UNKNOWN, never PASS.
-// Endpoint 12 pin: full post read 2026-11-22 via Cloudflare URL Scanner (raw API body 2,391 bytes, HTTP 200,
+// Endpoint 12 pin: full post read 2026-11-22 via Cloudflare URL Scanner (raw API body 2,397 bytes, HTTP 200,
 // created = updated = 2026-11-15T06:53:05.606Z, author mekusi_humanoverride); only the official mint, labelled
 // Token-2022, risk disclosure present, no buyer claim. Founder wording note: "Planned paid tiers are not all live
 // production features" understates rule B (no paid tier is live); a Moltbook edit would change this pin.
+// So endpoint 12 PASS means "the reviewed official post, unchanged, with only the official mint" — not that
+// the post itself states rules A–E (it is a discussion post; its rule list is empty).
 export const APPROVED_SHA256 = {
   1: "b691dfb042635dcd2c255a3fdb1cf04ee381592dbafe71b9869dfae8da77ad35",
   2: "c7ae1551ab614abc9cbbb0762ceefb4a4c7b0fb3631e9174ac371a5e95847b16",
@@ -108,14 +110,26 @@ export const ENDPOINTS = [
 ];
 
 const B58 = "1-9A-HJ-NP-Za-km-z";
-// Whole base58 tokens only: a neighbouring base58 character on either side means it is part of a longer token.
-const LOOKALIKE = new RegExp(`(?<![${B58}])J5h8[${B58}]{36,}(?![${B58}])`, "g");
-const PUMP = new RegExp(`(?<![${B58}])[${B58}]{28,44}pump(?![${B58}])`, "g");
+// Look-alikes: any token that starts with the official prefix (even glued to other characters) must be the
+// exact mint, and any whole base58 token ending in "pump", of any length, must be the exact mint.
+const LOOKALIKE = new RegExp(`J5h8[${B58}]{36,}`, "g");
+const PUMP = new RegExp(`(?<![${B58}])[${B58}]{28,}pump(?![${B58}])`, "g");
 // JSON escapes are decoded first, so "...:\\nJ5h8..." in a raw JSON body is read as a line break plus the mint.
 const unescape = (t) => t.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\[nrtbf"\\/]/g, " ");
-function addresses(text) {
-  const t = unescape(text);
-  return [...new Set([...(t.match(LOOKALIKE) ?? []), ...(t.match(PUMP) ?? [])])];
+function scan(t) {
+  return [...(t.match(LOOKALIKE) ?? []), ...(t.match(PUMP) ?? [])];
+}
+// Every string (keys and values) of a JSON body is scanned on its own, so no field and no escape can hide a
+// wrong mint; other bodies are scanned raw and with JSON-style escapes decoded.
+function strings(v, out = []) {
+  if (typeof v === "string") out.push(v);
+  else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); strings(x, out); }
+  return out;
+}
+function addresses(body) {
+  let parts;
+  try { parts = strings(JSON.parse(body)); } catch { parts = [body, unescape(body)]; }
+  return [...new Set(parts.flatMap(scan))];
 }
 
 /** Pure evaluation of one fetched response; exported for offline tests. */
@@ -143,6 +157,8 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   if (ep.moltbook) {
     let j; try { j = JSON.parse(body); } catch { return r("UNKNOWN", "Moltbook API did not return JSON"); }
     if (!j?.success || !j.post) return r("UNKNOWN", "Moltbook post body not available (metadata only)");
+    if (j.post.is_deleted !== false || j.post.is_spam !== false || j.post.author?.name !== "mekusi_humanoverride" || j.post.id !== MOLT_ID)
+      return r("UNKNOWN", "Moltbook post metadata changed (deleted, spam, id or author); review before trusting it");
     text = `${j.post.title ?? ""}\n${j.post.content ?? ""}`;
   }
   const pinned = ep.moltbook ? text : body;

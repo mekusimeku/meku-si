@@ -36,14 +36,18 @@ Never edit APPROVED_SHA256 or any repository file.
               claim). Alert the founder immediately with the endpoint, reason and evidence.
      exit 2 = no FAIL, but at least one UNKNOWN. UNKNOWN is NOT a pass. Report each reason.
 
-4. For each UNKNOWN, you may try ONE independent read-only method (for example a free Cloudflare URL
-   Scanner scan, comparing the live body SHA-256 with APPROVED_SHA256 in tools/mint-integrity-live-check.mjs).
-   Report what it showed, but never change UNKNOWN to PASS or FAIL yourself.
+4. For each UNKNOWN, you may retry that one URL once with a plain read-only GET (for example curl -sSL -D -)
+   and compare its SHA-256 with APPROVED_SHA256 in tools/mint-integrity-live-check.mjs. Do not submit URLs
+   to third-party scanners unless the founder has allowed it. Report what you saw, but never change UNKNOWN
+   to PASS or FAIL yourself.
    Typical UNKNOWN reasons and what they mean:
      - "content differs from approved snapshot": the page changed. A human must review the new content;
        if it is correct, the pin is updated in a reviewed PR. Until then it stays UNKNOWN.
      - "redirected away from the requested URL", "HTTP 403/429/5xx", "request failed", "bot challenge page":
        could not verify this run; retry next run.
+     - "final URL not reported", "body larger than …", "no response body": the response could not be graded.
+     - "Moltbook post body not available" or "Moltbook post metadata changed": the official post could not be
+       confirmed as the same, live, non-deleted post by mekusi_humanoverride.
 
 5. Never claim the audit is complete when any row is UNKNOWN. Never describe a verified buyer, live
    subscriptions or paid agent access. End the report with: commit SHA, exit code, PASS/FAIL/UNKNOWN counts.
@@ -57,3 +61,6 @@ Never edit APPROVED_SHA256 or any repository file.
   `mekusimeku/screenshot-magic-5054` `public/`; when those files change, update the pins in a reviewed PR
   after confirming the new live bytes.
 - Moltbook (endpoint 12) is read only through its public post API. Editing the post changes its pin.
+  Its PASS means "the reviewed official post, unchanged, with only the official mint". The post is a discussion
+  post and does not itself state rules A–E; its line "Planned paid tiers are not all live production features"
+  understates rule B (no paid tier is live). Rewording it is a founder decision.

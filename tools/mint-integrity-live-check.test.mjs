@@ -2,7 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ENDPOINTS, MINT, evaluate } from "./mint-integrity-live-check.mjs";
+import { createHash } from "node:crypto";
+import { APPROVED_SHA256, ENDPOINTS, MINT, evaluate } from "./mint-integrity-live-check.mjs";
 
 const ep = (n) => ENDPOINTS.find((e) => e.n === n);
 const ok = (body, contentType = "text/plain") => ({ status: 200, contentType, body });
@@ -70,7 +71,8 @@ test("review fixes: off-host redirect, injected CF script, 'are live', zero buye
   const wrong = guide.replaceAll(MINT, MINT.slice(0, -1) + "P") + '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>';
   assert.equal(evaluate(ep(10), ok(wrong)).result, "FAIL");
   assert.equal(evaluate(ep(10), ok(guide + "\nAgent subscriptions are live.")).result, "FAIL");
-  assert.equal(evaluate(ep(10), ok(guide + "\nThere are 0 verified buyers so far.")).result, "PASS");
+  // Not a false claim (no FAIL); changed content is UNKNOWN until its snapshot pin is reviewed.
+  assert.equal(evaluate(ep(10), ok(guide + "\nThere are 0 verified buyers so far.")).result, "UNKNOWN");
   assert.equal(evaluate(ep(10), { status: 200, contentType: null, body: guide }).result, "FAIL");
 });
 
@@ -122,7 +124,7 @@ test("final review: tampered JSON (extra enabling flag, duplicate key, extra fie
     access: { buyingTokenAloneGrantsAgentSubscription: false, agentSubscriptionsLive: false, autonomousAgentPurchasesAllowed: false },
   };
   const good = JSON.stringify(record, null, 2);
-  assert.equal(evaluate(ep(2), ok(good, "application/json")).result, "PASS");
+  assert.equal(evaluate(ep(2), ok(good, "application/json")).result, "UNKNOWN"); // passes every check, but is not the approved bytes
   const bad = JSON.stringify({ ...record, access: { ...record.access, paidAgentAccessLive: true } }, null, 2);
   assert.equal(evaluate(ep(2), ok(bad, "application/json")).result, "FAIL");
 });
@@ -130,4 +132,43 @@ test("final review: tampered JSON (extra enabling flag, duplicate key, extra fie
 test("final review: same-host redirect to another path is UNKNOWN", () => {
   const r = evaluate(ep(10), { ...ok(guide), finalUrl: "https://raw.githubusercontent.com/attacker/fork/main/x.md" });
   assert.equal(r.result, "UNKNOWN");
+});
+
+const sha = (b) => createHash("sha256").update(b).digest("hex");
+
+test("snapshot pins for endpoints 8–11 equal this repo's approved sources (update pins in the same PR)", async () => {
+  assert.equal(APPROVED_SHA256[10], sha(readFileSync(new URL("../docs/mekusi-agent-token.md", import.meta.url))));
+  assert.equal(APPROVED_SHA256[11], sha(readFileSync(new URL("../agent-index.json", import.meta.url))));
+  assert.equal(APPROVED_SHA256[8], sha((await w("/token.json")).body));
+  assert.equal(APPROVED_SHA256[9], sha((await w("/llms.txt")).body));
+  for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) assert.match(APPROVED_SHA256[n], /^[0-9a-f]{64}$/);
+  assert.equal(APPROVED_SHA256[12], undefined);
+});
+
+test("any change to approved content can never PASS: one appended space is UNKNOWN", async () => {
+  assert.equal(evaluate(ep(10), ok(guide + " ")).result, "UNKNOWN");
+  const tj = await w("/token.json");
+  assert.equal(evaluate(ep(8), tj).result, "PASS");
+  assert.equal(evaluate(ep(9), { ...(await w("/llms.txt")), body: (await w("/llms.txt")).body + "\nNew line." }).result, "UNKNOWN");
+});
+
+test("repeat review B1/B2: negations and wider false claims never PASS; known ones FAIL", () => {
+  const base = guide.replace(/requires owner consent and wallet approval/g, "is available").replace(/wallet owner controls signing/g, "");
+  for (const n of ["Wallet owner approval isn't required.", "Wallet owner approval is not needed.", "No wallet owner approval needed.", "Wallet-owner approval is unnecessary.", "You can skip wallet owner approval."])
+    assert.equal(evaluate(ep(10), ok(base + "\n" + n)).result, "FAIL", n);
+  const ref = `<html>Solana ${MINT}</html>`;
+  for (const c of ["Paid agent subscriptions are now available.", "Subscriptions have launched.", "Token holders receive agent access.", "Our first AI agent buyer purchased MEKU.",
+    "Subscriptions are now open.", "Agent access is now live.", "First buyer verified on-chain.", "Subscriptions: LIVE", "subscriptions&nbsp;are live"])
+    assert.equal(evaluate(ep(5), ok(ref.replace("</html>", c + "</html>"), "text/html")).result, "FAIL", c);
+  // A phrasing no pattern knows still cannot PASS on a pinned endpoint.
+  assert.notEqual(evaluate(ep(10), ok(guide + "\nAgents can now subscribe with MEKUSI.")).result, "PASS");
+});
+
+test("repeat review N1/N3: claims in attributes and enabling string/flag names fail", () => {
+  const page = `<html><meta name="description" content="Paid agent subscriptions are now live"> Solana ${MINT}</html>`;
+  assert.equal(evaluate(ep(5), ok(page, "text/html")).result, "FAIL");
+  const rec = { asset: { network: "mainnet-beta", mint: MINT, tokenProgram: "Token-2022" }, access: { agentSubscriptionsLive: false, buyingTokenAloneGrantsAgentSubscription: false },
+    market: { walletOwnerApprovalRequired: true }, purchaseEvidence: { signatureAloneIsNotProof: true } };
+  for (const extra of [{ subscriptionsActive: true }, { tokenUnlocksAgentAccess: true }, { paidAgentAccess: "live" }])
+    assert.equal(evaluate(ep(2), ok(JSON.stringify({ ...rec, access: { ...rec.access, ...extra } }), "application/json")).result, "FAIL", JSON.stringify(extra));
 });

@@ -13,9 +13,30 @@
 // never a false PASS). Endpoints 8 and 9 (the A2UI Worker) are checked against the rules that Worker states
 // today, a subset of the full public rules A–E; widening them needs a reviewed Worker update and approved redeploy.
 const MAX_BODY = 2 * 1024 * 1024;
+
+// Approved snapshots: SHA-256 of each endpoint's reviewed body. PASS requires the live bytes to equal the
+// approved bytes AND every check below to pass, so wording the heuristics miss can never PASS — any change
+// is UNKNOWN until a human reviews it and updates the pin here in a reviewed PR. Endpoints 1–7 are
+// screenshot-magic-5054 main 4bf4758 public/ files (equal to live per Cloudflare URL Scanner, 2026-11-22);
+// 8–9 are the deployed Worker's output; 10–11 are this repo's files (CI checks they match). Endpoint 12
+// (Moltbook API JSON includes changing counters) has no pin: its PASS rests on the mint and claim checks only.
+export const APPROVED_SHA256 = {
+  1: "b691dfb042635dcd2c255a3fdb1cf04ee381592dbafe71b9869dfae8da77ad35",
+  2: "c7ae1551ab614abc9cbbb0762ceefb4a4c7b0fb3631e9174ac371a5e95847b16",
+  3: "90070de6c2e162a8f13a6314c2b3a55f8ad081def076eda1c1a027f0879149be",
+  4: "ee361bd08528dfd11d7521c768632128ea1170600c6f0b8006e524f26594ebd6",
+  5: "7e284fc95b96189a1bc6b13ba46468530a5354931e7fdc1b38ed45044ac7e1e5",
+  6: "5d3873310d6d0374b2cba7450e64f4db40d378691ea97aaa5cea023e61e9aca8",
+  7: "24bc9fced00006df6c80397bfa7aad0236928e7397d147996ae8be21f74b0402",
+  8: "2383ebe01b96ad78845f0f59c2de15a5af54e850a0e0300fc53bd83440d4033f",
+  9: "a26f305aa84f35818597e2c2427aaaf3aa32e139a43eca8986f671973f88a1d8",
+  10: "a5328633eaab423d72934664c61ceece46a4d37580bb931335d41e7f5deab1ab",
+  11: "c806d13073d51512800ea24c35d25fbaf191bab4a6aa4177825210524baba26e",
+};
 // Usage: node tools/mint-integrity-live-check.mjs [--json]
 
 import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
 
 export const MINT = "J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump";
 const W = "https://meku-human-override-a2ui.mekusi-team.workers.dev";
@@ -32,19 +53,20 @@ const RULE = {
 // Assertive claims only; headings and rules such as "we will not call this a first independent buyer unless…" are allowed.
 const FALSE_CLAIM = /\b(we (have|now have|welcomed|confirmed|onboarded)|has (its|our) first|[1-9]\d*) (our |an? |its )?(first )?(verified |independent )+(ai[- ]agent )?buyers?\b|\bverified buyers?\s*:\s*[1-9]|subscriptions? (are|is) (now )?live|paid agent (access|subscriptions?) (is|are) (now )?live/i;
 
-const FALSE_CLAIM_2 = /\bfirst (verified |independent )+(ai[- ]agent )?buyers? (has|have|is|was|arrived|confirmed|purchased|bought)\b|\b(we['’]ve|we have) (got|gotten|had) (our |an? )?(first )?(verified |independent )+buyers?\b|\b(subscriptions?|paid agent access) (went|has gone|is going|have gone) live\b|\bsubscriptions? (are|is) (now )?active\b|\bpaid agent access (has )?(launched|is active|is available)\b|\b(token|holding|owning)(?:(?!\bnot\b|n['’]t\b|\bnever\b|\bno\b|\bwithout\b)[^.]){0,30}\b(unlocks?|grants?|gives?|gets?) (you )?(paid )?agent access\b/i;
+const FALSE_CLAIM_2 = /\bfirst (verified |independent )+(ai[- ]agent )?buyers? (has|have|is|was|arrived|confirmed|purchased|bought)\b|\b(we['’]ve|we have) (got|gotten|had) (our |an? )?(first )?(verified |independent )+buyers?\b|\b(subscriptions?|paid agent access) (went|has gone|is going|have gone) live\b|\b(paid |agent )*subscriptions? (are|is|have|has) (now )?(active|available|open|launched|enabled|live)\b|\bsubscriptions?\s*:\s*(live|active|on)\b|\bagent access (is|has) (now )?(live|launched|active|open)\b|\bfirst (ai[- ]agent |verified |independent )*buyers? (has|have|is|was|arrived|confirmed|purchased|bought|verified)\b|\bpaid agent access (has )?(launched|is active|is available)\b|\b(token|holding|owning)(?:(?!\bnot\b|n['’]t\b|\bnever\b|\bno\b|\bwithout\b)[^.]){0,30}\b(unlocks?|grants?|gives?|gets?|receives?|provides?|includes?) (you )?(paid )?agent access\b/i;
 // A required statement does not count when its own wording negates it.
-const NEGATED = /\b(not required|optional|no longer|is proof|is sufficient|not insufficient)\b/i;
+const NEGATED = /\b((is|are)?n['’]?o?t (required|needed|necessary)|unnecessary|optional|no longer|is proof|is sufficient|is enough|not insufficient)\b/i;
+const NEGATED_BEFORE = /\b(no|without|skip|never)\s+$/i;
 function stated(rule, text) {
   const g = new RegExp(rule.source, "gi");
-  for (const m of text.matchAll(g)) if (!NEGATED.test(text.slice(m.index, m.index + m[0].length + 40))) return true;
+  for (const m of text.matchAll(g)) if (!NEGATED.test(text.slice(m.index, m.index + m[0].length + 40)) && !NEGATED_BEFORE.test(text.slice(Math.max(0, m.index - 12), m.index))) return true;
   return false;
 }
 // Any boolean that would turn on access, payments or purchases fails a JSON identity record.
 function enablingFlags(v, path = "") {
   if (!v || typeof v !== "object") return [];
   return Object.entries(v).flatMap(([k, x]) =>
-    x === true && /(live|enabled|allowed|grants)/i.test(k) && !/not|never|required|readonly/i.test(k) ? [path + k] : enablingFlags(x, path + k + "."));
+    (x === true || /^(live|active|enabled|on)$/i.test(String(x))) && /(live|enabled|allowed|grants|active|unlock|access)/i.test(k) && !/not|never|required|readonly/i.test(k) ? [path + k] : enablingFlags(x, path + k + "."));
 }
 const duplicateKey = (body, keys) => keys.find((k) => (body.match(new RegExp(`"${k}"\\s*:`, "g")) ?? []).length > 1);
 
@@ -104,7 +126,9 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
     text = `${j.post.title ?? ""}\n${j.post.content ?? ""}`;
   }
   // Rules are read from visible wording: drop HTML tags and markdown emphasis, collapse whitespace.
-  text = text.replace(/<[^<>]*>/g, " ").replace(/\*\*|__/g, "").replace(/\s+/g, " ");
+  // Claim-bearing attributes (meta content, alt, title) are kept as text so claims there are checked too.
+  const attrs = (body.match(/\b(?:content|alt|title)\s*=\s*"[^"]{0,500}"/gi) ?? []).map((a) => a.slice(a.indexOf('"') + 1, -1)).join(" . ");
+  text = (text + " . " + attrs).replace(/&nbsp;|&#160;/gi, " ").replace(/<[^<>]*>/g, " ").replace(/\*\*|__/g, "").replace(/\s+/g, " ");
   const found = addresses(text);
   const wrong = found.filter((a) => a !== MINT);
   if (wrong.length) return r("FAIL", `non-official mint-like address: ${wrong.join(", ")}`);
@@ -123,7 +147,13 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   for (const k of ep.rules) if (!stated(RULE[k], text)) return r("FAIL", `required statement missing: ${k}`);
   const claim = text.match(FALSE_CLAIM) ?? text.match(FALSE_CLAIM_2);
   if (claim) return r("FAIL", `possible false buyer/subscription claim: "${claim[0]}"`);
-  return r("PASS", "live body verified");
+  const pin = APPROVED_SHA256[ep.n];
+  if (pin) {
+    const got = createHash("sha256").update(body).digest("hex");
+    if (got !== pin) return r("UNKNOWN", `content differs from approved snapshot (sha256 ${got.slice(0, 12)}…); review it, then update APPROVED_SHA256`);
+    return r("PASS", "live body equals approved snapshot and all checks pass");
+  }
+  return r("PASS", "live body verified (no snapshot pin; mint and claim checks only)");
 }
 
 async function fetchOne(ep) {

@@ -35,9 +35,12 @@ Never edit APPROVED_SHA256 or any repository file.
               tampered JSON identity, missing or negated required statement, false buyer/subscription
               claim). Alert the founder immediately with the endpoint, reason and evidence.
      exit 2 = no FAIL, but at least one UNKNOWN. UNKNOWN is NOT a pass. Report each reason.
+     If mint-report.json is empty or not valid JSON, the checker itself failed to run: report
+     "checker did not complete" with the exit code and error output — that is neither PASS nor FAIL.
 
 4. For each UNKNOWN, you may retry that one URL once with a plain read-only GET (for example curl -sSL -D -)
-   and compare its SHA-256 with APPROVED_SHA256 in tools/mint-integrity-live-check.mjs. Do not submit URLs
+   and compare its SHA-256 with APPROVED_SHA256 in tools/mint-integrity-live-check.mjs (endpoint 12: compare
+   sha256(post.title + "\n" + post.content) from the API JSON, not the raw body). Do not submit URLs
    to third-party scanners unless the founder has allowed it. Report what you saw, but never change UNKNOWN
    to PASS or FAIL yourself.
    Typical UNKNOWN reasons and what they mean:
@@ -45,8 +48,10 @@ Never edit APPROVED_SHA256 or any repository file.
        if it is correct, the pin is updated in a reviewed PR. Until then it stays UNKNOWN.
      - "redirected away from the requested URL", "HTTP 403/429/5xx", "request failed", "bot challenge page":
        could not verify this run; retry next run.
-     - "final URL not reported", "body larger than …", "no response body": the response could not be graded.
-     - "Moltbook post body not available" or "Moltbook post metadata changed": the official post could not be
+     - "final URL not reported", "body larger than …", "no response body", "HTTP <code>", "evaluation error",
+       "ambiguous JSON": the response could not be graded safely.
+     - "Moltbook API did not return JSON", "Moltbook post body not available" or "Moltbook post metadata
+       changed": the official post could not be
        confirmed as the same, live, non-deleted post by mekusi_humanoverride.
 
 5. Never claim the audit is complete when any row is UNKNOWN. Never describe a verified buyer, live

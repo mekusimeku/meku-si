@@ -112,7 +112,7 @@ export const ENDPOINTS = [
 const B58 = "1-9A-HJ-NP-Za-km-z";
 // Look-alikes: any token that starts with the official prefix (even glued to other characters) must be the
 // exact mint, and any whole base58 token ending in "pump", of any length, must be the exact mint.
-const LOOKALIKE = new RegExp(`J5h8[${B58}]{36,}`, "g");
+const LOOKALIKE = new RegExp(`J5h8[${B58}]{28,}`, "g");
 const PUMP = new RegExp(`(?<![${B58}])[${B58}]{28,}pump(?![${B58}])`, "g");
 // JSON escapes are decoded first, so "...:\\nJ5h8..." in a raw JSON body is read as a line break plus the mint.
 const unescape = (t) => t.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\[nrtbf"\\/]/g, " ");
@@ -121,19 +121,33 @@ function scan(t) {
 }
 // Every string (keys and values) of a JSON body is scanned on its own, so no field and no escape can hide a
 // wrong mint; other bodies are scanned raw and with JSON-style escapes decoded.
-function strings(v, out = []) {
-  if (typeof v === "string") out.push(v);
-  else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); strings(x, out); }
+function strings(root) {
+  const out = [], stack = [root]; // iterative: deeply nested JSON cannot overflow the call stack
+  while (stack.length) {
+    const v = stack.pop();
+    if (typeof v === "string") out.push(v);
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); stack.push(x); }
+  }
   return out;
 }
+/** Wrong mint-like addresses, plus `hidden`: ones visible only in the raw text (e.g. behind a duplicate JSON key). */
 function addresses(body) {
-  let parts;
-  try { parts = strings(JSON.parse(body)); } catch { parts = [body, unescape(body)]; }
-  return [...new Set(parts.flatMap(scan))];
+  const decoded = [...new Set(scan(unescape(body)))];
+  let parsed;
+  try { parsed = [...new Set(strings(JSON.parse(body)).flatMap(scan))]; } catch { return { found: decoded, hidden: [] }; }
+  return { found: parsed, hidden: decoded.filter((a) => !parsed.includes(a)) };
 }
 
-/** Pure evaluation of one fetched response; exported for offline tests. */
-export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
+/** Pure evaluation of one fetched response; exported for offline tests. Never throws: an internal error is UNKNOWN. */
+export function evaluate(ep, resp = {}) {
+  try {
+    return evaluateUnsafe(ep, resp);
+  } catch (e) {
+    return { n: ep.n, url: ep.url, result: "UNKNOWN", reason: `evaluation error: ${String(e?.message ?? e).slice(0, 120)}`, status: resp?.status ?? null };
+  }
+}
+
+function evaluateUnsafe(ep, { status, contentType, body, error, finalUrl }) {
   const r = (result, reason) => ({ n: ep.n, url: ep.url, result, reason, status: status ?? null });
   if (error) return r("UNKNOWN", `request failed: ${error}`);
   if (status === 404 || status === 410) return r("FAIL", `HTTP ${status}`);
@@ -142,8 +156,11 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   if (typeof body !== "string") return r("UNKNOWN", "no response body");
   // Wrong mints are searched in the raw body first (attributes, redirected or oversized bodies included), so
   // nothing later — size limit, redirect, challenge marker — can turn a confirmed wrong mint into UNKNOWN.
-  const rawWrong = addresses(body.length > MAX_BODY ? body.slice(0, MAX_BODY) : body).filter((a) => a !== MINT);
+  const scanned = addresses(body.length > MAX_BODY ? body.slice(0, MAX_BODY) : body);
+  const rawWrong = scanned.found.filter((a) => a !== MINT);
   if (rawWrong.length) return r("FAIL", `non-official mint-like address: ${rawWrong.join(", ")}`);
+  const hiddenWrong = scanned.hidden.filter((a) => a !== MINT);
+  if (hiddenWrong.length) return r("UNKNOWN", `ambiguous JSON: mint-like text outside the parsed values (${hiddenWrong.join(", ")})`);
   if (body.length > MAX_BODY) return r("UNKNOWN", `body larger than ${MAX_BODY} bytes, not fully evaluated`);
   if (finalUrl) {
     const want = new URL(ep.fetch ?? ep.url);
@@ -160,13 +177,16 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
     if (j.post.is_deleted !== false || j.post.is_spam !== false || j.post.author?.name !== "mekusi_humanoverride" || j.post.id !== MOLT_ID)
       return r("UNKNOWN", "Moltbook post metadata changed (deleted, spam, id or author); review before trusting it");
     text = `${j.post.title ?? ""}\n${j.post.content ?? ""}`;
+    const profile = String(j.post.author?.description ?? "");
+    const profileClaim = profile.match(FALSE_CLAIM) ?? profile.match(FALSE_CLAIM_2);
+    if (profileClaim) return r("FAIL", `possible false claim in the author profile: "${profileClaim[0]}"`);
   }
   const pinned = ep.moltbook ? text : body;
   // Rules are read from visible wording: drop HTML tags and markdown emphasis, collapse whitespace.
   // Claim-bearing attributes (meta content, alt, title) are kept as text so claims there are checked too.
   const attrs = (body.match(/\b(?:content|alt|title)\s*=\s*"[^"]{0,500}"/gi) ?? []).map((a) => a.slice(a.indexOf('"') + 1, -1)).join(" . ");
   text = (text + " . " + attrs).replace(/&nbsp;|&#160;/gi, " ").replace(/<[^<>]*>/g, " ").replace(/\*\*|__/g, "").replace(/\s+/g, " ");
-  const found = addresses(text);
+  const found = [...new Set(scan(unescape(text)))];
   const wrong = found.filter((a) => a !== MINT);
   if (wrong.length) return r("FAIL", `non-official mint-like address: ${wrong.join(", ")}`);
   if (!text.includes(MINT)) return r("FAIL", "official mint missing");

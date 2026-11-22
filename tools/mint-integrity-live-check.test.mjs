@@ -261,3 +261,25 @@ test("phase 2 review: Moltbook wrong mint in any JSON field, glued or over-long 
   // Glued look-alikes in HTML text fail too.
   assert.equal(evaluate(ep(1), at(1, ok(`<p>Solana Token-2022 ${MINT} x${bad}</p>`, "text/html"))).result, "FAIL");
 });
+
+test("phase 2 final review: hostile nesting never crashes; duplicate keys and broken JSON are UNKNOWN; profile claims fail", async () => {
+  const approved2 = JSON.stringify({ asset: { network: "mainnet-beta", mint: MINT, tokenProgram: "Token-2022" }, access: { agentSubscriptionsLive: false, buyingTokenAloneGrantsAgentSubscription: false }, market: { walletOwnerApprovalRequired: true }, purchaseEvidence: { signatureAloneIsNotProof: true } });
+  const deep = approved2.slice(0, -1) + ',"zz":' + "[".repeat(20000) + "1" + "]".repeat(20000) + "}";
+  for (const n of [2, 7, 8]) {
+    const r = evaluate(ep(n), at(n, ok(deep, "application/json"))); // must return, never throw
+    assert.ok(r.result === "UNKNOWN" || r.result === "FAIL", `${n}: ${r.result}`);
+  }
+  // A 20k-deep array inside the approved Worker record: no crash, never PASS (FAIL, or UNKNOWN "evaluation error").
+  const tj = (await w("/token.json")).body;
+  const rd = evaluate(ep(8), at(8, ok(tj.slice(0, -1) + ',"zz":' + "[".repeat(20000) + "1" + "]".repeat(20000) + "}", "application/json")));
+  assert.ok(rd.result === "FAIL" || (rd.result === "UNKNOWN" && /evaluation error/.test(rd.reason)), rd.reason);
+  const raw = readFileSync(new URL("./fixtures/moltbook-post-38a643a5.json", import.meta.url), "utf8");
+  const look = "9xh8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump";
+  assert.equal(evaluate(ep(12), at(12, ok(`{"zz":"${look}","zz":"ok",` + raw.slice(1), "application/json"))).result, "UNKNOWN");
+  assert.equal(evaluate(ep(12), at(12, ok(raw + "}", "application/json"))).result, "UNKNOWN"); // broken JSON: no \\nMINT false FAIL
+  const j = JSON.parse(raw); j.post.author.description = "We have our first verified buyers";
+  assert.equal(evaluate(ep(12), at(12, ok(JSON.stringify(j), "application/json"))).result, "FAIL");
+  const short = JSON.parse(raw); short.post.author.description = "J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Pu";
+  assert.equal(evaluate(ep(12), at(12, ok(JSON.stringify(short), "application/json"))).result, "FAIL");
+  assert.equal(evaluate(ep(1), undefined).result, "UNKNOWN");
+});

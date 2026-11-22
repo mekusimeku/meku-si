@@ -63,3 +63,13 @@ test("PASS: Moltbook full post body via public API with the official mint", () =
   const body = JSON.stringify({ success: true, post: { title: "Challenge the payment model", content: `Token-2022 mint ${MINT}` } });
   assert.equal(evaluate(ep(12), ok(body, "application/json")).result, "PASS");
 });
+
+test("review fixes: off-host redirect, injected CF script, 'are live', zero buyers, missing type", () => {
+  assert.equal(evaluate(ep(10), { ...ok(guide), finalUrl: "https://evil.example/x" }).result, "UNKNOWN");
+  assert.equal(evaluate(ep(10), { ...ok(guide), finalUrl: "https://raw.githubusercontent.com/mekusimeku/meku-si/main/docs/mekusi-agent-token.md" }).result, "PASS");
+  const wrong = guide.replaceAll(MINT, MINT.slice(0, -1) + "P") + '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>';
+  assert.equal(evaluate(ep(10), ok(wrong)).result, "FAIL");
+  assert.equal(evaluate(ep(10), ok(guide + "\nAgent subscriptions are live.")).result, "FAIL");
+  assert.equal(evaluate(ep(10), ok(guide + "\nThere are 0 verified buyers so far.")).result, "PASS");
+  assert.equal(evaluate(ep(10), { status: 200, contentType: null, body: guide }).result, "FAIL");
+});

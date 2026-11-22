@@ -7,8 +7,12 @@
 //   PASS    verified correct from the live response body
 //   FAIL    confirmed incorrect (wrong/look-alike mint, 404, missing rule, false claim)
 //   UNKNOWN could not verify (network error, rate limit, bot challenge, client-rendered shell)
-// UNKNOWN is never turned into PASS or FAIL. Exit code: 1 if any FAIL, 0 otherwise.
+// UNKNOWN is never turned into PASS or FAIL. Exit code: 1 if any FAIL, else 2 if any UNKNOWN, else 0.
+// Limits: look-alike detection covers the official prefix and pump-suffixed addresses only; a mint split
+// by inline HTML tags reads as missing (a false FAIL, never a false PASS).
 // Usage: node tools/mint-integrity-live-check.mjs [--json]
+
+import { pathToFileURL } from "node:url";
 
 export const MINT = "J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump";
 const W = "https://meku-human-override-a2ui.mekusi-team.workers.dev";
@@ -23,7 +27,7 @@ const RULE = {
   evidence: /signature (alone|by itself)[^.]{0,40}(not|insufficient)|signatureAloneIsNotProof"\s*:\s*true|independently_verified_purchase_required_for_claims"\s*:\s*true|signatures?[^.]{0,60}(alone )?(are|is) not proof/i,
 };
 // Assertive claims only; headings and rules such as "we will not call this a first independent buyer unless…" are allowed.
-const FALSE_CLAIM = /\b(we (have|now have|welcomed|confirmed|onboarded)|has (its|our) first|\d+) (our |an? |its )?(first )?(verified |independent )+(ai[- ]agent )?buyers?\b|\bverified buyers?\s*:\s*[1-9]|subscriptions? (are|is) now live|paid agent (access|subscriptions?) (is|are) (now )?live/i;
+const FALSE_CLAIM = /\b(we (have|now have|welcomed|confirmed|onboarded)|has (its|our) first|[1-9]\d*) (our |an? |its )?(first )?(verified |independent )+(ai[- ]agent )?buyers?\b|\bverified buyers?\s*:\s*[1-9]|subscriptions? (are|is) (now )?live|paid agent (access|subscriptions?) (is|are) (now )?live/i;
 
 // kind: identity = full token identity record; reference = shows mint only (no rule repetition required)
 export const ENDPOINTS = [
@@ -52,13 +56,19 @@ function addresses(text) {
 }
 
 /** Pure evaluation of one fetched response; exported for offline tests. */
-export function evaluate(ep, { status, contentType, body, error }) {
+export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   const r = (result, reason) => ({ n: ep.n, url: ep.url, result, reason, status: status ?? null });
   if (error) return r("UNKNOWN", `request failed: ${error}`);
   if (status === 404 || status === 410) return r("FAIL", `HTTP ${status}`);
   if (status === 429 || status === 403 || status === 503 || status >= 500) return r("UNKNOWN", `HTTP ${status} (rate limit, challenge or outage)`);
   if (status !== 200) return r("UNKNOWN", `HTTP ${status}`);
-  if (/cf-challenge|challenge-platform|Just a moment\.\.\./i.test(body)) return r("UNKNOWN", "bot challenge page");
+  if (finalUrl) {
+    const want = new URL(ep.fetch ?? ep.url).host;
+    let got; try { got = new URL(finalUrl).host; } catch { got = "invalid"; }
+    if (got !== want) return r("UNKNOWN", `redirected to another host: ${got}`);
+  }
+  // Only a real interstitial counts; Cloudflare's injected /cdn-cgi/challenge-platform/ script on normal pages does not.
+  if (/<title>\s*Just a moment\.\.\.|id="challenge-form"|cf-chl-widget/i.test(body)) return r("UNKNOWN", "bot challenge page");
   let text = body;
   if (ep.moltbook) {
     let j; try { j = JSON.parse(body); } catch { return r("UNKNOWN", "Moltbook API did not return JSON"); }
@@ -73,7 +83,7 @@ export function evaluate(ep, { status, contentType, body, error }) {
   if (!text.includes(MINT)) return r("FAIL", "official mint missing");
   if (ep.kind === "identity" && !/Token-2022/.test(text)) return r("FAIL", "Token-2022 designation missing");
   if (ep.kind === "identity" && !/Solana/i.test(text)) return r("FAIL", "Solana network missing");
-  if (ep.type && contentType && !ep.type.test(contentType)) return r("FAIL", `unexpected content-type ${contentType}`);
+  if (ep.type && !ep.type.test(contentType ?? "")) return r("FAIL", `unexpected content-type ${contentType ?? "(none)"}`);
   if (ep.json) {
     let j; try { j = JSON.parse(body); } catch { return r("FAIL", "body is not valid JSON"); }
     if (!ep.json(j)) return r("FAIL", "JSON identity fields differ from the approved record");
@@ -106,9 +116,11 @@ export async function run() {
   return out;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const results = await run();
   if (process.argv.includes("--json")) console.log(JSON.stringify({ checkedAt: new Date().toISOString(), mint: MINT, results }, null, 2));
   else for (const x of results) console.log(`${String(x.n).padStart(2)} ${x.result.padEnd(7)} ${x.status ?? "-"} ${x.url} — ${x.reason}`);
-  process.exitCode = results.some((x) => x.result === "FAIL") ? 1 : 0;
+  const count = (k) => results.filter((x) => x.result === k).length;
+  console.error(`SUMMARY PASS=${count("PASS")} FAIL=${count("FAIL")} UNKNOWN=${count("UNKNOWN")} (UNKNOWN is not a pass)`);
+  process.exitCode = count("FAIL") ? 1 : count("UNKNOWN") ? 2 : 0;
 }

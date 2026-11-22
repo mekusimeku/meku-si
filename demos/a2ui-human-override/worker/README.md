@@ -23,3 +23,8 @@ Rules:
 
 Test: `node --test demos/a2ui-human-override/worker/worker.test.mjs` (offline).
 Live check of all twelve public endpoints (read-only GETs): `node tools/mint-integrity-live-check.mjs`.
+
+Known gap (needs a separate, founder-approved Worker update and redeploy): today's deployed `/llms.txt`
+does not state "paid subscriptions are not live" or "a signature alone is not proof", and the `/` page mint
+panel states none of rules A–E. The live checker grades endpoints 8 and 9 against the rules this Worker
+states today, so their PASS means "matches the deployed, approved record", not "states every public rule".

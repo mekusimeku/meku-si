@@ -8,8 +8,11 @@
 //   FAIL    confirmed incorrect (wrong/look-alike mint, 404, missing rule, false claim)
 //   UNKNOWN could not verify (network error, rate limit, bot challenge, client-rendered shell)
 // UNKNOWN is never turned into PASS or FAIL. Exit code: 1 if any FAIL, else 2 if any UNKNOWN, else 0.
-// Limits: look-alike detection covers the official prefix and pump-suffixed addresses only; a mint split
-// by inline HTML tags reads as missing (a false FAIL, never a false PASS).
+// Limits: look-alike detection covers the official prefix and pump-suffixed addresses only (other base58
+// addresses in buy links are not flagged); a mint split by inline HTML tags reads as missing (a false FAIL,
+// never a false PASS). Endpoints 8 and 9 (the A2UI Worker) are checked against the rules that Worker states
+// today, a subset of the full public rules A–E; widening them needs a reviewed Worker update and approved redeploy.
+const MAX_BODY = 2 * 1024 * 1024;
 // Usage: node tools/mint-integrity-live-check.mjs [--json]
 
 import { pathToFileURL } from "node:url";
@@ -29,19 +32,39 @@ const RULE = {
 // Assertive claims only; headings and rules such as "we will not call this a first independent buyer unless…" are allowed.
 const FALSE_CLAIM = /\b(we (have|now have|welcomed|confirmed|onboarded)|has (its|our) first|[1-9]\d*) (our |an? |its )?(first )?(verified |independent )+(ai[- ]agent )?buyers?\b|\bverified buyers?\s*:\s*[1-9]|subscriptions? (are|is) (now )?live|paid agent (access|subscriptions?) (is|are) (now )?live/i;
 
+const FALSE_CLAIM_2 = /\bfirst (verified |independent )+(ai[- ]agent )?buyers? (has|have|is|was|arrived|confirmed|purchased|bought)\b|\b(we['’]ve|we have) (got|gotten|had) (our |an? )?(first )?(verified |independent )+buyers?\b|\b(subscriptions?|paid agent access) (went|has gone|is going|have gone) live\b|\bsubscriptions? (are|is) (now )?active\b|\bpaid agent access (has )?(launched|is active|is available)\b|\b(token|holding|owning)(?:(?!\bnot\b|n['’]t\b|\bnever\b|\bno\b|\bwithout\b)[^.]){0,30}\b(unlocks?|grants?|gives?|gets?) (you )?(paid )?agent access\b/i;
+// A required statement does not count when its own wording negates it.
+const NEGATED = /\b(not required|optional|no longer|is proof|is sufficient|not insufficient)\b/i;
+function stated(rule, text) {
+  const g = new RegExp(rule.source, "gi");
+  for (const m of text.matchAll(g)) if (!NEGATED.test(text.slice(m.index, m.index + m[0].length + 40))) return true;
+  return false;
+}
+// Any boolean that would turn on access, payments or purchases fails a JSON identity record.
+function enablingFlags(v, path = "") {
+  if (!v || typeof v !== "object") return [];
+  return Object.entries(v).flatMap(([k, x]) =>
+    x === true && /(live|enabled|allowed|grants)/i.test(k) && !/not|never|required|readonly/i.test(k) ? [path + k] : enablingFlags(x, path + k + "."));
+}
+const duplicateKey = (body, keys) => keys.find((k) => (body.match(new RegExp(`"${k}"\\s*:`, "g")) ?? []).length > 1);
+
 // kind: identity = full token identity record; reference = shows mint only (no rule repetition required)
 export const ENDPOINTS = [
   { n: 1, url: "https://meku.farm/token.html", type: /text\/html/, kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
   { n: 2, url: "https://meku.farm/.well-known/meku-si-token.json", type: /application\/json/, kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"],
-    json: (j) => j.asset?.mint === MINT && j.asset?.tokenProgram === "Token-2022" && j.asset?.network === "mainnet-beta" && j.access?.agentSubscriptionsLive === false },
+    json: (j) => j.asset?.mint === MINT && j.asset?.tokenProgram === "Token-2022" && j.asset?.network === "mainnet-beta" && j.access?.agentSubscriptionsLive === false,
+    keys: ["mint", "tokenProgram", "network", "agentSubscriptionsLive", "buyingTokenAloneGrantsAgentSubscription", "walletOwnerApprovalRequired", "signatureAloneIsNotProof"] },
   { n: 3, url: "https://meku.farm/llms.txt", type: /text\/plain/, kind: "identity", rules: ["noAccess", "notLive"] },
   { n: 4, url: "https://meku.farm/agent-quickstart.html", type: /text\/html/, kind: "identity", rules: ["noAccess", "notLive", "evidence"] },
   { n: 5, url: "https://meku.farm/mcp-lab.html", type: /text\/html/, kind: "reference", rules: [] },
   { n: 6, url: "https://meku.farm/first-contact.html", type: /text\/html/, kind: "reference", rules: [] },
   { n: 7, url: "https://meku.farm/.well-known/meku-first-contact.json", type: /application\/json/, kind: "reference", rules: ["noAccess"],
-    json: (j) => j.networkReference?.listedSiteAddress === MINT && j.networkReference?.tokenProgram === "Token-2022" && j.safety?.realMissionPaymentsEnabled === false },
+    json: (j) => j.networkReference?.listedSiteAddress === MINT && j.networkReference?.tokenProgram === "Token-2022" && j.safety?.realMissionPaymentsEnabled === false,
+    keys: ["listedSiteAddress", "tokenProgram", "realMissionPaymentsEnabled"] },
   { n: 8, url: `${W}/token.json`, type: /application\/json/, kind: "identity", rules: ["notLive"],
-    json: (j) => j.mint === MINT && j.program === "Token-2022" && j.network === "Solana Mainnet" && j.agentSubscriptionsLive === false },
+    // Fixed record: must equal the approved Worker object exactly (no extra, missing or changed fields).
+    json: (j) => JSON.stringify(j) === JSON.stringify({ schemaVersion: "meku-a2ui-token-reference-v1", label: "MEKU SI", network: "Solana Mainnet", program: "Token-2022", mint: MINT, canonical: "https://meku.farm/.well-known/meku-si-token.json", human: "https://meku.farm/token.html", safetyLabReadOnly: true, agentSubscriptionsLive: false }),
+    keys: ["mint", "program", "network", "agentSubscriptionsLive"] },
   { n: 9, url: `${W}/llms.txt`, type: /text\/plain/, kind: "identity", rules: ["noAccess", "approval"] },
   { n: 10, url: "https://github.com/mekusimeku/meku-si/blob/main/docs/mekusi-agent-token.md", fetch: `${GH}/docs/mekusi-agent-token.md`, type: /text\/plain/, kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
   { n: 11, url: "https://github.com/mekusimeku/meku-si/blob/main/agent-index.json", fetch: `${GH}/agent-index.json`, type: /text\/plain|application\/json/, kind: "identity", rules: ["noAccess", "notLive", "approval", "evidence"] },
@@ -62,11 +85,16 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   if (status === 404 || status === 410) return r("FAIL", `HTTP ${status}`);
   if (status === 429 || status === 403 || status === 503 || status >= 500) return r("UNKNOWN", `HTTP ${status} (rate limit, challenge or outage)`);
   if (status !== 200) return r("UNKNOWN", `HTTP ${status}`);
+  if (typeof body !== "string") return r("UNKNOWN", "no response body");
+  if (body.length > MAX_BODY) return r("UNKNOWN", `body larger than ${MAX_BODY} bytes, not evaluated`);
   if (finalUrl) {
-    const want = new URL(ep.fetch ?? ep.url).host;
-    let got; try { got = new URL(finalUrl).host; } catch { got = "invalid"; }
-    if (got !== want) return r("UNKNOWN", `redirected to another host: ${got}`);
+    const want = new URL(ep.fetch ?? ep.url);
+    let got; try { got = new URL(finalUrl); } catch { got = null; }
+    if (!got || got.origin !== want.origin || got.pathname !== want.pathname) return r("UNKNOWN", `redirected away from the requested URL: ${finalUrl}`);
   }
+  // Wrong mints are searched in the raw body first, so attributes (href, data-*) and planted markers can't hide them.
+  const rawWrong = addresses(body).filter((a) => a !== MINT);
+  if (rawWrong.length) return r("FAIL", `non-official mint-like address: ${rawWrong.join(", ")}`);
   // Only a real interstitial counts; Cloudflare's injected /cdn-cgi/challenge-platform/ script on normal pages does not.
   if (/<title>\s*Just a moment\.\.\.|id="challenge-form"|cf-chl-widget/i.test(body)) return r("UNKNOWN", "bot challenge page");
   let text = body;
@@ -76,7 +104,7 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
     text = `${j.post.title ?? ""}\n${j.post.content ?? ""}`;
   }
   // Rules are read from visible wording: drop HTML tags and markdown emphasis, collapse whitespace.
-  text = text.replace(/<[^>]+>/g, " ").replace(/\*\*|__/g, "").replace(/\s+/g, " ");
+  text = text.replace(/<[^<>]*>/g, " ").replace(/\*\*|__/g, "").replace(/\s+/g, " ");
   const found = addresses(text);
   const wrong = found.filter((a) => a !== MINT);
   if (wrong.length) return r("FAIL", `non-official mint-like address: ${wrong.join(", ")}`);
@@ -87,9 +115,13 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   if (ep.json) {
     let j; try { j = JSON.parse(body); } catch { return r("FAIL", "body is not valid JSON"); }
     if (!ep.json(j)) return r("FAIL", "JSON identity fields differ from the approved record");
+    const dup = duplicateKey(body, ep.keys ?? []);
+    if (dup) return r("FAIL", `duplicate JSON key: ${dup}`);
+    const on = enablingFlags(j);
+    if (on.length) return r("FAIL", `enabling flag set to true: ${on.join(", ")}`);
   }
-  for (const k of ep.rules) if (!RULE[k].test(text)) return r("FAIL", `required statement missing: ${k}`);
-  const claim = text.match(FALSE_CLAIM);
+  for (const k of ep.rules) if (!stated(RULE[k], text)) return r("FAIL", `required statement missing: ${k}`);
+  const claim = text.match(FALSE_CLAIM) ?? text.match(FALSE_CLAIM_2);
   if (claim) return r("FAIL", `possible false buyer/subscription claim: "${claim[0]}"`);
   return r("PASS", "live body verified");
 }

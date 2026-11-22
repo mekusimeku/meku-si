@@ -73,3 +73,61 @@ test("review fixes: off-host redirect, injected CF script, 'are live', zero buye
   assert.equal(evaluate(ep(10), ok(guide + "\nThere are 0 verified buyers so far.")).result, "PASS");
   assert.equal(evaluate(ep(10), { status: 200, contentType: null, body: guide }).result, "FAIL");
 });
+
+test("final review: wrong mint hidden in an href or after a stray '<' fails", () => {
+  const page = `<html>Token-2022 Solana ${MINT} Token ownership does not grant agent access. Paid agent access is not live. Wallet-owner approval required. A signature alone is not proof.`;
+  const evil = "9xh8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump";
+  assert.equal(evaluate(ep(1), ok(page + `<a href="https://jup.ag/swap/SOL-${evil}">Buy</a></html>`, "text/html")).result, "FAIL");
+  assert.equal(evaluate(ep(1), ok(page + `< ${evil} ></html>`, "text/html")).result, "FAIL");
+  // A planted challenge marker cannot hide a wrong mint.
+  assert.equal(evaluate(ep(1), ok(page + ` ${evil} cf-chl-widget</html>`, "text/html")).result, "FAIL");
+});
+
+test("final review: hostile bodies are bounded in time and size", () => {
+  const t0 = Date.now();
+  evaluate(ep(1), ok("<a".repeat(1 << 19), "text/html"));
+  evaluate(ep(1), ok("<".repeat(1 << 20), "text/html"));
+  assert.ok(Date.now() - t0 < 5000, `evaluation took ${Date.now() - t0} ms`);
+  assert.equal(evaluate(ep(1), ok("x".repeat(3 * 1024 * 1024), "text/html")).result, "UNKNOWN");
+  assert.equal(evaluate(ep(1), { status: 200, contentType: "text/html", body: null }).result, "UNKNOWN");
+});
+
+test("final review: wider false buyer/subscription/access claims fail; the guide's own rule sentence passes", () => {
+  for (const c of [
+    "Our first verified buyer has arrived.", "First verified buyer confirmed!", "We've got our first verified buyer",
+    "Paid agent access has launched.", "Agent subscriptions went live today.", "subscriptions are active",
+    "Token holders get paid agent access.", "Owning the token unlocks agent access.",
+  ]) assert.equal(evaluate(ep(10), ok(guide + "\n" + c)).result, "FAIL", c);
+  assert.equal(evaluate(ep(10), ok(guide)).result, "PASS");
+});
+
+test("final review: negated required statements do not count", () => {
+  const neg = guide
+    .replace(/requires owner consent and wallet approval/g, "Wallet owner approval is not required")
+    .replace(/wallet owner controls signing/g, "");
+  assert.equal(evaluate(ep(10), ok(neg)).result, "FAIL");
+});
+
+test("final review: tampered JSON (extra enabling flag, duplicate key, extra field) fails", async () => {
+  const tj = await w("/token.json");
+  const extra = tj.body.replace('"agentSubscriptionsLive": false', '"agentSubscriptionsLive": false,\n  "tokenOwnershipGrantsAgentAccess": true');
+  assert.equal(evaluate(ep(8), { ...tj, body: extra }).result, "FAIL");
+  const dup = tj.body.replace('"agentSubscriptionsLive": false', '"agentSubscriptionsLive": true,\n  "agentSubscriptionsLive": false');
+  assert.equal(evaluate(ep(8), { ...tj, body: dup }).result, "FAIL");
+  // Endpoint 2: same shape as the published record; one extra enabling flag must fail.
+  const record = {
+    asset: { blockchain: "Solana", network: "mainnet-beta", mint: MINT, tokenProgram: "Token-2022" },
+    market: { walletOwnerApprovalRequired: true },
+    purchaseEvidence: { signatureAloneIsNotProof: true },
+    access: { buyingTokenAloneGrantsAgentSubscription: false, agentSubscriptionsLive: false, autonomousAgentPurchasesAllowed: false },
+  };
+  const good = JSON.stringify(record, null, 2);
+  assert.equal(evaluate(ep(2), ok(good, "application/json")).result, "PASS");
+  const bad = JSON.stringify({ ...record, access: { ...record.access, paidAgentAccessLive: true } }, null, 2);
+  assert.equal(evaluate(ep(2), ok(bad, "application/json")).result, "FAIL");
+});
+
+test("final review: same-host redirect to another path is UNKNOWN", () => {
+  const r = evaluate(ep(10), { ...ok(guide), finalUrl: "https://raw.githubusercontent.com/attacker/fork/main/x.md" });
+  assert.equal(r.result, "UNKNOWN");
+});

@@ -9,6 +9,7 @@ on:
       - tools/check-agent-entry.mjs
       - tools/mint-integrity-live-check*.mjs
       - docs/mekusi-agent-token.md
+      - demos/a2ui-human-override/worker/worker.js
       - .github/workflows/public-agent-entry.yml
   pull_request:
     paths:
@@ -17,6 +18,7 @@ on:
       - tools/check-agent-entry.mjs
       - tools/mint-integrity-live-check*.mjs
       - docs/mekusi-agent-token.md
+      - demos/a2ui-human-override/worker/worker.js
       - .github/workflows/public-agent-entry.yml
   workflow_dispatch:
 

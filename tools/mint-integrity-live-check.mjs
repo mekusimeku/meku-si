@@ -18,8 +18,9 @@ const MAX_BODY = 2 * 1024 * 1024;
 // approved bytes AND every check below to pass, so wording the heuristics miss can never PASS — any change
 // is UNKNOWN until a human reviews it and updates the pin here in a reviewed PR. Endpoints 1–7 are
 // screenshot-magic-5054 main 4bf4758 public/ files (equal to live per Cloudflare URL Scanner, 2026-11-22);
-// 8–9 are the deployed Worker's output; 10–11 are this repo's files (CI checks they match). Endpoint 12
-// (Moltbook API JSON includes changing counters) has no pin: its PASS rests on the mint and claim checks only.
+// 8–9 are the deployed Worker's output; 10–11 are this repo's files (CI checks they match). Endpoint 12 pins
+// sha256(post.title + "\n" + post.content), because the API JSON also carries changing counters. Until a
+// reviewer records that pin (the --json output shows "observedSha256" for it), endpoint 12 is UNKNOWN, never PASS.
 export const APPROVED_SHA256 = {
   1: "b691dfb042635dcd2c255a3fdb1cf04ee381592dbafe71b9869dfae8da77ad35",
   2: "c7ae1551ab614abc9cbbb0762ceefb4a4c7b0fb3631e9174ac371a5e95847b16",
@@ -32,6 +33,7 @@ export const APPROVED_SHA256 = {
   9: "a26f305aa84f35818597e2c2427aaaf3aa32e139a43eca8986f671973f88a1d8",
   10: "a5328633eaab423d72934664c61ceece46a4d37580bb931335d41e7f5deab1ab",
   11: "c806d13073d51512800ea24c35d25fbaf191bab4a6aa4177825210524baba26e",
+  12: null,
 };
 // Usage: node tools/mint-integrity-live-check.mjs [--json]
 
@@ -118,13 +120,15 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   const rawWrong = addresses(body).filter((a) => a !== MINT);
   if (rawWrong.length) return r("FAIL", `non-official mint-like address: ${rawWrong.join(", ")}`);
   // Only a real interstitial counts; Cloudflare's injected /cdn-cgi/challenge-platform/ script on normal pages does not.
-  if (/<title>\s*Just a moment\.\.\.|id="challenge-form"|cf-chl-widget/i.test(body)) return r("UNKNOWN", "bot challenge page");
+  // A page that carries the official mint is graded, not excused as a challenge (a marker can't hide a FAIL).
+  if (!body.includes(MINT) && /<title>\s*Just a moment\.\.\.|id="challenge-form"|cf-chl-widget/i.test(body)) return r("UNKNOWN", "bot challenge page");
   let text = body;
   if (ep.moltbook) {
     let j; try { j = JSON.parse(body); } catch { return r("UNKNOWN", "Moltbook API did not return JSON"); }
     if (!j?.success || !j.post) return r("UNKNOWN", "Moltbook post body not available (metadata only)");
     text = `${j.post.title ?? ""}\n${j.post.content ?? ""}`;
   }
+  const pinned = ep.moltbook ? text : body;
   // Rules are read from visible wording: drop HTML tags and markdown emphasis, collapse whitespace.
   // Claim-bearing attributes (meta content, alt, title) are kept as text so claims there are checked too.
   const attrs = (body.match(/\b(?:content|alt|title)\s*=\s*"[^"]{0,500}"/gi) ?? []).map((a) => a.slice(a.indexOf('"') + 1, -1)).join(" . ");
@@ -148,12 +152,10 @@ export function evaluate(ep, { status, contentType, body, error, finalUrl }) {
   const claim = text.match(FALSE_CLAIM) ?? text.match(FALSE_CLAIM_2);
   if (claim) return r("FAIL", `possible false buyer/subscription claim: "${claim[0]}"`);
   const pin = APPROVED_SHA256[ep.n];
-  if (pin) {
-    const got = createHash("sha256").update(body).digest("hex");
-    if (got !== pin) return r("UNKNOWN", `content differs from approved snapshot (sha256 ${got.slice(0, 12)}…); review it, then update APPROVED_SHA256`);
-    return r("PASS", "live body equals approved snapshot and all checks pass");
-  }
-  return r("PASS", "live body verified (no snapshot pin; mint and claim checks only)");
+  const got = createHash("sha256").update(pinned).digest("hex");
+  if (!pin) return { ...r("UNKNOWN", "official mint present and no failure found, but no approved snapshot is pinned yet"), observedSha256: got };
+  if (got !== pin) return { ...r("UNKNOWN", `content differs from approved snapshot (sha256 ${got.slice(0, 12)}…); review it, then update APPROVED_SHA256`), observedSha256: got };
+  return r("PASS", "live body equals approved snapshot and all checks pass");
 }
 
 async function fetchOne(ep) {

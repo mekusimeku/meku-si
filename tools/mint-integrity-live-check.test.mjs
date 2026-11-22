@@ -60,9 +60,9 @@ test("UNKNOWN is never converted: network error, rate limit, challenge, metadata
   assert.equal(evaluate(ep(12), ok(JSON.stringify({ success: false }), "application/json")).result, "UNKNOWN");
 });
 
-test("PASS: Moltbook full post body via public API with the official mint", () => {
+test("Moltbook full post body with the official mint is UNKNOWN until its text is pinned", () => {
   const body = JSON.stringify({ success: true, post: { title: "Challenge the payment model", content: `Token-2022 mint ${MINT}` } });
-  assert.equal(evaluate(ep(12), ok(body, "application/json")).result, "PASS");
+  assert.equal(evaluate(ep(12), ok(body, "application/json")).result, "UNKNOWN"); // mint fine, but no reviewed snapshot pin yet
 });
 
 test("review fixes: off-host redirect, injected CF script, 'are live', zero buyers, missing type", () => {
@@ -142,7 +142,7 @@ test("snapshot pins for endpoints 8–11 equal this repo's approved sources (upd
   assert.equal(APPROVED_SHA256[8], sha((await w("/token.json")).body));
   assert.equal(APPROVED_SHA256[9], sha((await w("/llms.txt")).body));
   for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) assert.match(APPROVED_SHA256[n], /^[0-9a-f]{64}$/);
-  assert.equal(APPROVED_SHA256[12], undefined);
+  assert.equal(APPROVED_SHA256[12], null);
 });
 
 test("any change to approved content can never PASS: one appended space is UNKNOWN", async () => {
@@ -171,4 +171,16 @@ test("repeat review N1/N3: claims in attributes and enabling string/flag names f
     market: { walletOwnerApprovalRequired: true }, purchaseEvidence: { signatureAloneIsNotProof: true } };
   for (const extra of [{ subscriptionsActive: true }, { tokenUnlocksAgentAccess: true }, { paidAgentAccess: "live" }])
     assert.equal(evaluate(ep(2), ok(JSON.stringify({ ...rec, access: { ...rec.access, ...extra } }), "application/json")).result, "FAIL", JSON.stringify(extra));
+});
+
+test("third review N1/N2: Moltbook false claim never PASSes; challenge marker can't hide a missing rule", () => {
+  const post = (content) => ok(JSON.stringify({ success: true, post: { title: "x", content } }), "application/json");
+  const r = evaluate(ep(12), post(`${MINT} We just got our first independent AI agent buyer!`));
+  assert.notEqual(r.result, "PASS");
+  assert.equal(evaluate(ep(12), post(`${MINT} Holders get agent access.`)).result === "PASS", false);
+  assert.equal(evaluate(ep(12), post("Old mint 9xh8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump")).result, "FAIL");
+  assert.match(evaluate(ep(12), post(`Token-2022 ${MINT}`)).observedSha256, /^[0-9a-f]{64}$/);
+  const noRules = `<html>Solana Token-2022 ${MINT} <div class="cf-chl-widget"></div></html>`;
+  assert.equal(evaluate(ep(1), ok(noRules, "text/html")).result, "FAIL");
+  assert.equal(evaluate(ep(1), ok("<title>Just a moment...</title>", "text/html")).result, "UNKNOWN");
 });

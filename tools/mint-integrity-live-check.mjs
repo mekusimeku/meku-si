@@ -8,7 +8,9 @@
 //   PASS    verified correct from the live response body
 //   FAIL    confirmed incorrect (wrong/look-alike mint, 404, missing rule, false claim)
 //   UNKNOWN could not verify (network error, rate limit, bot challenge, client-rendered shell)
-// UNKNOWN is never turned into PASS or FAIL. Exit code: 1 if any FAIL, else 2 if any UNKNOWN, else 0.
+// UNKNOWN is never turned into PASS or FAIL. Exit code: 1 if any FAIL, else 2 if any UNKNOWN, else 0;
+// 3 if the run did not complete (no 12-row report). Endpoint 12 PASS means the reviewed post is unchanged, not
+// that every statement in it is compliant (see APPROVED_SHA256 notes).
 // Limits: look-alike detection covers the official prefix and pump-suffixed addresses only (other base58
 // addresses in buy links are not flagged); a mint split by inline HTML tags reads as missing (a false FAIL,
 // never a false PASS). Endpoints 8 and 9 (the A2UI Worker) are checked against the rules that Worker states
@@ -51,6 +53,7 @@ export const MINT = "J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump";
 const W = "https://meku-human-override-a2ui.mekusi-team.workers.dev";
 const GH = "https://raw.githubusercontent.com/mekusimeku/meku-si/main";
 const MOLT_ID = "38a643a5-011b-447b-9756-8f25cb376fee";
+const MOLT_AUTHOR_ID = "0ad84168-d164-4e25-bb48-a0827e54fa3e"; // mekusi_humanoverride, read with the post 2026-11-22
 
 // Rules a page must state where token identity/purchase is presented (see founder rules A–E).
 const RULE = {
@@ -72,10 +75,41 @@ function stated(rule, text) {
   return false;
 }
 // Any boolean that would turn on access, payments or purchases fails a JSON identity record.
-function enablingFlags(v, path = "") {
-  if (!v || typeof v !== "object") return [];
-  return Object.entries(v).flatMap(([k, x]) =>
-    (x === true || /^(live|active|enabled|on)$/i.test(String(x))) && /(live|enabled|allowed|grants|active|unlock|access)/i.test(k) && !/not|never|required|readonly/i.test(k) ? [path + k] : enablingFlags(x, path + k + "."));
+function enablingFlags(root) {
+  const out = [], stack = [[root, ""]]; // iterative: no recursion depth limit
+  while (stack.length) {
+    const [v, path] = stack.pop();
+    if (!v || typeof v !== "object") continue;
+    for (const [k, x] of Object.entries(v)) {
+      if ((x === true || (typeof x === "string" && /^(live|active|enabled|on)$/i.test(x))) && /(live|enabled|allowed|grants|active|unlock|access)/i.test(k) && !/not|never|required|readonly/i.test(k)) out.push(path + k);
+      else if (x && typeof x === "object") stack.push([x, path + k + "."]);
+    }
+  }
+  return out;
+}
+/** First object key that appears twice in the same JSON object (any depth), or null. Linear, iterative. */
+export function firstDuplicateJsonKey(body) {
+  const stack = []; // per open container: a Set of keys for objects, null for arrays
+  let expectKey = false;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === '"') {
+      let j = i + 1, raw = "";
+      while (j < body.length && body[j] !== '"') { if (body[j] === "\\") { raw += body[j]; j++; } raw += body[j]; j++; }
+      const top = stack[stack.length - 1];
+      if (expectKey && top) {
+        let key; try { key = JSON.parse(`"${raw}"`); } catch { key = raw; }
+        if (top.has(key)) return key;
+        top.add(key);
+        expectKey = false;
+      }
+      i = j;
+    } else if (c === "{") { stack.push(new Set()); expectKey = true; }
+    else if (c === "[") { stack.push(null); expectKey = false; }
+    else if (c === "}" || c === "]") { stack.pop(); expectKey = false; }
+    else if (c === ",") expectKey = stack[stack.length - 1] instanceof Set;
+  }
+  return null;
 }
 const duplicateKey = (body, keys) => keys.find((k) => (body.match(new RegExp(`"${k}"\\s*:`, "g")) ?? []).length > 1);
 
@@ -158,10 +192,16 @@ function evaluateUnsafe(ep, { status, contentType, body, error, finalUrl }) {
   // nothing later — size limit, redirect, challenge marker — can turn a confirmed wrong mint into UNKNOWN.
   const scanned = addresses(body.length > MAX_BODY ? body.slice(0, MAX_BODY) : body);
   const rawWrong = scanned.found.filter((a) => a !== MINT);
-  if (rawWrong.length) return r("FAIL", `non-official mint-like address: ${rawWrong.join(", ")}`);
+  const short = (list) => list.slice(0, 5).map((a) => (a.length > 60 ? a.slice(0, 60) + "…" : a)).join(", ") + (list.length > 5 ? ` (+${list.length - 5} more)` : "");
+  if (rawWrong.length) return r("FAIL", `non-official mint-like address: ${short(rawWrong)}`);
   const hiddenWrong = scanned.hidden.filter((a) => a !== MINT);
-  if (hiddenWrong.length) return r("UNKNOWN", `ambiguous JSON: mint-like text outside the parsed values (${hiddenWrong.join(", ")})`);
+  if (hiddenWrong.length) return r("UNKNOWN", `ambiguous JSON: mint-like text outside the parsed values (${short(hiddenWrong)})`);
   if (body.length > MAX_BODY) return r("UNKNOWN", `body larger than ${MAX_BODY} bytes, not fully evaluated`);
+  if (ep.json || ep.moltbook) {
+    const dupKey = firstDuplicateJsonKey(body);
+    // Our own records (2, 7, 8) must be well-formed: a repeated key is a confirmed defect. Moltbook is third-party: UNKNOWN.
+    if (dupKey !== null) return r(ep.moltbook ? "UNKNOWN" : "FAIL", `ambiguous JSON: duplicate key "${String(dupKey).slice(0, 60)}" (parsers may disagree)`);
+  }
   if (finalUrl) {
     const want = new URL(ep.fetch ?? ep.url);
     let got; try { got = new URL(finalUrl); } catch { got = null; }
@@ -174,8 +214,10 @@ function evaluateUnsafe(ep, { status, contentType, body, error, finalUrl }) {
   if (ep.moltbook) {
     let j; try { j = JSON.parse(body); } catch { return r("UNKNOWN", "Moltbook API did not return JSON"); }
     if (!j?.success || !j.post) return r("UNKNOWN", "Moltbook post body not available (metadata only)");
-    if (j.post.is_deleted !== false || j.post.is_spam !== false || j.post.author?.name !== "mekusi_humanoverride" || j.post.id !== MOLT_ID)
-      return r("UNKNOWN", "Moltbook post metadata changed (deleted, spam, id or author); review before trusting it");
+    const a = j.post.author ?? {};
+    if (j.post.id !== MOLT_ID || j.post.is_deleted !== false || j.post.is_spam !== false || j.post.verification_status !== "verified"
+        || j.post.author_id !== MOLT_AUTHOR_ID || a.id !== MOLT_AUTHOR_ID || a.name !== "mekusi_humanoverride" || a.deletedAt != null || a.isActive === false)
+      return r("UNKNOWN", "Moltbook post metadata changed (id, deleted, spam, verification, author account); review before trusting it");
     text = `${j.post.title ?? ""}\n${j.post.content ?? ""}`;
     const profile = String(j.post.author?.description ?? "");
     const profileClaim = profile.match(FALSE_CLAIM) ?? profile.match(FALSE_CLAIM_2);
@@ -235,10 +277,23 @@ export async function run() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const results = await run();
-  if (process.argv.includes("--json")) console.log(JSON.stringify({ checkedAt: new Date().toISOString(), mint: MINT, results }, null, 2));
-  else for (const x of results) console.log(`${String(x.n).padStart(2)} ${x.result.padEnd(7)} ${x.status ?? "-"} ${x.url} — ${x.reason}`);
-  const count = (k) => results.filter((x) => x.result === k).length;
-  console.error(`SUMMARY PASS=${count("PASS")} FAIL=${count("FAIL")} UNKNOWN=${count("UNKNOWN")} (UNKNOWN is not a pass)`);
-  process.exitCode = count("FAIL") ? 1 : count("UNKNOWN") ? 2 : 0;
+  let results;
+  try {
+    results = await run();
+  } catch (e) {
+    results = null;
+    console.error(`CHECKER DID NOT COMPLETE: ${String(e?.stack ?? e).slice(0, 500)}`);
+  }
+  // A report counts only when it has exactly one row per endpoint, 1..12.
+  const complete = Array.isArray(results) && results.length === ENDPOINTS.length && results.every((x, i) => x.n === ENDPOINTS[i].n);
+  if (process.argv.includes("--json")) console.log(JSON.stringify({ checkedAt: new Date().toISOString(), mint: MINT, complete, rows: results?.length ?? 0, results: results ?? [] }, null, 2));
+  else for (const x of results ?? []) console.log(`${String(x.n).padStart(2)} ${x.result.padEnd(7)} ${x.status ?? "-"} ${x.url} — ${x.reason}`);
+  if (!complete) {
+    console.error("SUMMARY INCOMPLETE — the checker did not produce 12 rows; this is neither PASS nor FAIL");
+    process.exitCode = 3;
+  } else {
+    const count = (k) => results.filter((x) => x.result === k).length;
+    console.error(`SUMMARY PASS=${count("PASS")} FAIL=${count("FAIL")} UNKNOWN=${count("UNKNOWN")} (UNKNOWN is not a pass)`);
+    process.exitCode = count("FAIL") ? 1 : count("UNKNOWN") ? 2 : 0;
+  }
 }

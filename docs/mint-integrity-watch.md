@@ -25,18 +25,21 @@ Never edit APPROVED_SHA256 or any repository file.
      node tools/mint-integrity-live-check.mjs --json > mint-report.json; echo "exit=$?"
    Record the commit SHA and the exit code.
 
-2. Report all 12 rows from mint-report.json in a table: n, result, HTTP status, final URL,
+2. First confirm mint-report.json is valid JSON with "complete": true and "rows": 12. If not (or exit=3),
+   report "checker did not complete" with the exit code and stderr, and stop: that is neither PASS nor FAIL.
+   Otherwise report all 12 rows from mint-report.json in a table: n, result, HTTP status, final URL,
    content type, reason (and observedSha256 when present). Copy results exactly.
    Also copy the SUMMARY line printed on stderr.
 
-3. Interpret the exit code exactly:
+3. Interpret the exit code exactly (only for a complete 12-row report):
      exit 0 = all 12 PASS (each live body equals its approved snapshot and every check passed).
      exit 1 = at least one FAIL = confirmed problem (wrong or look-alike mint, 404, wrong content type,
               tampered JSON identity, missing or negated required statement, false buyer/subscription
               claim). Alert the founder immediately with the endpoint, reason and evidence.
      exit 2 = no FAIL, but at least one UNKNOWN. UNKNOWN is NOT a pass. Report each reason.
-     If mint-report.json is empty or not valid JSON, the checker itself failed to run: report
-     "checker did not complete" with the exit code and error output — that is neither PASS nor FAIL.
+     exit 3 = the checker did not complete (no 12-row report). Neither PASS nor FAIL; report it.
+   Endpoint 12 PASS means the reviewed official Moltbook post is unchanged and carries only the official
+   mint. It does NOT mean every statement in the post is compliant with the purchase/subscription rules.
 
 4. For each UNKNOWN, you may retry that one URL once with a plain read-only GET (for example curl -sSL -D -)
    and compare its SHA-256 with APPROVED_SHA256 in tools/mint-integrity-live-check.mjs (endpoint 12: compare
@@ -51,7 +54,7 @@ Never edit APPROVED_SHA256 or any repository file.
      - "final URL not reported", "body larger than …", "no response body", "HTTP <code>", "evaluation error",
        "ambiguous JSON": the response could not be graded safely.
      - "Moltbook API did not return JSON", "Moltbook post body not available" or "Moltbook post metadata
-       changed": the official post could not be
+       changed" or "ambiguous JSON: duplicate key": the official post could not be
        confirmed as the same, live, non-deleted post by mekusi_humanoverride.
 
 5. Never claim the audit is complete when any row is UNKNOWN. Never describe a verified buyer, live

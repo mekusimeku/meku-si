@@ -38,7 +38,7 @@ Requires the id returned by submission. Status lookup is scoped to the exact API
 
 ## Errors and limits
 - Authentication failures use HTTP 401 and JSON-RPC -32001. When a key is supplied, authentication and the rate check happen before JSON parsing; without a key, a malformed body gets 400 or 413 before the 401.
-- Rate limits use HTTP 429 and JSON-RPC -32001. Limits are operator-configured and shared with REST traffic. No Retry-After header is supplied.
+- Rate limits use HTTP 429 and JSON-RPC -32001. Limits are operator-configured and shared with REST traffic. Rate-limited MCP responses include `Retry-After` and JSON-RPC `error.data.retryAfterSeconds` retry guidance.
 - Invalid JSON can return HTTP 400 / -32700; invalid JSON-RPC can return HTTP 400 / -32600.
 - Method and tool lookup failures may use HTTP 200 with -32601 or -32602.
 - Tool-level failures can appear as isError: true inside an HTTP 200 response. Inspect the full JSON-RPC body, not only the HTTP status.

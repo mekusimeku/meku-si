@@ -1,0 +1,78 @@
+name: MEKU SI Mint Integrity (manual)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Refuse non-main runs (only the approved checker on main counts)
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "This report is valid only for refs/heads/main; got $GITHUB_REF. Not run."
+            exit 1
+          fi
+      - name: Check out approved public checker
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run 12-endpoint read-only check
+        id: mint
+        shell: bash
+        run: |
+          set +e
+          printf 'commit=%s\nref=%s\nrun_id=%s\nrun_attempt=%s\n' "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > mint-run-info.txt
+          node tools/mint-integrity-live-check.mjs --json > mint-report.json 2> mint-stderr.txt
+          result=$?
+          printf '%s\n' "$result" > mint-exit-code.txt
+          printf 'checker_exit=%s\n' "$result" >> "$GITHUB_OUTPUT"
+          cat mint-stderr.txt
+          node --input-type=module -e '
+            import fs from "node:fs";
+            try {
+              const r = JSON.parse(fs.readFileSync("mint-report.json", "utf8"));
+              const ok = r.complete === true && r.rows === 12;
+              console.log("Report complete:", ok);
+              if (!ok) process.exitCode = 1;
+            } catch (e) {
+              console.error("Invalid report:", e.message);
+              process.exitCode = 1;
+            }
+          '
+      - name: Upload report for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meku-mint-integrity-report
+          path: |
+            mint-report.json
+            mint-stderr.txt
+            mint-exit-code.txt
+            mint-run-info.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Mark confirmed failures and incomplete runs
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -f mint-exit-code.txt ]; then
+            echo 'Checker did not execute.'
+            exit 1
+          fi
+          code=$(cat mint-exit-code.txt)
+          echo "Checker exit code: $code"
+          # UNKNOWN (2) is not a confirmed defect; report artifact retains it.
+          case "$code" in
+            0|2) exit 0 ;;
+            1|3) exit 1 ;;
+            *) exit 1 ;;
+          esac

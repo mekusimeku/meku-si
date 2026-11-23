@@ -10,6 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Refuse non-main runs (only the approved checker on main counts)
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "This report is valid only for refs/heads/main; got $GITHUB_REF. Not run."
+            exit 1
+          fi
       - name: Check out approved public checker
         uses: actions/checkout@v4
         with:
@@ -23,6 +30,7 @@ jobs:
         shell: bash
         run: |
           set +e
+          printf 'commit=%s\nref=%s\nrun_id=%s\nrun_attempt=%s\n' "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > mint-run-info.txt
           node tools/mint-integrity-live-check.mjs --json > mint-report.json 2> mint-stderr.txt
           result=$?
           printf '%s\n' "$result" > mint-exit-code.txt
@@ -49,6 +57,7 @@ jobs:
             mint-report.json
             mint-stderr.txt
             mint-exit-code.txt
+            mint-run-info.txt
           if-no-files-found: warn
           retention-days: 7
       - name: Mark confirmed failures and incomplete runs

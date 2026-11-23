@@ -11,8 +11,11 @@ const STALE = [
   /requires the bearer key on every POST/i,
   /^Every POST requires the key/im,
   /Every JSON-RPC POST, including discovery/i,
+  /requires? (a|an|the) ?(bearer|API|Agent API)? ?key on every (JSON-RPC )?POST/i,
+  /key (is )?required[^.]*including initiali[sz]ation|key on every[^.]*including initiali[sz]ation/i,
 ];
-const ALLOW_HISTORY = /At that time MEKU required/;
+// Dated history may quote the old rule; only that sentence is exempt, not its whole line.
+const HISTORY_SENTENCE = /At that time MEKU required[^.]*\./g;
 
 function* markdown(dir) {
   for (const name of readdirSync(dir)) {
@@ -26,9 +29,9 @@ function* markdown(dir) {
 const problems = [];
 for (const file of markdown(ROOT)) {
   readFileSync(file, "utf8").split("\n").forEach((line, i) => {
-    if (ALLOW_HISTORY.test(line)) return;
-    for (const pattern of STALE)
-      if (pattern.test(line)) problems.push(`${file}:${i + 1}: ${line.trim().slice(0, 120)}`);
+    const checked = line.replace(HISTORY_SENTENCE, "");
+    if (STALE.some((pattern) => pattern.test(checked)))
+      problems.push(`${file}:${i + 1}: ${line.trim().slice(0, 120)}`);
   });
 }
 const readme = readFileSync(join(ROOT, "README.md"), "utf8");

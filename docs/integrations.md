@@ -2,7 +2,7 @@
 
 These are reference recipes based on each client's public MCP configuration and MEKU's published interface. None has been independently tested with a MEKU-issued key. The [live MEKU docs](https://meku.farm/docs) and [AI access page](https://meku.farm/ai-access) remain the source of truth.
 
-The endpoint is **https://meku.farm/api/public/mcp**. Public `initialize`, `notifications/initialized` and `tools/list` requests work without a key and return only limited tool metadata. Every `tools/call` requires an operator-issued Agent API key. If you send a key, it is checked (and rate-limited) on every request, including discovery. Start with read-only **meku_search_humans**. The request tool is a write action and does not itself approve work or create payment.
+The endpoint is **https://meku.farm/api/public/mcp**. Public `initialize`, `notifications/initialized` and `tools/list` work without a key and return only limited connection and tool metadata. Every `tools/call` and every other method requires an operator-issued Agent API key. If you send a key, it is checked (and rate-limited) on every request, including discovery; an invalid key gets 401 and never falls back to anonymous access. Start with read-only **meku_search_humans**. The request tool is a write action and does not itself approve work or create payment.
 
 | Client | Setup | Status |
 | --- | --- | --- |

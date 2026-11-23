@@ -6,7 +6,7 @@ Use this checklist when adding or reviewing a client, framework, workflow, or MC
 
 - MCP endpoint: `https://meku.farm/api/public/mcp`.
 - MEKU documents Streamable HTTP and protocol version `2025-06-18`.
-- An operator-issued Agent API key is required on every JSON-RPC POST, including initialization, discovery, and tool calls.
+- Public `initialize`, `notifications/initialized` and `tools/list` work without a key and return only limited tool metadata; every `tools/call` requires an operator-issued Agent API key. A supplied key is checked on every request, including discovery.
 - Start with the read-only `meku_search_humans` tool.
 - The documented tools are `meku_search_humans`, `meku_request_human`, and `meku_get_request_status`. See the [full tool reference](mcp-reference.md).
 - Current client support examples are reference material unless a test record names the client/version and evidence. A local mock test is not a live MEKU integration test.

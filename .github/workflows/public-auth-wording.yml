@@ -1,0 +1,22 @@
+name: Public MCP auth wording
+
+on:
+  pull_request:
+    paths: ['**/*.md', 'llms.txt', 'tools/check-public-auth-wording.mjs', '.github/workflows/public-auth-wording.yml']
+  push:
+    branches: [main]
+    paths: ['**/*.md', 'llms.txt', 'tools/check-public-auth-wording.mjs', '.github/workflows/public-auth-wording.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/check-public-auth-wording.mjs

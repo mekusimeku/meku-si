@@ -10,7 +10,7 @@ MEKU SI lets agents request real-world work while people decide whether to accep
 - Do not expose keys in frontend code, browser storage, shared prompts, screenshots, issue reports, or client output.
 - Revoke a key if it may have been exposed; MEKU describes operator-issued keys and revocation.
 
-Every POST requires the key. Treat it as a secret with access to the MCP tools and key-scoped request status.
+Every `tools/call` requires the key (public `initialize` and `tools/list` do not, and return only limited metadata). Treat it as a secret with access to the MCP tools and key-scoped request status.
 
 ## Consent and approval
 meku_request_human submits a request for operator review. It does not mean MEKU approved it, a human accepted work, work was completed, or payment was made.

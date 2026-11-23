@@ -13,7 +13,7 @@ No. meku_request_human submits an execution request for review. It does not appr
 No. It returns aggregate counts and matched skills/countries, not names or profiles. Counts cover up to 500 listed records. Online can include people marked busy.
 
 ## Why is a key required for discovery?
-MEKU currently requires the bearer key on every POST, including initialization, discovery, and tool calls.
+Public `initialize` and `tools/list` work without a key and return only limited tool metadata. Every `tools/call` requires the bearer key; a supplied key is checked on every POST, including discovery.
 
 ## Which protocol is advertised?
 Streamable HTTP and protocol version 2025-06-18. Compatibility has not been independently verified for every MCP host.

@@ -12,8 +12,8 @@ No. meku_request_human submits an execution request for review. It does not appr
 ## Does search reveal identities?
 No. It returns aggregate counts and matched skills/countries, not names or profiles. Counts cover up to 500 listed records. Online can include people marked busy.
 
-## Why is a key required for discovery?
-MEKU currently requires the bearer key on every POST, including initialization, discovery, and tool calls.
+## When is a key required?
+Public `initialize`, `notifications/initialized` and `tools/list` work without a key and return only limited connection and tool metadata. Every `tools/call` and every other method requires the bearer key. A supplied key is always checked and rate-limited, including on discovery; an invalid key gets 401 and never falls back to anonymous access.
 
 ## Which protocol is advertised?
 Streamable HTTP and protocol version 2025-06-18. Compatibility has not been independently verified for every MCP host.

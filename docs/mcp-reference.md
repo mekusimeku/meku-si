@@ -37,7 +37,7 @@ A new request starts with status submitted. A successful response includes id, s
 Requires the id returned by submission. Status lookup is scoped to the exact API key that created the request; another key on the same account does not grant access. The current format check accepts 36 hexadecimal/hyphen characters but does not enforce canonical UUID formatting. Results include request details such as title, action, description, location fields, skills, deliverable, timeframe, budget and flags, requester_kind, status, and created_at; they omit contact, owner/key identifiers, and operator notes. Documented states are submitted, under_review, approved, rejected, and cancelled. Approved does not mean work is complete or paid.
 
 ## Errors and limits
-- Authentication failures use HTTP 401 and JSON-RPC -32001. Authentication happens before JSON parsing.
+- Authentication failures use HTTP 401 and JSON-RPC -32001. When a key is supplied, authentication and the rate check happen before JSON parsing; without a key, a malformed body gets 400 or 413 before the 401.
 - Rate limits use HTTP 429 and JSON-RPC -32001. Limits are operator-configured and shared with REST traffic. No Retry-After header is supplied.
 - Invalid JSON can return HTTP 400 / -32700; invalid JSON-RPC can return HTTP 400 / -32600.
 - Method and tool lookup failures may use HTTP 200 with -32601 or -32602.

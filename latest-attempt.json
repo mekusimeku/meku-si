@@ -1,0 +1,141 @@
+{
+  "schema": "meku-mint-integrity-report/1",
+  "mint": "J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump",
+  "verdict": "UNKNOWN",
+  "generatedAt": "2026-11-25T03:46:19.586Z",
+  "reportDateWIB": "2026-11-25",
+  "validUntil": "2026-11-25T15:46:19.586Z",
+  "checkerStartedAt": "2026-11-25T03:46:16Z",
+  "checkerCheckedAt": "2026-11-25T03:46:19.555Z",
+  "run": {
+    "id": "45542226695",
+    "attempt": "1",
+    "url": "https://github.com/mekusimeku/meku-si/actions/runs/45542226695",
+    "event": "workflow_dispatch",
+    "ref": "refs/heads/main",
+    "commit": "9315aaa514f507cc6e0c5a2ed4d7b96070c9743b"
+  },
+  "checker": {
+    "exitCode": 2,
+    "complete": true,
+    "rows": 12,
+    "counts": {
+      "pass": 10,
+      "fail": 0,
+      "unknown": 2
+    }
+  },
+  "results": [
+    {
+      "n": 1,
+      "url": "https://meku.farm/token.html",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://meku.farm/token.html",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "n": 2,
+      "url": "https://meku.farm/.well-known/meku-si-token.json",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://meku.farm/.well-known/meku-si-token.json",
+      "contentType": "application/json"
+    },
+    {
+      "n": 3,
+      "url": "https://meku.farm/llms.txt",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://meku.farm/llms.txt",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "n": 4,
+      "url": "https://meku.farm/agent-quickstart.html",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://meku.farm/agent-quickstart.html",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "n": 5,
+      "url": "https://meku.farm/mcp-lab.html",
+      "result": "UNKNOWN",
+      "reason": "content differs from approved snapshot (sha256 14c9cbb44520…); review it, then update APPROVED_SHA256",
+      "status": 200,
+      "observedSha256": "14c9cbb445208ac3d5a28fb0ee2b2ad3856783cb94876deb575eb0017471dd97",
+      "finalUrl": "https://meku.farm/mcp-lab.html",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "n": 6,
+      "url": "https://meku.farm/first-contact.html",
+      "result": "UNKNOWN",
+      "reason": "content differs from approved snapshot (sha256 1afc150908bc…); review it, then update APPROVED_SHA256",
+      "status": 200,
+      "observedSha256": "1afc150908bce72a96ed40028fccbacf103831be9274dabac9a03bb2e675ead2",
+      "finalUrl": "https://meku.farm/first-contact.html",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "n": 7,
+      "url": "https://meku.farm/.well-known/meku-first-contact.json",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://meku.farm/.well-known/meku-first-contact.json",
+      "contentType": "application/json"
+    },
+    {
+      "n": 8,
+      "url": "https://meku-human-override-a2ui.mekusi-team.workers.dev/token.json",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://meku-human-override-a2ui.mekusi-team.workers.dev/token.json",
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "n": 9,
+      "url": "https://meku-human-override-a2ui.mekusi-team.workers.dev/llms.txt",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://meku-human-override-a2ui.mekusi-team.workers.dev/llms.txt",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "n": 10,
+      "url": "https://github.com/mekusimeku/meku-si/blob/main/docs/mekusi-agent-token.md",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://raw.githubusercontent.com/mekusimeku/meku-si/main/docs/mekusi-agent-token.md",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "n": 11,
+      "url": "https://github.com/mekusimeku/meku-si/blob/main/agent-index.json",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://raw.githubusercontent.com/mekusimeku/meku-si/main/agent-index.json",
+      "contentType": "text/plain; charset=utf-8"
+    },
+    {
+      "n": 12,
+      "url": "https://www.moltbook.com/post/38a643a5-011b-447b-9756-8f25cb376fee",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
+      "status": 200,
+      "finalUrl": "https://www.moltbook.com/api/v1/posts/38a643a5-011b-447b-9756-8f25cb376fee",
+      "contentType": "application/json; charset=utf-8"
+    }
+  ],
+  "stderrTail": "SUMMARY PASS=10 FAIL=0 UNKNOWN=2 (UNKNOWN is not a pass)\n"
+}

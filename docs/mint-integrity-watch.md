@@ -72,3 +72,33 @@ Never edit APPROVED_SHA256 or any repository file.
   Its PASS means "the reviewed official post, unchanged, with only the official mint". The post is a discussion
   post and does not itself state rules A–E; its line "Planned paid tiers are not all live production features"
   understates rule B (no paid tier is live). Rewording it is a founder decision.
+
+## Daily report for watches without network access (pending founder activation)
+
+`.github/workflows/mint-integrity-daily.yml` runs the same approved checker on GitHub at 07:23 and 08:07 WIB
+(00:23 and 01:07 UTC), before the 09:00 WIB watch, and commits one file, `latest.json`, to the branch
+`mint-integrity-reports` of `mekusimeku/meku-si`. A watch that cannot reach the internet can read that file
+through its GitHub connector instead of running the checker.
+
+Instruction text for a watch that reads the daily report (replaces step 1 of the block above):
+
+```text
+1. Using the GitHub connector, read the file latest.json on branch mint-integrity-reports of the repository
+   mekusimeku/meku-si. Do not run the checker and do not fetch any other URL.
+   Accept the report only if ALL of these hold; otherwise report "no valid current report" with the reason,
+   treat it as neither PASS nor FAIL, and do not notify the founder:
+     - schema is "meku-mint-integrity-report/1" and mint is exactly
+       J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump
+     - run.ref is "refs/heads/main" and run.event is "schedule" or "workflow_dispatch"
+     - the current time is before validUntil, and generatedAt is today's date in WIB (UTC+7)
+       (otherwise the report is STALE: the daily run did not happen or did not publish)
+     - checker.complete is true, checker.rows is 12 and results has 12 rows numbered 1 to 12
+     - verdict agrees with the counts and exit code: PASS = exit 0 and 12 PASS; FAIL = exit 1 and at least
+       one FAIL; UNKNOWN = exit 2, no FAIL and at least one UNKNOWN. Anything else counts as INCOMPLETE.
+   Then report: verdict, generatedAt, run.url, run.commit, checker.exitCode, the counts, and all 12 rows
+   (n, result, status, reason). Notify the founder only when verdict is FAIL (a confirmed defect).
+   UNKNOWN and INCOMPLETE are reported in the daily summary, never as a pass.
+```
+
+Activation needs founder approval: merging the workflow starts the two daily scheduled runs and lets the
+publish job write to the `mint-integrity-reports` branch (public, like the rest of this repository).

@@ -90,9 +90,12 @@ jobs:
           };
           fs.writeFileSync("latest.json", JSON.stringify(envelope, null, 2) + "\n");
           console.log(`verdict=${verdict} exit=${exitCode} complete=${complete} PASS=${counts.pass} FAIL=${counts.fail} UNKNOWN=${counts.unknown}`);
+          const row = (r) => `${String(r?.n).padStart(2)} ${String(r?.result).padEnd(7)} ${r?.status ?? "-"} ${String(r?.url ?? "")} | ${String(r?.reason ?? "").slice(0, 200)}`;
+          for (const r of results) console.log(row(r));
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY ?? "/dev/null",
             `### MEKU SI mint integrity: ${verdict}\n\nexit ${exitCode} · complete ${complete} · PASS ${counts.pass} · FAIL ${counts.fail} · UNKNOWN ${counts.unknown}\n\n`
-            + (verdict === "UNKNOWN" ? "UNKNOWN is not a pass: some endpoints could not be verified.\n" : ""));
+            + (verdict === "UNKNOWN" ? "UNKNOWN is not a pass: some endpoints could not be verified.\n\n" : "")
+            + "```\n" + results.map(row).join("\n") + "\n```\n");
           JS
       - name: Keep the report for the publish job
         if: always()

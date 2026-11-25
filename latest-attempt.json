@@ -1,28 +1,28 @@
 {
   "schema": "meku-mint-integrity-report/1",
   "mint": "J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump",
-  "verdict": "UNKNOWN",
-  "generatedAt": "2026-11-25T03:46:19.586Z",
+  "verdict": "PASS",
+  "generatedAt": "2026-11-25T03:53:05.537Z",
   "reportDateWIB": "2026-11-25",
-  "validUntil": "2026-11-25T15:46:19.586Z",
-  "checkerStartedAt": "2026-11-25T03:46:16Z",
-  "checkerCheckedAt": "2026-11-25T03:46:19.555Z",
+  "validUntil": "2026-11-25T15:53:05.537Z",
+  "checkerStartedAt": "2026-11-25T03:53:02Z",
+  "checkerCheckedAt": "2026-11-25T03:53:05.500Z",
   "run": {
-    "id": "45542226695",
+    "id": "45542983750",
     "attempt": "1",
-    "url": "https://github.com/mekusimeku/meku-si/actions/runs/45542226695",
+    "url": "https://github.com/mekusimeku/meku-si/actions/runs/45542983750",
     "event": "workflow_dispatch",
     "ref": "refs/heads/main",
-    "commit": "9315aaa514f507cc6e0c5a2ed4d7b96070c9743b"
+    "commit": "c1d92aacc59f1c1fa98e02179430357cd4faa93c"
   },
   "checker": {
-    "exitCode": 2,
+    "exitCode": 0,
     "complete": true,
     "rows": 12,
     "counts": {
-      "pass": 10,
+      "pass": 12,
       "fail": 0,
-      "unknown": 2
+      "unknown": 0
     }
   },
   "results": [
@@ -65,20 +65,18 @@
     {
       "n": 5,
       "url": "https://meku.farm/mcp-lab.html",
-      "result": "UNKNOWN",
-      "reason": "content differs from approved snapshot (sha256 14c9cbb44520…); review it, then update APPROVED_SHA256",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
       "status": 200,
-      "observedSha256": "14c9cbb445208ac3d5a28fb0ee2b2ad3856783cb94876deb575eb0017471dd97",
       "finalUrl": "https://meku.farm/mcp-lab.html",
       "contentType": "text/html; charset=utf-8"
     },
     {
       "n": 6,
       "url": "https://meku.farm/first-contact.html",
-      "result": "UNKNOWN",
-      "reason": "content differs from approved snapshot (sha256 1afc150908bc…); review it, then update APPROVED_SHA256",
+      "result": "PASS",
+      "reason": "live body equals approved snapshot and all checks pass",
       "status": 200,
-      "observedSha256": "1afc150908bce72a96ed40028fccbacf103831be9274dabac9a03bb2e675ead2",
       "finalUrl": "https://meku.farm/first-contact.html",
       "contentType": "text/html; charset=utf-8"
     },
@@ -137,5 +135,5 @@
       "contentType": "application/json; charset=utf-8"
     }
   ],
-  "stderrTail": "SUMMARY PASS=10 FAIL=0 UNKNOWN=2 (UNKNOWN is not a pass)\n"
+  "stderrTail": "SUMMARY PASS=12 FAIL=0 UNKNOWN=0 (UNKNOWN is not a pass)\n"
 }

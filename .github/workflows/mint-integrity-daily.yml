@@ -50,7 +50,9 @@ jobs:
         run: |
           set +e
           started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          node tools/mint-integrity-live-check.mjs --json > mint-report.json 2> mint-stderr.txt
+          # Hard limit inside the 10-minute job: a hung or timed-out checker exits 124 (137 after the kill)
+          # and the report below still gets written, as INCOMPLETE.
+          timeout --kill-after=15s 420s node tools/mint-integrity-live-check.mjs --json > mint-report.json 2> mint-stderr.txt
           code=$?
           cat mint-stderr.txt
           STARTED_AT="$started_at" CHECKER_EXIT="$code" node --input-type=module <<'JS'
@@ -76,6 +78,8 @@ jobs:
             mint: MINT,
             verdict,
             generatedAt: generatedAt.toISOString(),
+            // Calendar date in WIB (UTC+7) that this report covers.
+            reportDateWIB: new Date(generatedAt.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10),
             // Readers must treat the report as STALE (not current) after this time.
             validUntil: new Date(generatedAt.getTime() + 12 * 3600 * 1000).toISOString(),
             checkerStartedAt: process.env.STARTED_AT,
@@ -152,9 +156,21 @@ jobs:
           else
             git checkout -q --orphan mint-integrity-reports
           fi
-          cp ../incoming/latest.json latest.json
-          git add latest.json
-          msg=$(node -e 'const r=JSON.parse(require("fs").readFileSync("latest.json","utf8")); console.log(`mint integrity ${r.verdict} ${r.generatedAt} run ${r.run.id}`)')
+          # Every run is kept as latest-attempt.json. latest.json is replaced unless it already holds a FAIL
+          # for the same WIB date and the new run is UNKNOWN or INCOMPLETE: a weaker backup run must not
+          # hide a confirmed FAIL found earlier that morning. Only a complete PASS or a newer FAIL replaces it.
+          cp ../incoming/latest.json latest-attempt.json
+          keep=$(node -e '
+            const fs = require("fs");
+            const next = JSON.parse(fs.readFileSync("latest-attempt.json", "utf8"));
+            let prev = null; try { prev = JSON.parse(fs.readFileSync("latest.json", "utf8")); } catch {}
+            const hold = prev && prev.verdict === "FAIL" && prev.reportDateWIB === next.reportDateWIB
+              && (next.verdict === "UNKNOWN" || next.verdict === "INCOMPLETE");
+            console.log(hold ? "keep" : "replace");')
+          if [ "$keep" = "replace" ]; then cp latest-attempt.json latest.json; fi
+          git add latest.json latest-attempt.json
+          msg=$(node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync("latest-attempt.json","utf8")); const l=JSON.parse(fs.readFileSync("latest.json","utf8")); console.log(`mint integrity ${l.verdict} (attempt ${a.verdict}) ${a.generatedAt} run ${a.run.id}`)')
+          echo "latest.json: $keep"
           git commit -q -m "$msg"
           git -c http.extraheader="$auth" push -q origin mint-integrity-reports
           echo "Published: $msg"

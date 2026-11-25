@@ -1,0 +1,176 @@
+name: MEKU SI Mint Integrity (daily report)
+
+# Runs the approved, unchanged checker on main before the 09:00 WIB (02:00 UTC) ChatGPT watch and
+# commits the machine-readable report latest.json (plus latest-attempt.json) to the dedicated branch "mint-integrity-reports",
+# where the watch can read it through its GitHub connector. Read-only toward every public endpoint.
+# No secrets: the only credential is this run's GITHUB_TOKEN, and only the publish job may write,
+# and only to that branch. Pull requests that change this file run the check as a dry run (no publish).
+on:
+  schedule:
+    - cron: "23 0 * * *" # 07:23 WIB
+    - cron: "7 1 * * *"  # 08:07 WIB, second chance if the first scheduled run is delayed or dropped
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/mint-integrity-daily.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mint-integrity-daily-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Refuse non-main scheduled or manual runs
+        shell: bash
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Reports are valid only from refs/heads/main; got $GITHUB_REF. Not run."
+            exit 1
+          fi
+      - name: Check out approved public checker
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run 12-endpoint read-only check and build the report
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set +e
+          started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # Hard limit inside the 10-minute job: a hung or timed-out checker exits 124 (137 after the kill)
+          # and the report below still gets written, as INCOMPLETE.
+          timeout --kill-after=15s 420s node tools/mint-integrity-live-check.mjs --json > mint-report.json 2> mint-stderr.txt
+          code=$?
+          cat mint-stderr.txt
+          STARTED_AT="$started_at" CHECKER_EXIT="$code" node --input-type=module <<'JS'
+          import fs from "node:fs";
+          const MINT = "J5h8bqFW7tncH2LM3ZvFxd1kZV2AJ4rq44Puc1sGpump";
+          const exitCode = Number(process.env.CHECKER_EXIT);
+          let report = null;
+          try { report = JSON.parse(fs.readFileSync("mint-report.json", "utf8")); } catch { report = null; }
+          const results = Array.isArray(report?.results) ? report.results : [];
+          const complete = report?.complete === true && report?.rows === 12 && results.length === 12
+            && results.every((r, i) => r && r.n === i + 1) && report?.mint === MINT;
+          const count = (k) => results.filter((r) => r?.result === k).length;
+          const counts = { pass: count("PASS"), fail: count("FAIL"), unknown: count("UNKNOWN") };
+          // Same rules as the checker and the manual workflow; anything inconsistent is INCOMPLETE, never PASS.
+          let verdict = "INCOMPLETE";
+          if (complete && exitCode === 1 && counts.fail > 0) verdict = "FAIL";
+          else if (complete && exitCode === 2 && counts.fail === 0 && counts.unknown > 0) verdict = "UNKNOWN";
+          else if (complete && exitCode === 0 && counts.pass === 12) verdict = "PASS";
+          const generatedAt = new Date();
+          const stderr = fs.existsSync("mint-stderr.txt") ? fs.readFileSync("mint-stderr.txt", "utf8") : "";
+          const envelope = {
+            schema: "meku-mint-integrity-report/1",
+            mint: MINT,
+            verdict,
+            generatedAt: generatedAt.toISOString(),
+            // Calendar date in WIB (UTC+7) that this report covers.
+            reportDateWIB: new Date(generatedAt.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10),
+            // Readers must treat the report as STALE (not current) after this time.
+            validUntil: new Date(generatedAt.getTime() + 12 * 3600 * 1000).toISOString(),
+            checkerStartedAt: process.env.STARTED_AT,
+            checkerCheckedAt: report?.checkedAt ?? null,
+            run: {
+              id: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT, url: process.env.RUN_URL,
+              event: process.env.GITHUB_EVENT_NAME, ref: process.env.GITHUB_REF, commit: process.env.GITHUB_SHA,
+            },
+            checker: { exitCode, complete, rows: results.length, counts },
+            results,
+            stderrTail: stderr.slice(-2000),
+          };
+          fs.writeFileSync("latest.json", JSON.stringify(envelope, null, 2) + "\n");
+          console.log(`verdict=${verdict} exit=${exitCode} complete=${complete} PASS=${counts.pass} FAIL=${counts.fail} UNKNOWN=${counts.unknown}`);
+          const row = (r) => `${String(r?.n).padStart(2)} ${String(r?.result).padEnd(7)} ${r?.status ?? "-"} ${String(r?.url ?? "")} | ${String(r?.reason ?? "").slice(0, 200)}`;
+          for (const r of results) console.log(row(r));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY ?? "/dev/null",
+            `### MEKU SI mint integrity: ${verdict}\n\nexit ${exitCode} · complete ${complete} · PASS ${counts.pass} · FAIL ${counts.fail} · UNKNOWN ${counts.unknown}\n\n`
+            + (verdict === "UNKNOWN" ? "UNKNOWN is not a pass: some endpoints could not be verified.\n\n" : "")
+            + "```\n" + results.map(row).join("\n") + "\n```\n");
+          JS
+      - name: Keep the report for the publish job
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mint-integrity-latest
+          path: |
+            latest.json
+            mint-report.json
+            mint-stderr.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Mark confirmed failures and incomplete runs
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -f latest.json ]; then echo "No report was produced."; exit 1; fi
+          verdict=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("latest.json","utf8")).verdict)')
+          echo "Verdict: $verdict"
+          case "$verdict" in
+            PASS|UNKNOWN) exit 0 ;;   # UNKNOWN is recorded in the report; it is not a confirmed defect
+            *) exit 1 ;;              # FAIL or INCOMPLETE
+          esac
+
+  publish:
+    needs: check
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # only to commit latest.json / latest-attempt.json on the mint-integrity-reports branch
+    steps:
+      - name: Fetch the report from the check job
+        uses: actions/download-artifact@v4
+        with:
+          name: mint-integrity-latest
+          path: incoming
+      - name: Commit the report to the mint-integrity-reports branch
+        shell: bash
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -f incoming/latest.json
+          node -e 'const r=JSON.parse(require("fs").readFileSync("incoming/latest.json","utf8")); if (r.schema!=="meku-mint-integrity-report/1"||r.run.ref!=="refs/heads/main") process.exit(1)'
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git init -q pub && cd pub
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          if git -c http.extraheader="$auth" ls-remote --exit-code --heads origin mint-integrity-reports >/dev/null; then
+            git -c http.extraheader="$auth" fetch -q --depth=1 origin mint-integrity-reports
+            git checkout -q -B mint-integrity-reports FETCH_HEAD
+          else
+            git checkout -q --orphan mint-integrity-reports
+          fi
+          # Every run is kept as latest-attempt.json. latest.json is replaced unless it already holds a FAIL
+          # for the same WIB date and the new run is UNKNOWN or INCOMPLETE: a weaker backup run must not
+          # hide a confirmed FAIL found earlier that morning. Only a complete PASS or a newer FAIL replaces it.
+          cp ../incoming/latest.json latest-attempt.json
+          keep=$(node -e '
+            const fs = require("fs");
+            const next = JSON.parse(fs.readFileSync("latest-attempt.json", "utf8"));
+            let prev = null; try { prev = JSON.parse(fs.readFileSync("latest.json", "utf8")); } catch {}
+            const hold = prev && prev.verdict === "FAIL" && prev.reportDateWIB === next.reportDateWIB
+              && (next.verdict === "UNKNOWN" || next.verdict === "INCOMPLETE");
+            console.log(hold ? "keep" : "replace");')
+          if [ "$keep" = "replace" ]; then cp latest-attempt.json latest.json; fi
+          git add latest.json latest-attempt.json
+          msg=$(node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync("latest-attempt.json","utf8")); const l=JSON.parse(fs.readFileSync("latest.json","utf8")); console.log(`mint integrity ${l.verdict} (attempt ${a.verdict}) ${a.generatedAt} run ${a.run.id}`)')
+          echo "latest.json: $keep"
+          git commit -q -m "$msg"
+          git -c http.extraheader="$auth" push -q origin mint-integrity-reports
+          echo "Published: $msg"

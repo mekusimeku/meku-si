@@ -1,7 +1,7 @@
 name: MEKU SI Mint Integrity (daily report)
 
 # Runs the approved, unchanged checker on main before the 09:00 WIB (02:00 UTC) ChatGPT watch and
-# commits one machine-readable report, latest.json, to the dedicated branch "mint-integrity-reports",
+# commits the machine-readable report latest.json (plus latest-attempt.json) to the dedicated branch "mint-integrity-reports",
 # where the watch can read it through its GitHub connector. Read-only toward every public endpoint.
 # No secrets: the only credential is this run's GITHUB_TOKEN, and only the publish job may write,
 # and only to that branch. Pull requests that change this file run the check as a dry run (no publish).
@@ -130,14 +130,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write # only to commit latest.json on the mint-integrity-reports branch
+      contents: write # only to commit latest.json / latest-attempt.json on the mint-integrity-reports branch
     steps:
       - name: Fetch the report from the check job
         uses: actions/download-artifact@v4
         with:
           name: mint-integrity-latest
           path: incoming
-      - name: Commit latest.json to the mint-integrity-reports branch
+      - name: Commit the report to the mint-integrity-reports branch
         shell: bash
         env:
           TOKEN: ${{ github.token }}

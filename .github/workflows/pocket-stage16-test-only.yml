@@ -1,0 +1,31 @@
+name: Pocket Stage 16 Role-Bound PostgreSQL Test Only
+on:
+  pull_request:
+    paths:
+      - 'pocket-browser-test/stage16-auth/**'
+      - '.github/workflows/pocket-stage16-test-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  postgres-role-bound-test-only:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pocket_ci
+          POSTGRES_USER: pocket_ci
+          POSTGRES_PASSWORD: test_only_not_real
+        options: >-
+          --health-cmd "pg_isready -U pocket_ci -d pocket_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check isolated PostgreSQL role-bound one-shot authorization
+        shell: bash
+        env:
+          POCKET_CI_PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash pocket-browser-test/stage16-auth/ci-test.sh

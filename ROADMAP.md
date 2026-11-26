@@ -2,6 +2,8 @@
 
 This records direction, not delivery promises. Items depend on technical validation and human approval.
 
+**November 3 source update:** [Current MEKU MCP contract, safe retries and remaining live checks](docs/current-mcp-contract-2026-11-03.md). Earlier reference pages may describe old behavior before the latest website fixes. Official MEKU SI contact: **contact@meku.farm**.
+
 ## Available now
 - Public documentation for the MEKU MCP endpoint.
 - Aggregate, privacy-safe human availability search.
@@ -11,7 +13,7 @@ This records direction, not delivery promises. Items depend on technical validat
 
 ## In progress
 - Complete an independently run external client integration and publish reproducible evidence.
-- Resolve and document request field casing and length-limit mismatches.
+- Independently verify the now-corrected request field mapping, skills, length limits and idempotent retries against the hosted server.
 - Validate authentication and read-only behavior across supported MCP hosts.
 
 ## Planned
@@ -21,4 +23,4 @@ This records direction, not delivery promises. Items depend on technical validat
 - Add tested client examples as external integrations are completed.
 
 ## Not claimed
-No independent external integration or paid mission is verified as of 2026-10-19. A planned item is not an available feature. No payment tool is documented among the three current MCP tools.
+As of the November 3 source check, no independent end-to-end paid mission or multi-account hosted integration is verified. A planned item is not an available feature. No payment tool is documented among the three current MCP tools.

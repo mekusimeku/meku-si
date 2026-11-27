@@ -7,7 +7,7 @@
 import { mkdirSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BUNDLE_FORMAT, MAX_EVIDENCE_BYTES, extractAttachmentUrls, extractRecords, isLedgerUrl, sha256Hex } from "./lib.mjs";
+import { BUNDLE_FORMAT, MAX_EVIDENCE_BYTES, extractAttachmentUrls, extractRecords, isLedgerUrl, rosterFromComments, sameLogin, sha256Hex } from "./lib.mjs";
 
 export const EXPORTER_VERSION = "meku.pow-export/1";
 const MAX_PAGES = 10;
@@ -38,7 +38,7 @@ async function readCapped(response, cap) {
 
 const allowedAssetHost = (host) => host === "github.com" || host.endsWith(".githubusercontent.com");
 
-export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token, now = () => new Date() }) {
+export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token, now = () => new Date(), expectOperator = "mekusimeku" }) {
   const { owner, repo, number } = parseIssueUrl(issueUrl);
   if (existsSync(outDir) && readdirSync(outDir).length) throw new Error(`${outDir} is not empty`);
   const apiHeaders = {
@@ -62,9 +62,12 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
 
   mkdirSync(join(outDir, "evidence"), { recursive: true });
   const evidenceFiles = [];
+  // Only the roster human's evidence comment is downloaded, so strangers cannot make the
+  // exporter fetch their files.
+  const { human } = rosterFromComments(comments, { expectOperator });
   for (const comment of comments) {
     const isEvidence = extractRecords(comment.body).some((f) => f.record?.type === "evidence_submitted");
-    if (!isEvidence) continue;
+    if (!isEvidence || !human || !sameLogin(comment.author, human)) continue;
     for (const url of extractAttachmentUrls(comment.body)) {
       // Attachment downloads never carry the API token.
       const response = await fetchImpl(url, { headers: { "User-Agent": EXPORTER_VERSION }, redirect: "follow", signal: AbortSignal.timeout(60_000) });

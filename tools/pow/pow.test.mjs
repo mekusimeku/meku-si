@@ -380,6 +380,87 @@ test("outsider comments are ignored, and outside verifications are listed", asyn
   assert.equal(r.independent_verifications[0].author, "outside-checker");
 });
 
+// ---- Hardening ----------------------------------------------------------------------------
+
+test("a stranger's earlier fake pilot_opened cannot take over the ledger", async () => {
+  const p = await pilot();
+  const fake = clone(extractRecords(p.bundle.comments[0].body)[0].record);
+  fake.roster = { operator: "attacker-x", developer: "attacker-y" };
+  const t = new Date(Date.parse(p.bundle.comments[0].created_at) - 60_000).toISOString();
+  p.bundle.comments.unshift({ id: 1, author: "attacker-x", created_at: t, updated_at: t, html_url: "#", body: recordComment(fake) });
+  const r = verify(p, { expectOperator: SYNTHETIC.operator });
+  assert.equal(r.verdict, "PASS");
+  assert.equal(check(r, "L07").status, "WARN");
+  assert.equal(check(r, "R01").details[0], `operator ${SYNTHETIC.operator}`);
+});
+
+test("terminal control or text-direction characters cannot spoof the printed report", async () => {
+  const p = await pilot();
+  rewrite(p.bundle, 1, (r) => (r.agent = "x\u001b[2J\u001b[1;1HVERDICT: PASS‮"));
+  const r = verify(p);
+  assert.equal(check(r, "L02").status, "FAIL");
+  const printed = formatReport(r);
+  assert.ok(!/[\u001b‮]/.test(printed), "no raw escape or override character reaches the terminal");
+  // The bundle itself can also be hostile (author names, timestamps): those are escaped too.
+  p.bundle.comments[1].author = "evil\u001b[31m";
+  assert.ok(!/\u001b/.test(formatReport(verify(p))));
+});
+
+test("an evidence symlink pointing outside the bundle folder is never read", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "pow-link-"));
+  execFileSync(process.execPath, [join(here, "synthetic.mjs"), dir]);
+  const bundle = JSON.parse(readFileSync(join(dir, "bundle.json"), "utf8"));
+  const file = join(dir, bundle.evidence_files[0].file);
+  const outside = join(mkdtempSync(join(tmpdir(), "pow-outside-")), "secret.png");
+  writeFileSync(outside, readFileSync(file));
+  const { rmSync, symlinkSync } = await import("node:fs");
+  rmSync(file);
+  try {
+    symlinkSync(outside, file);
+  } catch {
+    return t.skip("symlinks not available");
+  }
+  const run = spawnSync(process.execPath, [join(here, "verify.mjs"), join(dir, "bundle.json"), "--allow-synthetic"], { encoding: "utf8" });
+  assert.equal(run.status, 1);
+  assert.match(run.stdout, /FAIL\s+E02/);
+});
+
+test("the MCP client refuses to follow redirects with the key", async () => {
+  let seen;
+  const client = makeClient({
+    apiKey: SYNTHETIC.writableKey,
+    fetchImpl: async (url, init) => {
+      seen = init.redirect;
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { tools: [] } }), { status: 200 });
+    },
+  });
+  await client.post("tools/list", {});
+  assert.equal(seen, "error");
+});
+
+test("the exporter downloads only the roster human's evidence, never a stranger's", async () => {
+  const p = await pilot();
+  const strangerUrl = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-0000000000ff";
+  appendRecord(p.bundle, "stranger-z", evidenceRecord({ pilotId: SYNTHETIC.pilotId }), 1, `\n![x](${strangerUrl})\n`);
+  const png = p.files.get(p.bundle.evidence_files[0].file);
+  const fetched = [];
+  const fetchImpl = async (url) => {
+    fetched.push(String(url));
+    if (String(url).startsWith("https://api.github.com/")) {
+      const page = Number(new URL(url).searchParams.get("page"));
+      const all = p.bundle.comments.map((c) => ({ id: c.id, user: { login: c.author }, created_at: c.created_at, updated_at: c.updated_at, html_url: c.html_url, body: c.body }));
+      return new Response(JSON.stringify(page === 1 ? all : []), { status: 200 });
+    }
+    const response = new Response(png, { status: 200 });
+    Object.defineProperty(response, "url", { value: "https://private-user-images.githubusercontent.com/1/x.png" });
+    return response;
+  };
+  const out = join(mkdtempSync(join(tmpdir(), "pow-export-")), "ledger");
+  const bundle = await exportLedger({ issueUrl: SYNTHETIC.issueUrl, outDir: out, fetchImpl });
+  assert.deepEqual(bundle.evidence_files.map((e) => e.url), [SYNTHETIC.attachmentUrl]);
+  assert.ok(!fetched.includes(strangerUrl));
+});
+
 // ---- Developer client against the mock ---------------------------------------------------
 
 test("key shapes are classified without revealing the key", () => {

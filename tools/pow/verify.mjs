@@ -23,6 +23,8 @@ import {
   ledgerDigest,
   recordProblems,
   requestArgumentProblems,
+  rosterFromComments,
+  displaySafe,
   sameLogin,
   scanImage,
   sha256Hex,
@@ -141,10 +143,12 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
     .slice()
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || String(a.id).localeCompare(String(b.id)));
 
-  // ---- Find pilot_opened to learn the roster.
+  // ---- Find pilot_opened to learn the roster. A seq 0 posted by anyone other than the expected
+  // operator account is ignored, so a stranger cannot hijack the ledger by commenting first.
   const found = [];
   for (const comment of ordered) for (const item of extractRecords(comment.body)) found.push({ comment, ...item });
-  const opening = found.find((f) => f.record?.type === "pilot_opened" && f.record?.seq === 0);
+  const openingEntry = rosterFromComments(ordered, { expectOperator }).opening;
+  const opening = openingEntry ? found.find((f) => f.comment === openingEntry.comment && f.record?.type === "pilot_opened" && f.record?.seq === 0) : null;
   if (!opening) {
     fail("L04", "the ledger has no pilot_opened record with seq 0");
     return finish();
@@ -158,8 +162,7 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
   else pass("R01", `operator ${roster.operator}`);
 
   // Human login is learned from task_offered (posted by the operator).
-  const offered = found.find((f) => f.record?.type === "task_offered" && sameLogin(f.comment.author, roster.operator));
-  const humanLogin = offered?.record?.human;
+  const humanLogin = rosterFromComments(ordered, { expectOperator }).human;
   const roleOf = (author) => {
     if (sameLogin(author, roster.operator)) return "operator";
     if (sameLogin(author, roster.developer)) return "developer";
@@ -178,6 +181,10 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       else warn("L07", `ignored malformed record-like comment by ${f.comment.author}`);
       continue;
     }
+    if (f !== opening && f.record?.type === "pilot_opened") {
+      warn("L07", `ignored another pilot_opened posted by ${f.comment.author}`);
+      continue;
+    }
     const record = f.record;
     if (record.type === "independent_verification") {
       const problems = recordProblems(record);
@@ -190,11 +197,10 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       warn("L07", `ignored ${record.type ?? "record"} posted by non-roster account ${f.comment.author}`);
       continue;
     }
-    const problems = recordProblems(record);
-    if (problems.length) fail("L02", `seq ${record.seq} ${record.type}: ${problems.join("; ")}`);
     if (record.role !== role) fail("R02", `seq ${record.seq} ${record.type} claims role ${record.role} but ${f.comment.author} is the ${role}`);
-    sequenced.push({ record, comment: f.comment });
+    sequenced.push({ record, comment: f.comment, problems: recordProblems(record) });
   }
+  for (const { record, problems } of sequenced) if (problems.length) fail("L02", `seq ${record.seq} ${record.type}: ${problems.join("; ")}`);
   if (results.get("L02").status !== "FAIL") pass("L02", `${sequenced.length} records`);
   if (results.get("R02").status !== "FAIL") pass("R02");
   if (results.get("L07").status === "NOT_REACHED") pass("L07", "none found");
@@ -472,6 +478,7 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
 
 export function formatReport(result) {
   const lines = [];
+  const plain = (text) => displaySafe(text);
   lines.push(`MEKU proof-of-work verification (${result.verifier}, protocol ${result.protocol})`);
   lines.push(`Ledger: ${result.issue_url ?? "unknown"}   Pilot: ${result.pilot_id ?? "unknown"}   Records: ${result.record_count}`);
   if (result.synthetic) lines.push("SYNTHETIC TEST DATA - NOT EVIDENCE OF ANY REAL WORK CYCLE");
@@ -499,7 +506,8 @@ export function formatReport(result) {
       ? " (automated checks; confirm M01-M04 by eye before calling the cycle verified)"
       : "";
   lines.push(`VERDICT: ${result.verdict}${note}`);
-  return lines.join("\n");
+  // Everything printed passes through displaySafe, so record text cannot rewrite the terminal.
+  return lines.map(plain).join("\n");
 }
 
 /** Read a bundle file and a loader that only opens evidence files inside the bundle's folder. */
@@ -514,7 +522,10 @@ function loaderFor(bundlePath) {
     const full = resolve(base, file);
     if (!full.startsWith(base + sep)) return null;
     try {
-      return readFileSync(full);
+      // Resolve symlinks too: a link inside the bundle folder must not reach files outside it.
+      const real = realpathSync(full);
+      if (!real.startsWith(base + sep)) return null;
+      return readFileSync(real);
     } catch {
       return null;
     }

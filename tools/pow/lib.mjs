@@ -386,7 +386,14 @@ export const RECORD_TYPES = Object.freeze({
 
 const ENVELOPE = ["pow", "pilot_id", "seq", "type", "role"];
 
+// Control and bidirectional-override characters could make a printed report lie about itself.
+const UNSAFE_TEXT = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+
 function checkValue(spec, value, path, problems, ctx) {
+  if (typeof value === "string" && UNSAFE_TEXT.test(value)) {
+    problems.push(`${path} contains control or text-direction characters`);
+    return;
+  }
   switch (spec.kind) {
     case "const":
       if (canonicalize(value ?? null) !== canonicalize(spec.value)) problems.push(`${path} must be ${JSON.stringify(spec.value)}`);
@@ -556,6 +563,28 @@ export function extractRecords(body) {
     found.push({ error: "a meku.pow record is not valid JSON" });
   }
   return found;
+}
+
+/** Display-safe text: control and text-direction characters become visible \u escapes. */
+export function displaySafe(value) {
+  return String(value).replace(new RegExp(UNSAFE_TEXT.source, "g"), (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+/** The roster as the verifier sees it: seq 0 posted by the expected operator account (or, for
+ *  synthetic test ledgers, the first seq 0), and the human named in that operator's task_offered. */
+export function rosterFromComments(comments, { expectOperator = "mekusimeku" } = {}) {
+  const records = [];
+  for (const comment of comments) for (const f of extractRecords(comment.body)) if (f.record) records.push({ comment, record: f.record });
+  const openings = records.filter((e) => e.record.type === "pilot_opened" && e.record.seq === 0);
+  const opening =
+    openings.find((e) => sameLogin(e.comment.author, expectOperator) && sameLogin(e.record.roster?.operator, expectOperator)) ??
+    openings.find((e) => isSyntheticPilot(e.record.pilot_id)) ??
+    openings[0] ??
+    null;
+  if (!opening) return { opening: null, operator: null, developer: null, human: null };
+  const operator = opening.record.roster?.operator ?? null;
+  const offered = records.find((e) => e.record.type === "task_offered" && sameLogin(e.comment.author, operator));
+  return { opening, operator, developer: opening.record.roster?.developer ?? null, human: offered?.record.human ?? null };
 }
 
 export function extractAttachmentUrls(body) {

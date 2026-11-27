@@ -59,7 +59,8 @@ export function makeClient({ endpoint = MCP_ENDPOINT, apiKey, fetchImpl = fetch,
       Accept: "application/json, text/event-stream",
     };
     if (initialized) headers["MCP-Protocol-Version"] = PROTOCOL_VERSION;
-    const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(TIMEOUT_MS) });
+    // redirect: "error" — the key is never carried to wherever a redirect points.
+    const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(payload), redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
     const text = await response.text();
     const observedAt = now().toISOString();
     if (notification) return { status: response.status, observedAt };

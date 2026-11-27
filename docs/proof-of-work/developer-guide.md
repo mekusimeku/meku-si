@@ -38,8 +38,11 @@ Subscribe to the ledger issue (**Subscribe** on GitHub), so that GitHub's notifi
 
 ## 3. Get the tools (no installs)
 
+Use the exact version the ledger names. Its first record, `pilot_opened`, links the protocol at a commit: `https://github.com/mekusimeku/meku-si/blob/<COMMIT>/docs/proof-of-work/protocol.md`.
+
 ```sh
 git clone https://github.com/mekusimeku/meku-si && cd meku-si
+git checkout <COMMIT>                                              # the commit named in pilot_opened
 node --test tools/pow/pow.test.mjs tools/pow/pow-docs.test.mjs   # offline; all tests should pass
 node tools/pow/synthetic.mjs /tmp/pow-try   # a SYNTHETIC example ledger
 node tools/pow/verify.mjs /tmp/pow-try/bundle.json --allow-synthetic

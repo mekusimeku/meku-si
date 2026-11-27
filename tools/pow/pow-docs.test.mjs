@@ -25,6 +25,7 @@ test("every operator template becomes a valid record once its CAPITAL placeholde
       .replaceAll("DEVELOPER_LOGIN", "example-dev")
       .replaceAll("HUMAN_LOGIN", "example-human")
       .replaceAll('"CODE"', '"K7QX29MD"')
+      .replaceAll("COMMIT", "0123456789abcdef0123456789abcdef01234567")
       .replaceAll("NEXT", "7");
   const blocks = jsonBlocks(read("operator-runbook.md")).map((b) => JSON.parse(fill(b)));
   assert.deepEqual(
@@ -34,7 +35,7 @@ test("every operator template becomes a valid record once its CAPITAL placeholde
   for (const record of blocks) assert.deepEqual(recordProblems(record), [], record.type);
   assert.deepEqual(
     blocks[0],
-    openedRecord({ pilotId: "POW-001", operator: "mekusimeku", developer: "example-dev", protocolUrl: "https://github.com/mekusimeku/meku-si/blob/main/docs/proof-of-work/protocol.md" }),
+    openedRecord({ pilotId: "POW-001", operator: "mekusimeku", developer: "example-dev", protocolUrl: "https://github.com/mekusimeku/meku-si/blob/0123456789abcdef0123456789abcdef01234567/docs/proof-of-work/protocol.md" }),
   );
 });
 
@@ -46,7 +47,7 @@ test("the check table in records.md matches the verifier exactly", () => {
 });
 
 test("every relative link in the pilot docs points at a file that exists", () => {
-  const files = ["protocol.md", "developer-guide.md", "human-guide.md", "operator-runbook.md", "records.md", "report-template.md"].map((f) => join(docs, f));
+  const files = ["protocol.md", "developer-guide.md", "human-guide.md", "operator-runbook.md", "records.md", "report-template.md", "founder-setup.md", "developer-invitation.md", "coordination.md"].map((f) => join(docs, f));
   files.push(join(here, "README.md"));
   for (const file of files) {
     for (const [, target] of readFileSync(file, "utf8").matchAll(/\]\(([^)\s]+)\)/g)) {
@@ -60,9 +61,9 @@ test("every relative link in the pilot docs points at a file that exists", () =>
 test("commands quoted in the guides exist in the tools", () => {
   const usage = {
     "request.mjs": ["prepare", "check", "submit", "status", "reveal", "ready-manual", "import-submit", "import-status"],
-    "record.mjs": ["opened", "reviewed", "offered", "consent", "evidence", "returned", "decision", "closed", "stop", "verification", "digest", "schema", "request-id-sha256", "hash-file", "check-image"],
+    "record.mjs": ["opened", "reviewed", "offered", "consent", "evidence", "returned", "decision", "closed", "stop", "verification", "digest", "schema", "request-id-sha256", "hash-file", "check-image", "check-comment"],
   };
-  for (const name of ["developer-guide.md", "operator-runbook.md", "protocol.md"]) {
+  for (const name of ["developer-guide.md", "operator-runbook.md", "protocol.md", "founder-setup.md", "records.md"]) {
     for (const [, tool, command] of read(name).matchAll(/tools\/pow\/(request\.mjs|record\.mjs) ([a-z-]+)/g))
       assert.ok(usage[tool].includes(command), `${name}: ${tool} ${command}`);
   }

@@ -1,13 +1,13 @@
 # Operator runbook: MEKU pilot POW-001
 
-For the MEKU operator account `mekusimeku`. Every step works from a phone browser. Each record is a block to copy, with a few values in CAPITALS to replace, and no hashing. Post each block as a **new comment** in the ledger and **never edit it afterwards**. Read the [protocol](protocol.md) first.
+For the MEKU operator account `mekusimeku`. Every step works from a phone browser. First do the [founder setup](founder-setup.md): phone test, second reviewer account, developer invitation and pilot key. Each record is a block to copy, with a few values in CAPITALS to replace, and no hashing. Post each block as a **new comment** in the ledger and **never edit it afterwards**. Read the [protocol](protocol.md) first.
 
 ## Before opening (all non-financial)
 
 1. **Developer.** Choose an independent developer who confirms the four statements in the [developer guide](developer-guide.md#0-check-that-you-are-eligible). MEKU staff, contractors and MEKU's own AI workers cannot take this role.
-2. **Second reviewer.** Pick a MEKU account other than the one that will issue the key: a SEEK reviewer or a second admin. MEKU refuses a review by the account that issued the key, because requests made with a key belong to that account.
+2. **Second reviewer.** Pick a MEKU account other than the one that will issue the key: a SEEK reviewer or a second admin. MEKU refuses a review by the account that issued the key, because requests made with a key belong to that account. To add one, see the [founder setup](founder-setup.md#2-second-reviewer-account).
 3. **Human.** Find a consenting adult who is not MEKU staff, not one of MEKU's AI workers and not the developer, and who has a GitHub account (a new pseudonymous one is fine). Send them the [human guide](human-guide.md). Never offer payment.
-4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 5 per minute and 30 per day. MEKU counts every call that carries the key, and an MCP host spends 3 calls just to connect. Leave **SEARCH ONLY** and **ENABLE CONCIERGE PROPOSALS** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it.
+4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 5 per minute and 30 per day (the form suggests 20 per day: change it). MEKU counts every call that carries the key, and an MCP host spends 3 calls just to connect. Leave **SEARCH ONLY** and **ENABLE CONCIERGE PROPOSALS** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it. Watching and revoking it: [founder setup](founder-setup.md#3-pilot-key-issue-limit-watch-revoke).
 
 5. **Dry run of the human's screenshot.** Phones and apps differ in what they add to an image, so test the human's exact way of posting before the pilot. Create an issue in `mekusimeku/meku-si` titled **POW-001 dry run: test screenshot** and send the human its link. They post one screenshot of a photo of a blank sheet of paper, as the [human guide](human-guide.md#before-you-start-a-dry-run-of-your-screenshot) describes. Then ask any agent working for you to run this command, which needs no key, on the image's link (press and hold the image, then copy its address):
 
@@ -21,7 +21,7 @@ Nothing in this pilot creates a mission, starts a payment, uses a wallet, or tou
 
 ## seq 0: open the ledger
 
-Create a new issue in `mekusimeku/meku-si` titled **POW-001 ledger: independent proof-of-work pilot**. Put a short plain explanation and a link to the protocol in the issue text; the issue text is not a record. Then post this as the **first comment**, replacing `DEVELOPER_LOGIN` with the developer's GitHub login (no @). For a link that can never change, you may replace `main` in the protocol address with the commit id shown on GitHub.
+Create a new issue in `mekusimeku/meku-si` titled **POW-001 ledger: independent proof-of-work pilot**. Put a short plain explanation and a link to the protocol in the issue text; the issue text is not a record. Then post this as the **first comment**, replacing `DEVELOPER_LOGIN` with the developer's GitHub login (no @) and `COMMIT` with the 40-character id of the commit you approved. PR #43's description gives the exact link to paste. The pinned link tells every verifier which version of the protocol and tools the pilot runs under; without it the verifier warns.
 
 ```json
 {
@@ -30,7 +30,7 @@ Create a new issue in `mekusimeku/meku-si` titled **POW-001 ledger: independent 
   "seq": 0,
   "type": "pilot_opened",
   "role": "operator",
-  "protocol": "https://github.com/mekusimeku/meku-si/blob/main/docs/proof-of-work/protocol.md",
+  "protocol": "https://github.com/mekusimeku/meku-si/blob/COMMIT/docs/proof-of-work/protocol.md",
   "mcp_endpoint": "https://meku.farm/api/public/mcp",
   "variant": "operator-relayed",
   "roster": {

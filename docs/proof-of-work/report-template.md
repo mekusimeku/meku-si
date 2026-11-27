@@ -9,13 +9,13 @@ Copy this file to `pilots/POW-001/README.md` and replace every `[bracketed]` par
 | | |
 | --- | --- |
 | **Verdict** | `[PASS / FAIL / STOPPED / REJECTED_BY_REVIEW / COMPLETED_REJECTED / INCOMPLETE]` |
-| **Variant** | operator-relayed (offer, consent, evidence and result travelled through the public ledger, not inside MEKU's product) |
+| **Variant** | manually coordinated (operator-relayed): offer, consent, evidence and result travelled through the public ledger by hand, not inside MEKU's product. Not an automated network operation |
 | **Payment** | none, in any form |
 | **Ledger** | [https://github.com/mekusimeku/meku-si/issues/N] |
 | **Ledger digest, all records** | `[sha256 printed by verify.mjs]` |
 | **Python reference digest** | `[sha256 printed by digest_reference.py; must be identical]` |
 | **Exported from the live issue by** | [who ran `verify.mjs --from-issue`, and when; a supplied bundle file does not count] |
-| **Protocol and tools** | `meku.pow/1`, `tools/pow/` at commit `[commit id]` |
+| **Protocol and tools** | `meku.pow/1`, `tools/pow/` at commit `[commit id named in the pilot_opened protocol link]` |
 | **Independent verification** | [links to `independent_verification` comments by accounts outside the roster, or **none yet**] |
 
 ## 1. What was tested

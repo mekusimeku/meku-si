@@ -5,7 +5,7 @@ Small, dependency-free Node.js 20+ tools for the [MEKU proof-of-work pilot](../.
 | File | Who uses it | What it does |
 | --- | --- | --- |
 | `request.mjs` | developer | MCP client: `prepare`, `check`, `submit`, `status`, `reveal`; also `ready-manual`, `import-submit` and `import-status` when your own MCP host makes the calls. It refuses edited requests, never retries on its own, never follows a redirect with the key, keeps private receipts and prints ledger records. |
-| `record.mjs` | everyone | Prints ready-to-post records: `opened`, `reviewed`, `offered`, `consent`, `evidence`, `returned`, `decision`, `closed`, `stop`, `verification`, `digest`, `schema`; `check-image` runs the evidence checks on any file or GitHub attachment link, for a dry run before a pilot. |
+| `record.mjs` | everyone | Prints ready-to-post records: `opened`, `reviewed`, `offered`, `consent`, `evidence`, `returned`, `decision`, `closed`, `stop`, `verification`, `digest`, `schema`; `check-image` runs the evidence checks on a file, an attachment link or every attachment in a comment, and `check-comment` shows how the verifier reads one posted record: both for the phone tests before a pilot. |
 | `export.mjs` | anyone | Ledger issue to `bundle.json` plus evidence files, using GitHub's public API. |
 | `verify.mjs` | anyone | Verifier: 33 automated checks, manual checks M01 to M05 (with everything the human wrote besides records), verdict and exit code. `--from-issue <url>` exports the live ledger first. Only such a self-made export counts; a bundle file alone proves nothing. |
 | `digest_reference.py` | anyone | Independent Python implementation of record extraction and the ledger digest. It shares no code with the JavaScript tools. |

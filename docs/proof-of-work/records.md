@@ -33,7 +33,7 @@ Every record starts with:
 
 | seq | `type` | `role` | Fields after the envelope |
 | --- | --- | --- | --- |
-| 0 | `pilot_opened` | operator | `protocol` (URL of this protocol), `mcp_endpoint` = `https://meku.farm/api/public/mcp`, `variant` = `operator-relayed`, `roster` {`operator`, `developer`}, `task` (fixed protocol constants), `payment` = `none` |
+| 0 | `pilot_opened` | operator | `protocol` (URL of this protocol, pinned to a commit: `https://github.com/mekusimeku/meku-si/blob/<40-character commit id>/docs/proof-of-work/protocol.md`), `mcp_endpoint` = `https://meku.farm/api/public/mcp`, `variant` = `operator-relayed`, `roster` {`operator`, `developer`}, `task` (fixed protocol constants), `payment` = `none` |
 | 1 | `developer_ready` | developer | `client` {`name`, `version`}, `agent` (what made the calls), `server` {`name` = `meku-human-cloud`, `version`, `protocol_version`}, `tools_listed`, `independence` (four statements, all `true`), `payment` = `none` |
 | 2 | `request_submitted` | developer | `code`, `object_commitment` (see below), `arguments` (exactly what was sent to `meku_request_human`), `arguments_sha256`, `request_id_sha256`, `response` {`status`, `created_at`, `deduplicated`}, `response_text_sha256`, `observed_at`, `payment` = `none` |
 | 3 | `request_reviewed` | operator | `code` (as shown in the request the reviewer saw), `decision` (`approved` or `rejected`), `reviewer_role` (`seek_reviewer` or `admin`), `reviewer_is_key_issuer` = `false`, optional `note` |
@@ -104,7 +104,7 @@ The verifier recomputes every file hash itself. It opens only regular files insi
 | ID | Check | What it compares |
 | --- | --- | --- |
 | L01 | Bundle format and source issue are valid | `format` and the issue URL; a real pilot's ledger must be an issue in `mekusimeku/meku-si` |
-| L02 | Every MEKU record from a roster account parses and matches its schema | each record against the schema, including the constant `true` statements and `payment` = `none`; WARN for a roster comment that hides text or mentions `meku.pow/1` without a readable record |
+| L02 | Every MEKU record from a roster account parses and matches its schema | each record against the schema, including the constant `true` statements and `payment` = `none`; WARN for a roster comment that hides text or mentions `meku.pow/1` without a readable record, and when a real pilot's `protocol` link is not pinned to a commit |
 | L03 | All records carry one pilot id; synthetic data is never accepted as a real pilot | `pilot_id` across records; `POW-SYNTHETIC-…` fails without `--allow-synthetic` |
 | L04 | Records follow the protocol order with contiguous seq numbers | seq 0, 1, 2 … and the allowed next type at each step |
 | L05 | Record comments were never edited | GitHub `updated_at` equals `created_at` |

@@ -26,6 +26,24 @@ The pilot is unpaid. No token, wallet or payment is involved at any point, and n
 | Offer, consent, evidence, result | A public GitHub issue (the **ledger**), relayed by the MEKU operator | **Manual relay.** MEKU cannot deliver an unpaid task to a person inside its product today: a mission reaches a person only after a confirmed payment, and live payments are off. The status tool returns no results. Every report must therefore say **operator-relayed**. |
 | Verification | Anyone | Tools ready and tested offline on synthetic data, including planted faults the verifier must catch. A second, independent Python implementation reproduces the ledger digest, and an independent JSON Schema validator accepts the records. |
 
+## Manual pilot, not automated network operation
+
+POW-001 is a **manually coordinated pilot**. People do by hand, in a public GitHub issue, several steps that an automated MEKU network would do inside its product. A verified POW-001 shows that one request from an independent agent was fulfilled by a consenting person, with every step public and checkable. It does not show that MEKU's network delivers, checks or returns work automatically.
+
+| Step | In POW-001 | In a fully automated network operation | In MEKU today |
+| --- | --- | --- | --- |
+| Agent connects | The developer's agent, over MCP, with a key a MEKU admin issued by hand | The same, with keys issued through an access plan | MCP live; request-capable keys are issued by an admin |
+| Agent submits the request | Over MCP, after a person types the request's code back | Over MCP, within the key's limits | Live |
+| Request is reviewed | A second MEKU account taps **APPROVE** | The same: review stays human by design | Live; self-review refused by the app, not yet by the database (B7) |
+| A person is found and offered the task | The operator recruits a volunteer and names them in the ledger | MEKU offers the task to people in its product | Only after a confirmed payment, and payments are off (B5) |
+| Consent, instructions, evidence | GitHub comments in the ledger | Inside the mission in MEKU | Part of MEKU's paid-mission flow, behind the same payment gate |
+| Result returns to the agent | The operator posts `result_returned` in the ledger | The agent reads the checked result over MCP | Not built: the status tool returns request states only (B4) |
+| Agent decides | The developer runs the tools and posts the decision | The agent accepts or rejects over MCP | Not built |
+| Verification | Anyone, offline, from the public ledger | The same, plus records MEKU signs | Tools ready; MEKU's answers are not signed |
+| Payment | None | Paid missions | Off until the founder authorizes it |
+
+Reports, posts and replies about POW-001 must call it a manually coordinated (operator-relayed) pilot, never an automated or autonomous network operation.
+
 ## Roles
 
 | Role | Who | Rules |

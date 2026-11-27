@@ -32,8 +32,8 @@ import { verifyBundle, formatReport } from "./verify.mjs";
 import { SYNTHETIC, buildSyntheticPilot, makeJpeg, makePng, pngChunk, tiffWithGps } from "./synthetic.mjs";
 import { checkConnection, importStatus, importSubmission, keyKind, makeClient, manualReadyRecord, prepareRequest, recordComment, submitRequest } from "./request.mjs";
 import { createMockMeku } from "./mock-meku-mcp.mjs";
-import { consentRecord, evidenceRecord, stopRecord, closedRecord } from "./record.mjs";
-import { exportLedger } from "./export.mjs";
+import { commentReport, consentRecord, evidenceRecord, stopRecord, closedRecord } from "./record.mjs";
+import { exportLedger, fetchComment } from "./export.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..");
@@ -1144,4 +1144,58 @@ test("check-image refuses a URL that is not a GitHub attachment, before any down
   const out = spawnSync(process.execPath, [join(here, "record.mjs"), "check-image", "https://example.com/a.png"], { encoding: "utf8" });
   assert.equal(out.status, 1);
   assert.match(out.stderr, /not a GitHub attachment URL/);
+});
+
+// ---- Founder phone test support (2026-11-28) ----------------------------------------------
+
+test("check-comment reports how the verifier reads one posted record", async () => {
+  const t = "2026-11-28T00:00:00Z";
+  const comment = (body, updated = t) => ({ id: 1, author: "mekusimeku", created_at: t, updated_at: updated, html_url: "#", body });
+  const record = { pow: "meku.pow/1", pilot_id: "POW-001", seq: 3, type: "request_reviewed", role: "operator", code: "K7QX29MD", decision: "approved", reviewer_role: "seek_reviewer", reviewer_is_key_issuer: false };
+  const block = JSON.stringify(record, null, 2);
+  assert.equal(commentReport(comment(block)).ok, true, "a bare block, as the copy button pastes it");
+  assert.equal(commentReport(comment("```json\n" + block + "\n```")).ok, true);
+  const curly = commentReport(comment(block.replace('"approved"', "“approved”")));
+  assert.equal(curly.ok, false);
+  assert.match(curly.problems.join(" "), /Smart Punctuation/);
+  assert.match(commentReport(comment(block, "2026-11-28T00:05:00Z")).problems.join(" "), /edited/);
+  assert.match(commentReport(comment(block + "\n<!-- x -->")).problems.join(" "), /hides text/);
+  assert.match(commentReport(comment("I approved it")).problems.join(" "), /finds no meku\.pow\/1 record/);
+  assert.match(commentReport(comment("```json\n" + block + "\n```\n```json\n" + block + "\n```")).problems.join(" "), /more than one record/);
+  assert.match(commentReport(comment(block.replace('"K7QX29MD"', '"K7QX29M"'))).problems.join(" "), /code/);
+});
+
+test("fetchComment reads one public comment and refuses anything but a comment link", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return new Response(JSON.stringify({ id: 7, user: { login: "mekusimeku" }, created_at: "a", updated_at: "a", html_url: "h", body: "b" }), { status: 200 });
+  };
+  const c = await fetchComment("https://github.com/mekusimeku/meku-si/pull/43#issuecomment-7226380940", { fetchImpl });
+  assert.equal(calls[0].url, "https://api.github.com/repos/mekusimeku/meku-si/issues/comments/7226380940");
+  assert.equal(calls[0].init.headers.Authorization, undefined, "no token unless one is given");
+  assert.deepEqual([c.author, c.body], ["mekusimeku", "b"]);
+  await fetchComment("https://github.com/mekusimeku/meku-si/issues/1#issuecomment-2", { fetchImpl, token: "t" });
+  assert.equal(calls[1].init.headers.Authorization, "Bearer t");
+  for (const bad of ["https://evil.example/x#issuecomment-1", "https://github.com/a/b/issues/1", "https://github.com/a/b/issues/1#issuecomment-1x"])
+    await assert.rejects(fetchComment(bad, { fetchImpl }), /Give a comment link/);
+  assert.equal(calls.length, 2, "nothing is fetched for a bad link");
+  const out = spawnSync(process.execPath, [join(here, "record.mjs"), "check-comment", "not-a-link"], { encoding: "utf8" });
+  assert.equal(out.status, 1);
+  assert.match(out.stderr, /Give a comment link/);
+});
+
+test("a real pilot whose opening does not pin the protocol to a commit gets a warning", async () => {
+  const warned = async (protocol) => {
+    const p = await pilot();
+    rewrite(p.bundle, 0, (r) => {
+      r.pilot_id = "POW-001";
+      r.protocol = protocol;
+    });
+    p.bundle.source.issue_url = "https://github.com/mekusimeku/meku-si/issues/999";
+    const r = verify(p, { allowSynthetic: false, expectOperator: SYNTHETIC.operator });
+    return check(r, "L02").details.some((d) => /not pinned to a commit/.test(d));
+  };
+  assert.equal(await warned("https://github.com/mekusimeku/meku-si/blob/main/docs/proof-of-work/protocol.md"), true);
+  assert.equal(await warned(`https://github.com/mekusimeku/meku-si/blob/${"a1".repeat(20)}/docs/proof-of-work/protocol.md`), false);
 });

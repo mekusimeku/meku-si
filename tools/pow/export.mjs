@@ -14,6 +14,29 @@ import { BUNDLE_FORMAT, MAX_EVIDENCE_BYTES, extractAttachmentUrls, extractRecord
 export const EXPORTER_VERSION = "meku.pow-export/1";
 const MAX_PAGES = 10;
 
+const apiHeaders = (token) => ({
+  Accept: "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+  "User-Agent": EXPORTER_VERSION,
+  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+});
+
+const COMMENT_LINK = /^https:\/\/github\.com\/([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})\/(?:issues|pull)\/\d{1,9}#issuecomment-(\d{1,15})$/;
+
+/** Reads one public comment, for checking how a record posted from a phone will be read. */
+export async function fetchComment(link, { fetchImpl = fetch, token } = {}) {
+  const match = String(link).match(COMMENT_LINK);
+  if (!match) throw new Error("Give a comment link: https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id> (also /pull/<n>)");
+  const [, owner, repo, id] = match;
+  const response = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/issues/comments/${id}`, {
+    headers: apiHeaders(token),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`GitHub API answered HTTP ${response.status} for that comment`);
+  const c = await response.json();
+  return { id: c.id, author: c.user?.login ?? null, created_at: c.created_at, updated_at: c.updated_at, html_url: c.html_url, body: c.body ?? "" };
+}
+
 function parseIssueUrl(issueUrl) {
   if (!isLedgerUrl(issueUrl)) throw new Error("Give the ledger as https://github.com/<owner>/<repo>/issues/<number>");
   const [, owner, repo, , number] = new URL(issueUrl).pathname.split("/");
@@ -54,16 +77,11 @@ export async function downloadAttachment(url, { fetchImpl = fetch } = {}) {
 export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token, now = () => new Date(), expectOperator = "mekusimeku" }) {
   const { owner, repo, number } = parseIssueUrl(issueUrl);
   if (existsSync(outDir) && readdirSync(outDir).length) throw new Error(`${outDir} is not empty`);
-  const apiHeaders = {
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": EXPORTER_VERSION,
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  const headers = apiHeaders(token);
   const comments = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}/comments?per_page=100&page=${page}`;
-    const response = await fetchImpl(url, { headers: apiHeaders, signal: AbortSignal.timeout(30_000) });
+    const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error(`GitHub API answered HTTP ${response.status} for comments page ${page}`);
     const batch = await response.json();
     if (!Array.isArray(batch)) throw new Error("GitHub API answer is not a list of comments");

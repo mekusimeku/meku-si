@@ -16,8 +16,12 @@ import {
   TASK_KIND,
   VARIANT,
   canonicalize,
+  displaySafe,
   extractAttachmentUrls,
   extractRecords,
+  freeTextOf,
+  hidesText,
+  imageReferences,
   isGithubLogin,
   isSyntheticPilot,
   ledgerDigest,
@@ -181,6 +185,36 @@ export function verificationRecord({ bundlePath, tool, manualChecks, notes, allo
 
 // ---- CLI ---------------------------------------------------------------------
 
+/** How the verifier would read one posted comment: for the phone test before a pilot. */
+export function commentReport(comment) {
+  const lines = [];
+  const problems = [];
+  const body = String(comment.body ?? "");
+  const edited = comment.updated_at !== comment.created_at;
+  lines.push(`Comment by ${comment.author} at ${comment.created_at}${edited ? " (edited)" : ""}`);
+  if (edited) problems.push("the comment was edited; in a ledger an edited record fails (L05)");
+  const found = extractRecords(body);
+  if (found.length === 0) problems.push("the verifier finds no meku.pow/1 record in this comment");
+  if (found.length > 1) problems.push("the comment holds more than one record");
+  for (const f of found) {
+    if (f.error) {
+      problems.push(f.error);
+      if (/[\u201C\u201D\u201E\u201F\u2033]/.test(body))
+        problems.push("it contains curly quotes, which an iPhone types when Smart Punctuation is on: turn it off and post the block again");
+      continue;
+    }
+    const p = recordProblems(f.record);
+    lines.push(`Record: seq ${f.record.seq ?? "-"} ${f.record.type} (${f.record.pilot_id}): ${p.length ? "INVALID" : "valid"}`);
+    problems.push(...p);
+  }
+  if (hidesText(body)) problems.push("the comment hides text in an HTML comment");
+  const words = freeTextOf(body);
+  if (words) lines.push(`Other text: ${words.replace(/\s+/g, " ").slice(0, 200)}`);
+  const images = imageReferences(body).length;
+  if (images) lines.push(`Images: ${images}, of them GitHub attachments: ${extractAttachmentUrls(body).length}`);
+  return { ok: problems.length === 0, lines, problems };
+}
+
 const USAGE = `Usage: node tools/pow/record.mjs <command> [options]
   opened     --pilot POW-001 --operator <login> --developer <login> --protocol-url <url>
   reviewed   --pilot POW-001 --code <CODE> --decision approved|rejected --reviewer-role seek_reviewer|admin [--note "..."]
@@ -192,7 +226,8 @@ const USAGE = `Usage: node tools/pow/record.mjs <command> [options]
   closed     --pilot POW-001 --seq <n> --outcome completed|stopped|rejected_by_review --key-revoked [--note "..."]
   stop       --pilot POW-001 --seq <n> --role developer|operator|human --reason "..."
   verification --bundle <bundle.json> --tool "<tool and version>" [--code-legible] [--object-matching] [--no-personal-data] [--physical] [--human-did-not-withdraw] [--notes "..."]
-  check-image <file | GitHub attachment URL>       (the evidence checks E03 and E04, e.g. on a test screenshot before a pilot)
+  check-image <file | attachment URL | comment link> (the evidence checks E03 and E04, e.g. on a test screenshot before a pilot)
+  check-comment <GitHub comment link>              (how the verifier reads one posted record, e.g. one posted from a phone)
   digest     --bundle <bundle.json>                (ledger digest over every record in the bundle)
   request-id-sha256 <uuid>
   hash-file  <path>
@@ -295,18 +330,39 @@ async function main(argv) {
       case "check-image": {
         // A file, or a GitHub attachment URL (a test screenshot posted the way the human will
         // post theirs), checked exactly as the verifier checks evidence (E03 and E04).
-        if (!rest[0]) throw new Error("check-image needs a file or a GitHub attachment URL");
-        let bytes;
-        if (/^https?:\/\//i.test(rest[0])) {
-          const { downloadAttachment } = await import("./export.mjs");
-          bytes = (await downloadAttachment(rest[0])).bytes;
-          console.log(`Downloaded ${bytes.length} bytes, SHA-256 ${sha256Hex(bytes)}`);
-        } else bytes = readFileSync(rest[0]);
-        const result = scanImage(bytes);
-        for (const f of result.findings) console.log(`${f.level.padEnd(5)} ${f.code}: ${f.detail}`);
-        const failed = result.findings.some((f) => f.level === "FAIL");
-        console.log(`${failed ? "FAIL" : "PASS"}: ${result.mediaType ?? "unknown type"} ${result.width ?? "?"}x${result.height ?? "?"}${failed ? " (do not post this image)" : ""}`);
+        // A comment link checks every attachment in that comment.
+        if (!rest[0]) throw new Error("check-image needs a file, a GitHub attachment URL or a comment link");
+        const sources = [];
+        if (rest[0].includes("#issuecomment-")) {
+          const { fetchComment } = await import("./export.mjs");
+          const comment = await fetchComment(rest[0], { token: process.env.GITHUB_TOKEN || undefined });
+          sources.push(...extractAttachmentUrls(comment.body));
+          if (!sources.length) throw new Error("that comment holds no GitHub attachment");
+        } else sources.push(rest[0]);
+        let failed = false;
+        for (const source of sources) {
+          let bytes;
+          if (/^https?:\/\//i.test(source)) {
+            const { downloadAttachment } = await import("./export.mjs");
+            bytes = (await downloadAttachment(source)).bytes;
+            console.log(`Downloaded ${source}: ${bytes.length} bytes, SHA-256 ${sha256Hex(bytes)}`);
+          } else bytes = readFileSync(source);
+          const result = scanImage(bytes);
+          for (const f of result.findings) console.log(`${f.level.padEnd(5)} ${f.code}: ${f.detail}`);
+          const bad = result.findings.some((f) => f.level === "FAIL");
+          failed ||= bad;
+          console.log(`${bad ? "FAIL" : "PASS"}: ${result.mediaType ?? "unknown type"} ${result.width ?? "?"}x${result.height ?? "?"}${bad ? " (do not post an image made this way)" : ""}`);
+        }
         return failed ? 1 : 0;
+      }
+      case "check-comment": {
+        if (!rest[0]) throw new Error("check-comment needs a GitHub comment link");
+        const { fetchComment } = await import("./export.mjs");
+        const report = commentReport(await fetchComment(rest[0], { token: process.env.GITHUB_TOKEN || undefined }));
+        for (const line of report.lines) console.log(displaySafe(line));
+        for (const problem of report.problems) console.log(displaySafe(`FAIL  ${problem}`));
+        console.log(report.ok ? "PASS: the verifier reads this record exactly as posted" : "FAIL: fix the way of posting before using it in a ledger");
+        return report.ok ? 0 : 1;
       }
       case "schema":
         console.log(JSON.stringify(recordJsonSchema(), null, 2));

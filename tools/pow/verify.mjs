@@ -45,6 +45,7 @@ import {
 } from "./lib.mjs";
 
 export const VERIFIER_VERSION = "meku.pow-verify/3";
+const PINNED_PROTOCOL = /^https:\/\/github\.com\/mekusimeku\/meku-si\/blob\/[0-9a-f]{40}\/docs\/proof-of-work\/protocol\.md$/;
 const HOUR_MS = 3_600_000;
 
 // Which record may follow which. A stop may follow any record from pilot_opened onward
@@ -139,6 +140,7 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
   const chain = []; // accepted records in seq order: { record, comment }
   const humanWords = []; // everything the human wrote besides records, for manual check M05
   let pilotId = null;
+  let protocolUrl = null;
   let issueUrl = null;
   let evidenceUrl = null;
   let evidenceSha = null;
@@ -184,10 +186,14 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       return;
     }
     pilotId = typeof opening.record.pilot_id === "string" ? opening.record.pilot_id : null;
+    protocolUrl = typeof opening.record.protocol === "string" ? opening.record.protocol : null;
     const synthetic = isSyntheticPilot(pilotId);
     if (synthetic && !allowSynthetic) fail("L03", `${pilotId} is synthetic test data, not a real pilot (use --allow-synthetic only for tests)`);
     if (!synthetic && !issueUrl.toLowerCase().startsWith(`https://github.com/${expectRepo.toLowerCase()}/issues/`))
       fail("L01", `a real pilot ledger must be an issue in ${expectRepo}`);
+    // The opening names the exact version of the protocol and tools the pilot runs under.
+    if (!synthetic && !PINNED_PROTOCOL.test(String(opening.record.protocol)))
+      warn("L02", "pilot_opened.protocol is not pinned to a commit, so a verifier cannot tell which version of the protocol and tools applies");
     if (!sameLogin(opening.comment.author, roster.operator)) fail("R01", `pilot_opened was posted by ${opening.comment.author}, not roster.operator`);
     else if (!synthetic && !sameLogin(roster.operator, expectOperator)) fail("R01", `roster.operator is ${roster.operator}, expected ${expectOperator}`);
     else pass("R01", `operator ${roster.operator}`);
@@ -539,6 +545,7 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       pilot_id: pilotId,
       synthetic: isSyntheticPilot(pilotId),
       issue_url: issueUrl,
+      protocol_url: protocolUrl,
       provenance: provenance ?? { exported_by_this_run: false, note: "This checks only the bundle file given. Export it yourself from the live issue (or use --from-issue) before relying on a PASS." },
       verdict,
       record_count: records.length,
@@ -561,6 +568,7 @@ export function formatReport(result) {
   const lines = [];
   lines.push(`MEKU proof-of-work verification (${result.verifier}, protocol ${result.protocol})`);
   lines.push(`Ledger: ${result.issue_url ?? "unknown"}   Pilot: ${result.pilot_id ?? "unknown"}   Records: ${result.record_count}`);
+  if (result.protocol_url) lines.push(`Protocol named by the ledger: ${result.protocol_url}`);
   lines.push(
     result.provenance?.exported_by_this_run
       ? `Source: exported from GitHub by this run at ${result.provenance.exported_at}`

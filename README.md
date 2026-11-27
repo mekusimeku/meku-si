@@ -31,7 +31,7 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 - [FAQ](docs/faq.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Independent pilot guide](docs/first-pilot.md)
-- **[Proof-of-work pilot POW-001](docs/proof-of-work/protocol.md)**: the first independently verifiable agent-to-human work cycle. Unpaid, with a fixed safe task, a public ledger and an [offline verifier](tools/pow/README.md). Ready for review; not yet run.
+- **[Proof-of-work pilot POW-001](docs/proof-of-work/protocol.md)**: the first independently verifiable agent-to-human work cycle. Unpaid and coordinated by hand (not an automated network operation), with a fixed safe task, a public ledger and an [offline verifier](tools/pow/README.md). Ready for review; not yet run.
 - [Human Cloud showcase](docs/showcase.md)
 - [STARGATE neural-intent research + public simulator](docs/stargate-neural-intent-simulator.md)
 - [Roadmap](ROADMAP.md)

@@ -228,8 +228,13 @@ export function verifyBundle(
         continue;
       }
       if (f !== opening && f.record?.type === "pilot_opened") {
-        if (role) reasons.set(f.comment, "a second pilot_opened");
-        else warn("L07", `ignored another pilot_opened posted by ${f.comment.author}`);
+        if (role) {
+          // One opening per pilot. A second valid one by the operator that says anything else
+          // (apart from its seq) contradicts the roster, pilot id or protocol link of the first.
+          const differs = role === "operator" && recordProblems(f.record).length === 0 && canon({ ...f.record, seq: null }) !== canon({ ...opening.record, seq: null });
+          if (differs) fail("L04", `a second pilot_opened posted at ${f.comment.created_at} says something different from the one posted at ${opening.comment.created_at}`);
+          reasons.set(f.comment, differs ? "contradicts the pilot_opened" : "a second pilot_opened");
+        } else warn("L07", `ignored another pilot_opened posted by ${f.comment.author}`);
         continue;
       }
       const record = f.record;

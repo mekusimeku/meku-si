@@ -13,7 +13,7 @@ Anything else is **not counted**: text before or after the record, two records, 
 
 Other rules:
 
-- Only accounts on the roster count. `pilot_opened` names the operator and the developer, and `task_offered` names the human. A pilot has one human: if the operator's offers name more than one, even in an offer posted before its turn, the ledger fails (H02). A record in another participant's role is not counted (R02). Record-shaped comments from anyone else are ignored and reported (L07).
+- Only accounts on the roster count. `pilot_opened` names the operator and the developer, and `task_offered` names the human. A pilot has one human: if the operator's offers name more than one, even in an offer posted before its turn, the ledger fails (H02). It also has one opening: a second `pilot_opened` by the operator that says anything else, apart from its seq, fails (L04); an identical one is ignored. A record in another participant's role is not counted (R02). Record-shaped comments from anyone else are ignored and reported (L07).
 - Every comment by a participant that is not a counted record is printed in full, with its link: the human's for manual check M05, the others' for M06. A STOP among the human's comments needs a stop record (H05).
 - Numbers must be whole numbers: `1.0` or `1e3` makes the record invalid. JavaScript and Python would otherwise hash them differently.
 - No string may contain control characters, text-direction overrides, `<!--`, `-->`, three backticks or three tildes. Such a record is not counted. The verifier also escapes everything it prints.

@@ -1814,6 +1814,17 @@ test("review 7: a pilot has one human, so offers naming two humans fail, even on
   }
 });
 
+test("review 8 P3: a second pilot_opened that says something else fails; the same one is ignored", async () => {
+  for (const [change, verdict] of [[(r) => ({ ...r, roster: { ...r.roster, developer: "synthetic_other" } }), "FAIL"], [(r) => r, "PASS"]]) {
+    const p = await hostile();
+    const opening = extractRecords(p.bundle.comments[0].body)[0].record;
+    appendRecord(p.bundle, SYNTHETIC.operator, change(clone(opening)), 3);
+    const r = verify(p);
+    assert.equal(r.verdict, verdict, JSON.stringify(r.checks.filter((x) => x.status === "FAIL")));
+    if (verdict === "FAIL") assert.match(check(r, "L04").details.join(" "), /a second pilot_opened .* says something different/);
+  }
+});
+
 test("review 4 N1: a header line can carry only the reveal's instruction, and it must match", async () => {
   const p = await hostile();
   const i = commentIndexFor(p.bundle, 7);

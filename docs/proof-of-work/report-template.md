@@ -13,7 +13,7 @@ Copy this file to `pilots/POW-001/README.md` and replace every `[bracketed]` par
 | **Payment** | none, in any form |
 | **Ledger** | [https://github.com/mekusimeku/meku-si/issues/N] |
 | **Ledger digest, all records** | `[sha256 printed by verify.mjs]` |
-| **Python reference digest** | `[sha256 printed by digest_reference.py; must be identical]` |
+| **Python reference digest** | `[sha256 printed by digest_reference.py; must be identical. If the verifier listed records it did not count as invalid, run it with --skip and those comment ids, and say so]` |
 | **Exported from the live issue by** | [who ran `verify.mjs --from-issue`, and when; a supplied bundle file does not count] |
 | **Protocol and tools** | `meku.pow/1`, `tools/pow/` at commit `[commit id named in the pilot_opened protocol link]` |
 | **Independent verification** | [links to `independent_verification` comments by accounts outside the roster, or **none yet**] |
@@ -28,7 +28,7 @@ An independent developer's AI agent requested one small physical task through ME
 | --- | --- | --- |
 | Developer | [login] | Client: [name version]. Agent: [as recorded in seq 1]. Path: [built-in client / own MCP host] |
 | Operator | mekusimeku | MEKU's official account |
-| Reviewer | [not public] | Role: [seek_reviewer / admin]; attested not to be the key issuer |
+| Reviewer | [not public] | Role: [seek_reviewer / admin]; attested not to be the key issuer's account; held by the same person as the key issuer: [yes/no, from `reviewer_same_person_as_key_issuer`] |
 | Human | [login] | Registered MEKU human: [yes / no]. Contacted by: [channel] |
 | Outside verifier(s) | [login(s)] | Not on the roster |
 

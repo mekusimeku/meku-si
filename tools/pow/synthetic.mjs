@@ -190,7 +190,7 @@ export async function buildSyntheticPilot() {
   });
   const submitted = await submitRequest({ client, prepared, confirm: prepared.code });
   post(S.developer, 20, submitted.record);
-  post(S.operator, 60, reviewedRecord({ pilotId: S.pilotId, code: prepared.code, decision: "approved", reviewerRole: "seek_reviewer", note: "Synthetic review" }));
+  post(S.operator, 60, reviewedRecord({ samePerson: false, pilotId: S.pilotId, code: prepared.code, decision: "approved", reviewerRole: "seek_reviewer", note: "Synthetic review" }));
   mock.setStatus(S.requestId, "approved");
   clockMinute = 69;
   const status = await readStatus({ client, receipt: submitted.receipt });

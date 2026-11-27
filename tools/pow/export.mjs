@@ -9,7 +9,7 @@
 import { mkdirSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BUNDLE_FORMAT, MAX_EVIDENCE_BYTES, extractAttachmentUrls, isLedgerUrl, rosterFromComments, sameLogin, sha256Hex } from "./lib.mjs";
+import { BUNDLE_FORMAT, MAX_EVIDENCE_BYTES, extractAttachmentUrls, isLedgerUrl, readRecordComment, rosterFromComments, sameLogin, sha256Hex } from "./lib.mjs";
 
 export const EXPORTER_VERSION = "meku.pow-export/2";
 // Up to 10,000 comments, so that a crowd of outside comments cannot make a ledger unexportable
@@ -116,10 +116,14 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
   // each image for metadata, not only the evidence. A stranger's files are never fetched.
   const roster = rosterFromComments(comments, { expectOperator });
   const participants = [roster.operator, roster.developer, roster.human].filter((login) => typeof login === "string");
-  for (const comment of comments) {
+  // The human's evidence comes first and never counts against the limit, so that a crowd of
+  // other images can never push the evidence out of the bundle.
+  const isEvidence = (comment) => sameLogin(comment.author, roster.human) && readRecordComment(comment.body)?.record?.type === "evidence_submitted";
+  const order = [...comments.filter(isEvidence), ...comments.filter((c) => !isEvidence(c))];
+  for (const comment of order) {
     if (!participants.some((login) => sameLogin(comment.author, login))) continue;
     for (const url of extractAttachmentUrls(comment.body)) {
-      if (evidenceFiles.filter((e) => e.file).length >= MAX_ATTACHMENTS) {
+      if (!isEvidence(comment) && evidenceFiles.filter((e) => e.file && !e.evidence).length >= MAX_ATTACHMENTS) {
         evidenceFiles.push({ comment_id: comment.id, url, file: null, error: `more than ${MAX_ATTACHMENTS} attachments; not downloaded` });
         continue;
       }
@@ -131,7 +135,7 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
         const ext = bytes[0] === 0x89 ? "png" : bytes[0] === 0xff ? "jpg" : "bin";
         const file = `evidence/${sha256}.${ext}`;
         writeFileSync(join(outDir, file), bytes);
-        evidenceFiles.push({ comment_id: comment.id, url, file, sha256, bytes: bytes.length, content_type: contentType });
+        evidenceFiles.push({ comment_id: comment.id, url, file, sha256, bytes: bytes.length, content_type: contentType, ...(isEvidence(comment) ? { evidence: true } : {}) });
       } catch (error) {
         evidenceFiles.push({ comment_id: comment.id, url, file: null, error: error.message });
       }

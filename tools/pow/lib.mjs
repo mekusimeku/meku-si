@@ -286,6 +286,7 @@ export const RECORD_TYPES = Object.freeze({
       decision: oneOf("approved", "rejected"),
       reviewer_role: oneOf("seek_reviewer", "admin"),
       reviewer_is_key_issuer: constant(false),
+      reviewer_same_person_as_key_issuer: bool(),
       note: optional(str(0, 300)),
     },
   },
@@ -580,7 +581,10 @@ export function recordJsonSchema() {
  *  implementation; String.prototype.trim and Python's strip disagree on other characters. */
 export const jsonTrim = (text) => String(text).replace(/^[ \t\n\r]+|[ \t\n\r]+$/g, "");
 
-const HEADER_LINE = /^MEKU proof-of-work record: (?:seq [0-9]{1,4} )?[a-z_]{1,40} \(POW-[A-Z0-9-]{1,40}\)(?: - [^\n<>`]{0,200})?$/;
+// The only label a header may carry is the reveal's instruction to the human, so a header
+// line can never hold words that nobody reads.
+const HEADER_LINE =
+  /^MEKU proof-of-work record: (?:seq [0-9]{1,4} )?[a-z_]{1,40} \(POW-[A-Z0-9-]{1,40}\)(?: - write ([0-9A-HJKMNP-TV-Z]{10}) and put an? ([A-Z]{2,5}) next to it)?$/;
 const IMAGE_AT_START = /^(?:!\[[^\]\n]{0,200}\]\([^)\s]{1,300}\)|<img\b[^<>\n]{0,1000}>)/i;
 const IMAGE_AT_END = /(?:!\[[^\]\n]{0,200}\]\([^)\s]{1,300}\)|<img\b[^<>\n]{0,1000}>)$/i;
 
@@ -624,7 +628,8 @@ export function readRecordComment(body) {
     text = jsonTrim(cut(m));
   }
   const lines = text.split("\n");
-  if (HEADER_LINE.test(lines[0])) text = jsonTrim(lines.slice(1).join("\n"));
+  const header = lines[0].match(HEADER_LINE);
+  if (header) text = jsonTrim(lines.slice(1).join("\n"));
   let json;
   if (text.startsWith("```")) {
     const block = text.split("\n");
@@ -644,7 +649,14 @@ export function readRecordComment(body) {
   }
   if (!isRecordObject(record)) return { problem: 'JSON without "pow": "meku.pow/1"' };
   if (image && record.type !== "evidence_submitted") return { problem: "an image beside a record other than the evidence" };
-  return { record, image };
+  if (!image && record.type === "evidence_submitted") return { problem: "the evidence record without its screenshot; post both in one comment" };
+  let label = null;
+  if (header?.[1]) {
+    if (record.type !== "object_revealed" || header[1].slice(8) !== record.suffix || header[2] !== record.object)
+      return { problem: "a header line whose instruction does not match the record" };
+    label = { code: header[1].slice(0, 8), suffix: header[1].slice(8), object: header[2] };
+  }
+  return { record, image, label };
 }
 
 /** JSON for records: refuses fractional and exponent numbers, which JavaScript and Python
@@ -691,7 +703,7 @@ export function wordsBesideRecord(body) {
 export function extractRecords(body) {
   const read = readRecordComment(body);
   if (!read) return [];
-  return read.problem ? [{ error: read.problem }] : [{ record: read.record, image: read.image }];
+  return read.problem ? [{ error: read.problem }] : [{ record: read.record, image: read.image, label: read.label }];
 }
 
 // The documented STOP: a comment that says only one of these words (any case or width, with

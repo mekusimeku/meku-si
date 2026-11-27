@@ -27,7 +27,7 @@ Some phones add hidden data to images, and the pilot can only use a screenshot t
 1. Take a photo of a **blank** sheet of paper, with nothing else in the picture.
 2. Make a screenshot of it exactly as step 3 below describes.
 3. Before posting, open the screenshot in your photo app and swipe up on it. If you see a map or a place name, the image carries a location: do not post it, and tell the operator.
-4. Post that screenshot as a comment in the dry-run issue the operator sends you, from the same phone and the same app or browser you will use later.
+4. In the dry-run issue the operator sends you, post one comment with the evidence block from step 4 below and that screenshot attached, exactly as you will in the ledger, from the same phone and the same app or browser.
 
 Anything you post on GitHub is public at once, so post only the screenshot of the blank page, never the photo itself. Your GitHub username appears on that issue. The operator has the image checked and tells you whether it passed, and also checks that your comment can be seen by others: GitHub sometimes hides comments from brand-new accounts. If the check did not pass, the operator will suggest another way to make the screenshot, and you try again.
 
@@ -95,7 +95,7 @@ The developer will post a comment whose first line says, for example, `write K7Q
 
 ## Step 4: post the evidence
 
-Post a **new comment** in the ledger with exactly this block and attach the **screenshot** to the same comment, one image only, and write nothing else in it. On GitHub, use the paperclip or "Paste, drop, or click to add files":
+Post a **new comment** in the ledger with exactly this block and attach the **screenshot** to the same comment, one image only, and write nothing else in it. The block counts only together with its screenshot. On GitHub, use the paperclip or "Paste, drop, or click to add files":
 
 ```json
 {
@@ -114,11 +114,12 @@ Post a **new comment** in the ledger with exactly this block and attach the **sc
 }
 ```
 
-Post it within 48 hours of the object being named. That is all; the operator and the developer do the rest.
+Post it within 48 hours of the object being named. If you forgot the screenshot, or attached the wrong one, post the block again with the right screenshot, before the operator returns the result: the last one counts. After the operator's result is posted, do not post another screenshot, because it would contradict the one that was checked. That is all; the operator and the developer do the rest.
 
 ## Important
 
 - **Never edit or delete** your comments. If something is wrong, post a new comment or tell the operator. An edited comment stops the pilot from passing unless a stop is recorded, because its first version might have said stop. If a block was not accepted (for example, you added words to it), post the block again, alone, in a new comment.
 - **To stop**, post a comment that says only `STOP` (or only 🛑), or tell the operator. The same word in many other languages also counts, for example berhenti, batal, arrête, 停止, やめて or 그만. A comment like that prevents the pilot from passing until a stop is recorded, even after the pilot has closed. If you want to give a reason, post it in a second comment. Everything you write in the ledger is printed in full for the people who check the pilot, so a request to stop in any other words is also seen. Stopping is never held against you.
+- **Post no other images** in the ledger. Every image a participant posts is checked, and one that carries a location fails the whole pilot.
 - **If one of your comments ever disappears,** tell the developer, who is not part of MEKU. GitHub's notification emails keep your own copy of every comment (see **Subscribe** above).
 - **If you see anything personal** in your posted image, tell the operator at once. Deleting the comment hides it, but the uploaded image stays reachable at its address until GitHub Support removes it. The operator will ask GitHub Support to remove it.

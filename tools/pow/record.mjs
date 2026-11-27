@@ -59,15 +59,24 @@ export function openedRecord({ pilotId, operator, developer, protocolUrl }) {
   });
 }
 
-export function reviewedRecord({ pilotId, code, decision, reviewerRole, note }) {
+export function reviewedRecord({ pilotId, code, decision, reviewerRole, samePerson, note }) {
   return ensureValid({
     ...envelope(pilotId, 3, "request_reviewed", "operator"),
     code,
     decision,
     reviewer_role: reviewerRole,
     reviewer_is_key_issuer: false,
+    // Disclosed either way: two accounts held by one person separate the review only by account.
+    reviewer_same_person_as_key_issuer: samePerson,
     ...(note ? { note } : {}),
   });
+}
+
+/** The seq the next record takes in a ledger, from an exported bundle: for a stop or a close
+ *  typed by hand, where a wrong number would leave the record uncounted. */
+export function nextSeq(bundlePath) {
+  const { bundle, loadEvidence } = loadBundleFile(bundlePath);
+  return verifyBundle(bundle, { loadEvidence, allowSynthetic: true }).record_count;
 }
 
 /** Ledger state from a bundle (a file path, or { bundle, loadEvidence } in memory),
@@ -208,14 +217,14 @@ export function commentReport(comment) {
 
 const USAGE = `Usage: node tools/pow/record.mjs <command> [options]
   opened     --pilot POW-001 --operator <login> --developer <login> --protocol-url <url>
-  reviewed   --pilot POW-001 --code <CODE> --decision approved|rejected --reviewer-role seek_reviewer|admin [--note "..."]
+  reviewed   --pilot POW-001 --code <CODE> --decision approved|rejected --reviewer-role seek_reviewer|admin --same-person yes|no [--note "..."]
   offered    --bundle <bundle.json> --human <login> --registered yes|no --channel github|email|in_person|phone|message|other
   consent    --pilot POW-001                       (the human's record; identical for every pilot)
   evidence   --pilot POW-001                       (the human's record; attach the screenshot in the same comment)
   returned   --bundle <bundle.json> [--code-visible] [--object-visible] [--no-personal-data] [--note "..."]
   decision   --bundle <bundle.json> --accept|--reject --reason "..." [--code-visible] [--code-matches] [--object-visible] [--object-matches] [--no-personal-data]
-  closed     --pilot POW-001 --seq <n> --outcome completed|stopped|rejected_by_review --key-revoked [--note "..."]
-  stop       --pilot POW-001 --seq <n> --role developer|operator|human --reason "..."
+  closed     --pilot POW-001 (--seq <n> | --bundle <bundle.json>) --outcome completed|stopped|rejected_by_review --key-revoked [--note "..."]
+  stop       --pilot POW-001 (--seq <n> | --bundle <bundle.json>) --role developer|operator|human --reason "..."
   verification --bundle <bundle.json> --tool "<tool and version>" [--code-legible] [--object-matching] [--no-personal-data] [--physical] [--human-did-not-withdraw] [--other-comments-consistent] [--notes "..."]
   check-image <file | attachment URL | comment link> (the evidence checks E03 and E04, e.g. on a test screenshot before a pilot)
   check-comment <GitHub comment link>              (how the verifier reads one posted record, e.g. one posted from a phone)
@@ -254,7 +263,7 @@ async function main(argv) {
         print(openedRecord({ pilotId, operator: login("operator"), developer: login("developer"), protocolUrl: need("protocol-url") }));
         return 0;
       case "reviewed":
-        print(reviewedRecord({ pilotId, code: need("code"), decision: need("decision"), reviewerRole: need("reviewer-role"), note: opt("note") }));
+        print(reviewedRecord({ pilotId, code: need("code"), decision: need("decision"), reviewerRole: need("reviewer-role"), samePerson: yesNo("same-person"), note: opt("note") }));
         return 0;
       case "offered":
         print(offeredRecord({ bundlePath: need("bundle"), human: login("human"), registered: yesNo("registered"), channel: need("channel") }));
@@ -290,10 +299,10 @@ async function main(argv) {
       }
       case "closed":
         if (!flag("key-revoked")) throw new Error("revoke the pilot key first, then pass --key-revoked");
-        print(closedRecord({ pilotId, seq: Number(need("seq")), outcome: need("outcome"), note: opt("note") }));
+        print(closedRecord({ pilotId, seq: opt("bundle") ? nextSeq(opt("bundle")) : Number(need("seq")), outcome: need("outcome"), note: opt("note") }));
         return 0;
       case "stop":
-        print(stopRecord({ pilotId, seq: Number(need("seq")), role: need("role"), reason: need("reason") }));
+        print(stopRecord({ pilotId, seq: opt("bundle") ? nextSeq(opt("bundle")) : Number(need("seq")), role: need("role"), reason: need("reason") }));
         return 0;
       case "verification": {
         const manualChecks = {

@@ -40,8 +40,9 @@ This checks, before anyone else is involved, that records and screenshots posted
 
 1. Take a photo of a blank sheet of paper, with nothing else in the picture.
 2. Open the photo in Photos and tap it once, so the buttons and the bar with the time disappear. Press the side button and volume up together.
-3. In PR #43, start a new comment, tap the paperclip ("Paste, drop, or click to add files"), choose the screenshot and tap **Comment**. Write nothing else in that comment.
-4. Copy the link of that comment, as in test A, and ask an agent to run:
+3. Open the screenshot and swipe up on it. If you see a map or a place name, do not post it: the test has already found a problem, so post only that finding in PR #43.
+4. In PR #43, start a new comment, tap the paperclip ("Paste, drop, or click to add files"), choose the screenshot and tap **Comment**. Write nothing else in that comment.
+5. Copy the link of that comment, as in test A, and ask an agent to run:
 
    ```sh
    node tools/pow/record.mjs check-image <your comment link>
@@ -61,13 +62,13 @@ Both test comments stay in PR #43. They are not in any ledger, so they never cou
 
 MEKU gives a request made with an agent key to the account that created the key. The review screen refuses a review by that account: "You made this request; a different reviewer must review it." So a second account must approve the pilot request. These steps add one without weakening that rule.
 
-**Choose who holds it.** Ideally a person you trust who is not you, not the developer and not the human. If you hold both accounts yourself, the review is separate only by account, not by person. Then say so in the seq 3 record's `note`, for example "second account held by the same person as the key issuer".
+**Choose who holds it.** Ideally a person you trust who is not you, not the developer and not the human. A SEEK reviewer can read every SEEK request in MEKU, including other requesters' contact details, so choose someone you trust with that. If you hold both accounts yourself, the review is separate only by account, not by person. The seq 3 record then says so with `"reviewer_same_person_as_key_issuer": true`, the verifier warns about it (R04), and every report states it.
 
 **Create the account (about 5 minutes).**
 
 1. In a private Safari tab, open `meku.farm/auth` and tap **NEW HERE? CREATE ACCOUNT**.
 2. Under **I AM JOINING AS** choose **CLIENT**. Enter an email address that no other MEKU account uses and a password of at least 8 characters, then tap **CREATE ACCOUNT**.
-3. Open the confirmation link in that email, then sign in once at `meku.farm/auth`. The first sign-in creates the account's profile, which the next step needs.
+3. Open the confirmation link in that email and sign in at `meku.farm/auth`. Under **HOW WILL YOU USE MEKU?**, choose **CLIENT** and tap **CONTINUE AS CLIENT**. That creates the account's profile, which the next step needs.
 
 **Make it a SEEK reviewer (founder only, about 5 minutes).** A SEEK reviewer can read and review SEEK requests and nothing else: no admin rights and no financial rights. MEKU has no screen for this. It is one row in the `seek_reviewers` table of MEKU's production database (Lovable project `16389f52-e7e4-4855-ba26-9ae9b3c4253b`), added with the SQL tool you already use for that database. This is a production database write, so no agent makes it.
 

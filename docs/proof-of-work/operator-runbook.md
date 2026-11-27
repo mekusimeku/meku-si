@@ -9,13 +9,13 @@ For the MEKU operator account `mekusimeku`. Every step works from a phone browse
 3. **Human.** Find a consenting adult who is not MEKU staff, not one of MEKU's AI workers and not the developer, and who has a GitHub account (a new pseudonymous one is fine). Send them the [human guide](human-guide.md). Never offer payment.
 4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 5 per minute and 30 per day (the form suggests 20 per day: change it). MEKU counts every call that carries the key, and an MCP host spends 3 calls just to connect. Leave **SEARCH ONLY · EXPIRES IN 30 DAYS · NO REQUEST SUBMISSIONS** and **ENABLE CONCIERGE PROPOSALS FOR THIS KEY** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it. Watching and revoking it: [founder setup](founder-setup.md#3-pilot-key-issue-limit-watch-revoke).
 
-5. **Dry run of the human's screenshot.** Phones and apps differ in what they add to an image, so test the human's exact way of posting before the pilot. Create an issue in `mekusimeku/meku-si` titled **POW-001 dry run: test screenshot** and send the human its link. They post one screenshot of a photo of a blank sheet of paper, as the [human guide](human-guide.md#before-you-start-a-dry-run-of-your-screenshot) describes. Anything posted there is public at once, which is why the human posts only a screenshot of a blank page, after checking it for a location. Then copy the link of their comment (press and hold its time), and ask any agent working for you to run this command, which needs no key:
+5. **Dry run of the human's screenshot.** Phones and apps differ in what they add to an image, so test the human's exact way of posting before the pilot. Create an issue in `mekusimeku/meku-si` titled **POW-001 dry run: test screenshot** and send the human its link. They post, in one comment, the evidence block from step 4 of the [human guide](human-guide.md#before-you-start-a-dry-run-of-your-screenshot) with one screenshot of a photo of a blank sheet of paper attached, as they will later in the ledger. Anything posted there is public at once, which is why the human posts only a screenshot of a blank page, after checking it for a location. Then copy the link of their comment (press and hold its time), and ask any agent working for you to run this command, which needs no key:
 
    ```sh
    node tools/pow/record.mjs check-image https://github.com/mekusimeku/meku-si/issues/N#issuecomment-...
    ```
 
-   It must end with `PASS`. A `WARN` about a screenshot note or a time chunk is fine. If it ends with `FAIL`, do not open the ledger: ask the human to try again without cropping, or from a browser instead of the app, and run the check again. If no way passes, post the findings in the dry-run issue and do not run the pilot with that phone. Also open the dry-run issue in a private browser tab, signed out: the human's comment must be visible there, because GitHub sometimes hides comments from brand-new accounts. Close the dry-run issue when done. It is not part of the ledger.
+   It must end with `PASS`. A `WARN` about a screenshot note or a time chunk is fine. Run `node tools/pow/record.mjs check-comment` on the same link too: it must say `PASS`, which shows that the block and the image were posted in a form the verifier counts. If it ends with `FAIL`, do not open the ledger: ask the human to try again without cropping, or from a browser instead of the app, and run the check again. If no way passes, post the findings in the dry-run issue and do not run the pilot with that phone. Also open the dry-run issue in a private browser tab, signed out: the human's comment must be visible there, because GitHub sometimes hides comments from brand-new accounts. Close the dry-run issue when done. It is not part of the ledger.
 
 Nothing in this pilot creates a mission, starts a payment, uses a wallet, or touches MEKU POCKET.
 
@@ -59,7 +59,7 @@ The **second reviewer** signs in, opens `meku.farm/seek`, and finds **POW-001: h
 - the text is exactly the protocol text, with nothing asked for beyond it;
 - no other request shows the same code. If one does, reject both and post a stop.
 
-Press **APPROVE** or **REJECT**. Then post this, replacing `CODE` with the 8-character code. Change `approved` to `rejected` if you rejected it, and `seek_reviewer` to `admin` if the reviewer is an admin:
+Press **APPROVE** or **REJECT**. Then post this, replacing `CODE` with the 8-character code. Change `approved` to `rejected` if you rejected it, and `seek_reviewer` to `admin` if the reviewer is an admin. Set `reviewer_same_person_as_key_issuer` to `true` if the same person holds the reviewer's account and the account that issued the key: the review was then separate only by account, and every report says so:
 
 ```json
 {
@@ -71,7 +71,8 @@ Press **APPROVE** or **REJECT**. Then post this, replacing `CODE` with the 8-cha
   "code": "CODE",
   "decision": "approved",
   "reviewer_role": "seek_reviewer",
-  "reviewer_is_key_issuer": false
+  "reviewer_is_key_issuer": false,
+  "reviewer_same_person_as_key_issuer": false
 }
 ```
 
@@ -145,7 +146,7 @@ This is MEKU returning the result to the developer. The developer checks it and 
 
 ## Stopping and timeouts
 
-Anyone may stop. If the human writes STOP (or 🛑, or the same word in another language), writes anything else that might mean they want to stop, or tells you so, if a participant has not acted for 48 hours at their step, or if something is wrong, post this with `NEXT` replaced by the next seq number and a short reason. Then close. A stop may also follow the developer's decision. After the close, if the human withdraws consent later, post one more stop; nothing follows it. When in doubt, stop: a stop is a valid outcome, while consent that may have been withdrawn can never be verified.
+Anyone may stop. A stop counts whatever seq you type, but the close after it must follow it: if you are unsure of the numbers, ask an agent to print both blocks from an export, with `node tools/pow/record.mjs stop --bundle <bundle.json> --role operator --reason "..."` and later `closed --bundle <bundle.json> --outcome stopped --key-revoked`. If the human writes STOP (or 🛑, or the same word in another language), writes anything else that might mean they want to stop, or tells you so, if a participant has not acted for 48 hours at their step, or if something is wrong, post this with `NEXT` replaced by the next seq number and a short reason. Then close. A stop may also follow the developer's decision. After the close, if the human withdraws consent later, post one more stop; nothing follows it. When in doubt, stop: a stop is a valid outcome, while consent that may have been withdrawn can never be verified.
 
 ```json
 {

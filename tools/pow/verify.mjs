@@ -251,7 +251,7 @@ export function verifyBundle(
         reasons.set(f.comment, problems.join("; "));
         continue;
       }
-      sequenced.push({ record, comment: f.comment, image: f.image ?? null });
+      sequenced.push({ record, comment: f.comment, image: f.image ?? null, label: f.label ?? null });
     }
     for (const [comment, reason] of reasons)
       warn("L02", `a record by the ${roleOf(comment.author)} at ${comment.created_at} is not counted: ${reason}`);
@@ -263,30 +263,54 @@ export function verifyBundle(
     for (const { record } of sequenced) if (record.pilot_id !== pilotId) fail("L03", `seq ${record.seq} has pilot_id ${record.pilot_id}`);
     if (results.get("L03").status !== "FAIL") pass("L03", pilotId);
 
-    let previous = null;
+    // Records join the chain in time order when their type may come next and their seq is the
+    // next one. A record out of place is not counted (the participant posts it again) unless it
+    // contradicts a counted record. A stop or a close counts whatever seq was typed, because a
+    // typo must never keep a stop from counting.
+    // Two images are the same when their addresses are, or when the bundle holds both files and
+    // their bytes are identical (the same screenshot uploaded again gets a new address).
+    const files = Array.isArray(bundle.evidence_files) ? bundle.evidence_files : [];
+    const imageHash = (e) => {
+      const file = files.find((f) => String(f?.comment_id) === String(e.comment.id) && typeof f?.url === "string" && f.url.toLowerCase() === String(e.image).toLowerCase())?.file;
+      const bytes = file ? loadEvidence(file) : null;
+      return bytes ? sha256Hex(bytes) : null;
+    };
+    const sameImage = (a, b) => (a.image ?? null) === (b.image ?? null) || (a.image && b.image && imageHash(a) !== null && imageHash(a) === imageHash(b));
     for (const entry of sequenced) {
       const { record, comment } = entry;
-      // An exact repeat of an earlier record by the same account adds nothing. A different
-      // record under a seq already used is a contradiction, and fails below.
-      const repeat = chain.find((e) => sameLogin(e.comment.author, comment.author) && canon(e.record) !== null && canon(e.record) === canon(record));
-      if (repeat) {
+      const same = (e) => sameLogin(e.comment.author, comment.author) && canon(e.record) !== null && canon(e.record) === canon(record) && sameImage(e, entry);
+      if (chain.some(same)) {
         warn("L04", `seq ${record.seq} ${record.type} was posted again at ${comment.created_at}; the repeat is ignored`);
         reasons.set(comment, `an exact repeat of seq ${record.seq}`);
         continue;
       }
+      const last = chain.at(-1);
+      // The evidence may be posted again with another screenshot until MEKU returns the result;
+      // the latest one counts, and the one it replaces is listed.
+      if (record.type === "evidence_submitted" && last?.record.type === "evidence_submitted" && sameLogin(last.comment.author, comment.author) && record.seq === last.record.seq) {
+        warn("L04", `the evidence posted at ${last.comment.created_at} was replaced by the evidence posted at ${comment.created_at}`);
+        reasons.set(last.comment, `replaced by the evidence posted at ${comment.created_at}`);
+        chain[chain.length - 1] = entry;
+        continue;
+      }
       const closed = chain.some((e) => e.record.type === "pilot_closed");
       const stopped = chain.some((e) => e.record.type === "stop");
-      const allowed = allowedNext(previous, { closed, stopped });
-      if (record.seq !== chain.length) {
-        fail("L04", `expected seq ${chain.length}, found seq ${record.seq} (${record.type})`);
-        break;
+      const allowed = allowedNext(last?.record ?? null, { closed, stopped });
+      const lenient = record.type === "stop" || record.type === "pilot_closed";
+      const counted = Number.isSafeInteger(record.seq) ? chain[record.seq] : undefined;
+      if (counted && counted.record.type === record.type && (record.seq !== chain.length || !allowed.includes(record.type))) {
+        fail("L04", `seq ${record.seq} ${record.type} posted at ${comment.created_at} differs from the counted seq ${record.seq}, posted at ${counted.comment.created_at}`);
+        reasons.set(comment, `contradicts the counted seq ${record.seq}`);
+        continue;
       }
-      if (!allowed.includes(record.type)) {
-        fail("L04", `seq ${record.seq}: ${record.type} cannot follow ${previous?.type ?? "the start"} (allowed: ${allowed.join(", ") || "nothing"})`);
-        break;
+      if (!allowed.includes(record.type) || (record.seq !== chain.length && !lenient)) {
+        const expected = allowed.length ? `seq ${chain.length}: ${allowed.join(" or ")}` : "nothing more";
+        warn("L04", `seq ${record.seq} ${record.type} posted at ${comment.created_at} is out of place (expected ${expected}); it is not counted`);
+        reasons.set(comment, `out of place: expected ${expected}`);
+        continue;
       }
+      if (record.seq !== chain.length) warn("L04", `the ${record.type} posted at ${comment.created_at} says seq ${record.seq}; it is counted as seq ${chain.length}`);
       chain.push(entry);
-      previous = record;
     }
     if (results.get("L04").status !== "FAIL") pass("L04", `${chain.length} records in order`);
 
@@ -331,7 +355,10 @@ export function verifyBundle(
       }
     }
     if (results.get("R03").status === "NOT_REACHED" && logins.length === 3) pass("R03", logins.join(", "));
-    if (R.request_reviewed) pass("R04", `attested by the operator; reviewer role ${str(R.request_reviewed.record.reviewer_role)}; MEKU's database does not enforce it yet`);
+    if (R.request_reviewed?.record.reviewer_same_person_as_key_issuer === true)
+      warn("R04", "the operator states that one person holds both the key issuer's and the reviewer's accounts: the review was separate only by account");
+    else if (R.request_reviewed)
+      pass("R04", `attested by the operator: another account, held by another person; reviewer role ${str(R.request_reviewed.record.reviewer_role)}; MEKU's database does not enforce it yet`);
 
     // ---- Request checks
     const code = str(R.request_submitted?.record.code);
@@ -427,6 +454,8 @@ export function verifyBundle(
       else if (!isObjectSalt(rv.salt) || !Number.isSafeInteger(consentId) || consentId < 1) fail("H03", "the salt or the consent comment id is malformed");
       else if (objectFor(rv.salt, rv.consent_comment_id) !== rv.object) fail("H03", `the salt and consent comment give ${objectFor(rv.salt, rv.consent_comment_id)}, not ${rv.object}`);
       else if (suffixFor(rv.salt, rv.consent_comment_id) !== rv.suffix) fail("H03", `the salt and consent comment give the suffix ${suffixFor(rv.salt, rv.consent_comment_id)}, not ${rv.suffix}`);
+      else if (R.object_revealed.label && R.object_revealed.label.code !== code)
+        fail("H03", `the reveal's first line tells the human to write ${R.object_revealed.label.code}, not the request's code ${code}`);
       else pass("H03", `object ${rv.object} and suffix ${rv.suffix}, derived from the committed salt and consent comment ${rv.consent_comment_id}`);
     }
     if (R.evidence_submitted && R.object_revealed) {
@@ -501,7 +530,6 @@ export function verifyBundle(
     }
     // Every other image a participant posted is checked the same way, and listed for M03: a
     // photo with a location in a side comment would leak as surely as one in the evidence.
-    const files = Array.isArray(bundle.evidence_files) ? bundle.evidence_files : [];
     for (const comment of ordered) {
       const role = roleOf(comment.author);
       if (!role) continue;
@@ -516,7 +544,8 @@ export function verifyBundle(
           continue;
         }
         const found = scanImage(bytes).findings.filter((f) => f.level !== "PASS");
-        for (const f of found) (f.level === "FAIL" && !SHAPE_FINDINGS.has(f.code) ? fail : warn)("E04", `${where}: ${f.detail}`);
+        // Beside the evidence only a location fails the pilot; other metadata goes to M03.
+        for (const f of found) (["GPS_PRESENT", "XMP_LOCATION"].includes(f.code) ? fail : warn)("E04", `${where}: ${f.detail}`);
         images.push({ role, url, created_at: comment.created_at, checked: true, sha256: sha256Hex(bytes), findings: found.map((f) => `${f.level} ${f.code}`) });
       }
       for (const ref of externalImages(comment.body)) {

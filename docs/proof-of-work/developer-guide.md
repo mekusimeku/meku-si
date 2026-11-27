@@ -77,7 +77,7 @@ node tools/pow/request.mjs check --pilot POW-001 \
   --agent "Describe your agent, model and runtime" --affirm-independence
 ```
 
-Keep `--agent` to at most 160 characters, without `<!--`, `-->` or three backticks. The tools never print a record the verifier would refuse; they say what to fix instead.
+Keep `--agent` to at most 160 characters, without `<!--`, `-->` or three backticks. The tools never print a record the verifier would refuse; they say what to fix instead. They print only the comment to post on standard output, and every instruction on standard error, so copy only the block. After posting, check your own comment with `node tools/pow/record.mjs check-comment <link to your comment>`: it must say `PASS` before the next step. If it does not, post the block again, alone, in a new comment. Post no images in the ledger.
 
 Path A spends one keyed call: initialization goes without the key, and only `tools/list` carries it.
 
@@ -157,7 +157,7 @@ After the operator's `result_returned` (seq 9):
 node tools/pow/verify.mjs --from-issue https://github.com/mekusimeku/meku-si/issues/<N> --out pow-ledger
 ```
 
-Open the image in `pow-ledger/evidence/` and look at it yourself. Accept only if your code followed by the 2 revealed characters is written by hand and legible, the named object is there, and nothing personal is visible:
+Open the evidence image and look at it yourself: it is the file in `pow-ledger/evidence/` whose name is the SHA-256 that check E02 prints (the folder also holds any other image a participant posted). Accept only if your code followed by the 2 revealed characters is written by hand and legible, the named object is there, and nothing personal is visible:
 
 ```sh
 node tools/pow/record.mjs decision --bundle pow-ledger/bundle.json --accept \

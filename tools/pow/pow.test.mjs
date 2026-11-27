@@ -245,7 +245,7 @@ test("the synthetic ledger passes every automated check and has a fixed digest",
   assert.equal(r.manual.length, 6);
   assert.equal(r.record_count, 12);
   // Regression anchor: any change to records, hashing or the template changes this value.
-  assert.equal(r.ledger_digest, "459f72926f08340275d486ad1a97f8a4bf4e23f3104bdfeb6fea8fa6be48f7f1");
+  assert.equal(r.ledger_digest, "c3f808126b352a6f10ff72193fa84e0267ee5b61ffd79a6bbd7a3b1abe4cee7a");
   assert.equal(r.ledger_digest, ledgerDigest(SYNTHETIC.pilotId, r.records_in_order));
   assert.match(formatReport(r), /SYNTHETIC TEST DATA - NOT EVIDENCE/);
 });
@@ -314,10 +314,10 @@ const FAULTS = [
     },
   ],
   ["L06 reveal at the same second as consent", "L06", (b) => shiftTime(b, 7, -10)],
-  ["L04 reveal posted before consent", "L04", (b) => shiftTime(b, 7, -15)],
-  ["L04 a payment field that is not none: the record is not counted, so the chain has a gap", "L04", (b) => rewrite(b, 2, (r) => (r.payment = "MEKU SI 10"))],
-  ["L04 consent posted by an outsider", "L04", (b) => (b.comments[commentIndexFor(b, 6)].author = "someone-else")],
-  ["L04 developer posts a human record: not counted, so the chain has a gap", "L04", (b) => (b.comments[commentIndexFor(b, 8)].author = SYNTHETIC.developer)],
+  ["L04 reveal posted before consent: not counted, so the ledger cannot pass", "L04", (b) => shiftTime(b, 7, -15), "WARN"],
+  ["L02 a payment field that is not none: not counted, so the ledger cannot pass", "L02", (b) => rewrite(b, 2, (r) => (r.payment = "MEKU SI 10")), "WARN"],
+  ["L07 consent posted by an outsider: ignored, so the ledger cannot pass", "L07", (b) => (b.comments[commentIndexFor(b, 6)].author = "someone-else"), "WARN"],
+  ["R02 developer posts a human record: not counted, so the ledger cannot pass", "R02", (b) => (b.comments[commentIndexFor(b, 8)].author = SYNTHETIC.developer), "WARN"],
   ["R03 human is the developer", "R03", (b) => rewrite(b, 5, (r) => (r.human = SYNTHETIC.developer))],
   ["Q01 key cannot submit", "Q01", (b) => rewrite(b, 1, (r) => (r.tools_listed = ["meku_search_humans"]))],
   ["Q02 request asks for something extra", "Q02", (b) => rewrite(b, 2, (r) => (r.arguments.description += " Also send your home address."))],
@@ -356,9 +356,9 @@ const FAULTS = [
         r.stored_request_sha256 = sha256Hex(canonicalize(r.stored_request));
       }),
   ],
-  ["L04 object not on the list: not counted, so the chain has a gap", "L04", (b) => rewrite(b, 7, (r) => (r.object = "KNIFE"))],
+  ["L02 object not on the list: not counted, so the ledger cannot pass", "L02", (b) => rewrite(b, 7, (r) => (r.object = "KNIFE")), "WARN"],
   ["H04 evidence 49 hours after the reveal", "H04", (b) => ["8", "9", "10", "11"].forEach((s) => shiftTime(b, Number(s), 49 * 60))],
-  ["L04 two attachments: the evidence comment is not counted, so the chain has a gap", "L04", (b) => (b.comments[commentIndexFor(b, 8)].body += `\n![b](https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000002)`)],
+  ["L02 two attachments: the evidence comment is not counted, so the ledger cannot pass", "L02", (b) => (b.comments[commentIndexFor(b, 8)].body += `\n![b](https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000002)`), "WARN"],
   ["E02 evidence file swapped", "E02", (b, p) => p.files.set(b.evidence_files[0].file, makePng(320, 240, [pngChunk("tEXt", Buffer.from("x\0y"))]))],
   ["E04 evidence carries GPS", "E04", (b, p) => p.files.set(b.evidence_files[0].file, makePng(320, 240, [pngChunk("eXIf", tiffWithGps())]))],
   ["D02 decision digest wrong", "D02", (b) => rewrite(b, 10, (r) => (r.ledger_digest = "a".repeat(64)))],
@@ -367,13 +367,14 @@ const FAULTS = [
   ["C01 close outcome mismatch", "C01", (b) => rewrite(b, 11, (r) => (r.outcome = "stopped"))],
 ];
 
-for (const [name, id, plant] of FAULTS) {
+for (const [name, id, plant, status = "FAIL"] of FAULTS) {
   test(`planted fault is caught: ${name}`, async () => {
     const p = await pilot();
     plant(p.bundle, p);
     const r = verify(p);
-    assert.equal(r.verdict, "FAIL", `verdict for ${name}`);
-    assert.equal(check(r, id).status, "FAIL", `${id} for ${name}: ${JSON.stringify(r.checks.filter((c) => c.status === "FAIL"))}`);
+    // A fault in a record fails the ledger; a record that is not counted leaves it unfinished.
+    assert.equal(r.verdict, status === "FAIL" ? "FAIL" : "INCOMPLETE", `verdict for ${name}`);
+    assert.equal(check(r, id).status, status, `${id} for ${name}: ${JSON.stringify(r.checks.filter((c) => c.status !== "PASS" && c.status !== "NOT_REACHED"))}`);
   });
 }
 
@@ -691,7 +692,8 @@ test("command-line tools: synthetic example, verify exit codes, schema, human re
   const consent = execFileSync(process.execPath, [join(here, "record.mjs"), "consent", "--pilot", "POW-001"], { encoding: "utf8" });
   assert.deepEqual(extractRecords(consent)[0].record, consentRecord({ pilotId: "POW-001" }));
   const evidence = execFileSync(process.execPath, [join(here, "record.mjs"), "evidence", "--pilot", "POW-001"], { encoding: "utf8" });
-  assert.deepEqual(extractRecords(evidence)[0].record, evidenceRecord({ pilotId: "POW-001" }));
+  assert.deepEqual(extractRecords(`${evidence}\n![Image](${SYNTHETIC.attachmentUrl})`)[0].record, evidenceRecord({ pilotId: "POW-001" }));
+  assert.match(extractRecords(evidence)[0].error, /without its screenshot/, "the evidence never counts without its image");
 });
 
 test("the object list holds only harmless household items", () => {
@@ -773,12 +775,13 @@ test("review F2b/F9: malformed participant data gives a FAIL report, never a cra
   const i = commentIndexFor(q.bundle, 2);
   q.bundle.comments[i].body = q.bundle.comments[i].body.replace('"seq": 2', '"seq": 2.0');
   r = verify(q);
-  assert.equal(r.verdict, "FAIL");
+  assert.notEqual(r.verdict, "PASS");
   assert.equal(check(r, "L02").status, "WARN", "the malformed record is not counted, and listed");
   const z = await hostile();
   z.bundle.comments[commentIndexFor(z.bundle, 3)].body = recordComment({ pow: "meku.pow/1", pilot_id: ["POW-SYNTHETIC-1"], seq: 3, type: ["request_reviewed"], role: "operator" });
   r = verify(z);
-  assert.equal(r.verdict, "FAIL");
+  assert.notEqual(r.verdict, "PASS");
+  assert.ok(formatReport(r).includes("VERDICT:"));
 });
 
 test("review F3: a record hidden in an HTML comment does not count", async () => {
@@ -907,7 +910,30 @@ test("review F12: fractional numbers are refused identically by JavaScript and P
   const dir = mkdtempSync(join(tmpdir(), "pow-f12-"));
   writeFileSync(join(dir, "bundle.json"), JSON.stringify(p.bundle));
   const out = spawnSync("python3", ["-I", join(here, "digest_reference.py"), join(dir, "bundle.json")], { encoding: "utf8" });
-  assert.notEqual(out.status, 0, "Python also drops the malformed record, so the chain breaks at seq 1");
+  assert.equal(out.stdout.split(" ")[0], verify(p).ledger_digest, "Python also drops the malformed record, so both count only seq 0");
+  assert.match(out.stdout, /through seq 0; 1 records/);
+});
+
+test("review 4 P3: with the verifier's invalid records set aside, the Python digest agrees after a repost", async (t) => {
+  if (spawnSync("python3", ["--version"]).status !== 0) return t.skip("python3 not installed");
+  // The operator types the code in lower case, which the schema refuses, then posts seq 3 again.
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 3);
+  const good = p.bundle.comments[i];
+  const record = extractRecords(good.body)[0].record;
+  const bad = { ...clone(good), id: 4242, created_at: new Date(Date.parse(good.created_at) - 60_000).toISOString() };
+  bad.updated_at = bad.created_at;
+  bad.body = recordComment({ ...record, code: record.code.toLowerCase() });
+  p.bundle.comments.splice(i, 0, bad);
+  const r = verify(p);
+  assert.equal(r.verdict, "PASS");
+  const dir = mkdtempSync(join(tmpdir(), "pow-skip-"));
+  writeFileSync(join(dir, "bundle.json"), JSON.stringify(p.bundle));
+  const skip = r.uncounted_comments.map((u) => u.comment_id).join(",");
+  const py = spawnSync("python3", ["-I", join(here, "digest_reference.py"), join(dir, "bundle.json"), "--skip", skip], { encoding: "utf8" });
+  assert.equal(py.stdout.split(" ")[0], r.ledger_digest);
+  const unskipped = spawnSync("python3", ["-I", join(here, "digest_reference.py"), join(dir, "bundle.json")], { encoding: "utf8" });
+  assert.notEqual(unskipped.stdout.split(" ")[0], r.ledger_digest, "without --skip they visibly disagree, never falsely agree");
 });
 
 test("review F17: ordinary prose and Quote replies do not break a genuine ledger", async () => {
@@ -1144,8 +1170,10 @@ test("review R1/R2: an image before a bare record is fine; prose before it gets 
   assert.notEqual(r.verdict, "PASS");
   assert.match(check(r, "L02").details.join(" "), /not counted: text besides the record/);
   // The human can recover by posting the block alone in a new comment.
-  appendRecord(q.bundle, SYNTHETIC.human, extractRecords(JSON.stringify(consentRecord({ pilotId: SYNTHETIC.pilotId })))[0].record, 1);
-  assert.match(check(verify(q), "L04").status, /FAIL|PASS/);
+  truncateAfter(q.bundle, 5);
+  q.bundle.comments.push({ ...q.bundle.comments.at(-1), id: 777, created_at: "2026-01-05T10:59:00.000Z", updated_at: "2026-01-05T10:59:00.000Z", author: SYNTHETIC.human, body: `I agree!\n${JSON.stringify(consentRecord({ pilotId: SYNTHETIC.pilotId }), null, 2)}` });
+  appendRecord(q.bundle, SYNTHETIC.human, consentRecord({ pilotId: SYNTHETIC.pilotId }), 1);
+  assert.equal(verify(q).record_count, 7, "the consent posted alone counts");
 });
 
 test("review N4/N7: JavaScript and Python agree on whitespace, seq types and bad text", async (t) => {
@@ -1155,7 +1183,8 @@ test("review N4/N7: JavaScript and Python agree on whitespace, seq types and bad
     writeFileSync(join(dir, "bundle.json"), JSON.stringify(bundle));
     const py = spawnSync("python3", ["-I", join(here, "digest_reference.py"), join(dir, "bundle.json")], { encoding: "utf8" });
     const js = verifyBundle(bundle, { allowSynthetic: true, loadEvidence: () => null });
-    return { py: py.status === 0 ? py.stdout.split(" ")[0] : null, js: js.records_in_order.length === 12 ? js.ledger_digest : null };
+    // Both print the digest of whatever chain they count; a dropped record shortens both alike.
+    return { py: py.status === 0 ? py.stdout.split(" ")[0] : null, js: js.ledger_digest ?? null };
   };
   for (const lead of ["﻿", "\u001C", "\u0085"]) {
     const p = await hostile();
@@ -1193,7 +1222,7 @@ test("review N4/N7: JavaScript and Python agree on whitespace, seq types and bad
   writeFileSync(join(dir, "bundle.json"), JSON.stringify(z.bundle));
   const py = spawnSync("python3", ["-I", join(here, "digest_reference.py"), join(dir, "bundle.json")], { encoding: "utf8" });
   assert.ok(!/Traceback/.test(py.stderr), "Python reports malformed text instead of crashing");
-  assert.equal(verifyBundle(z.bundle, { allowSynthetic: true }).verdict, "FAIL");
+  assert.notEqual(verifyBundle(z.bundle, { allowSynthetic: true }).verdict, "PASS");
 });
 
 test("review: a real pilot's ledger must live in mekusimeku/meku-si", async () => {
@@ -1249,7 +1278,7 @@ test("check-image refuses a URL that is not a GitHub attachment, before any down
 test("check-comment reports how the verifier reads one posted record", async () => {
   const t = "2026-11-28T00:00:00Z";
   const comment = (body, updated = t) => ({ id: 1, author: "mekusimeku", created_at: t, updated_at: updated, html_url: "#", body });
-  const record = { pow: "meku.pow/1", pilot_id: "POW-001", seq: 3, type: "request_reviewed", role: "operator", code: "K7QX29MD", decision: "approved", reviewer_role: "seek_reviewer", reviewer_is_key_issuer: false };
+  const record = { pow: "meku.pow/1", pilot_id: "POW-001", seq: 3, type: "request_reviewed", role: "operator", code: "K7QX29MD", decision: "approved", reviewer_role: "seek_reviewer", reviewer_is_key_issuer: false, reviewer_same_person_as_key_issuer: false };
   const block = JSON.stringify(record, null, 2);
   assert.equal(commentReport(comment(block)).ok, true, "a bare block, as the copy button pastes it");
   assert.equal(commentReport(comment("```json\n" + block + "\n```")).ok, true);
@@ -1375,7 +1404,9 @@ test("review 3 P2-1: a stop can follow the decision or the close, and an edit pl
   r = verify(q);
   assert.equal(r.verdict, "STOPPED", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
   appendRecord(q.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 13, role: "operator", reason: "again" }));
-  assert.equal(verify(q).verdict, "FAIL", "only one stop after the close");
+  r = verify(q);
+  assert.equal(r.verdict, "STOPPED");
+  assert.match(check(r, "L04").details.join(" "), /out of place/, "only one stop after the close is counted");
   // An edited comment by the human, covered by a stop, ends as STOPPED rather than FAIL.
   const z = await hostile();
   truncateAfter(z.bundle, 8);
@@ -1486,4 +1517,151 @@ test("review 3 P3-1: the Python reference reports a hostile bundle instead of cr
     assert.notEqual(out.status, 0, name);
     assert.doesNotMatch(out.stderr, /Traceback/, name);
   }
+});
+
+// ---- Findings of the fourth independent review (2026-11-28) ------------------------------
+
+test("review 4 P1: the evidence counts only with its screenshot, and a later screenshot replaces it until seq 9", async () => {
+  const evidenceBlock = (p) => {
+    const i = commentIndexFor(p.bundle, 8);
+    return { i, record: extractRecords(p.bundle.comments[i].body)[0].record };
+  };
+  // Forgot the screenshot, then posted again with it: the second one counts.
+  const p = await hostile();
+  const { i, record } = evidenceBlock(p);
+  const withImage = p.bundle.comments[i];
+  const without = { ...clone(withImage), id: 4343, created_at: new Date(Date.parse(withImage.created_at) - 60_000).toISOString() };
+  without.updated_at = without.created_at;
+  without.body = recordComment(record);
+  p.bundle.comments.splice(i, 0, without);
+  let r = verify(p);
+  assert.equal(r.verdict, "PASS", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+  assert.match(check(r, "L02").details.join(" "), /without its screenshot/);
+  // A second screenshot before seq 9 replaces the first; E02 then needs the second one's hash.
+  const q = await hostile();
+  const j = commentIndexFor(q.bundle, 8);
+  const second = { ...clone(q.bundle.comments[j]), id: 4444 };
+  second.created_at = second.updated_at = new Date(Date.parse(q.bundle.comments[j].created_at) + 60_000).toISOString();
+  const otherUrl = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000044";
+  second.body = `${recordComment(record)}\n![Image](${otherUrl})`;
+  q.bundle.comments.splice(j + 1, 0, second);
+  q.bundle.evidence_files.push({ comment_id: 4444, url: otherUrl, file: "evidence/second.png", sha256: "x" });
+  q.files.set("evidence/second.png", makePng(330, 250));
+  r = verify(q);
+  assert.match(check(r, "L04").details.join(" "), /was replaced by the evidence posted at/);
+  assert.equal(r.evidence.url, otherUrl, "the latest evidence counts");
+  assert.equal(check(r, "E02").status, "FAIL", "the developer's decision hashed the replaced photo");
+  assert.ok(r.uncounted_comments.some((u) => /replaced by the evidence/.test(u.reason)));
+  // After MEKU returned the result, another screenshot contradicts the one that was checked...
+  const z = await hostile();
+  appendRecordless(z.bundle, SYNTHETIC.human, `${recordComment(record)}\n![Image](${otherUrl})`, commentIndexFor(z.bundle, 9));
+  z.bundle.evidence_files.push({ comment_id: z.bundle.comments[commentIndexFor(z.bundle, 9) + 1].id, url: otherUrl, file: "evidence/second.png", sha256: "x" });
+  z.files.set("evidence/second.png", makePng(330, 250));
+  r = verify(z);
+  assert.equal(r.verdict, "FAIL");
+  assert.match(check(r, "L04").details.join(" "), /differs from the counted seq 8/);
+  // ...but the same screenshot uploaded again is only a repeat.
+  z.files.set("evidence/second.png", z.files.get(z.bundle.evidence_files[0].file));
+  r = verify(z);
+  assert.equal(r.verdict, "PASS");
+  assert.match(check(r, "L04").details.join(" "), /posted again/);
+});
+
+test("review 4 N1: a header line can carry only the reveal's instruction, and it must match", async () => {
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 7);
+  const reveal = extractRecords(p.bundle.comments[i].body)[0].record;
+  const code = extractRecords(p.bundle.comments[commentIndexFor(p.bundle, 2)].body)[0].record.code;
+  const header = (label) => `MEKU proof-of-work record: seq 7 object_revealed (${SYNTHETIC.pilotId}) - ${label}\n\n\`\`\`json\n${JSON.stringify(reveal, null, 2)}\n\`\`\``;
+  assert.ok(readRecordComment(header(`write ${code}${reveal.suffix} and put a ${reveal.object} next to it`)).record, "the tool's own line");
+  for (const label of ["I changed my mind, please do not use or publish this photo", `write ${code}${reveal.suffix} and put a SHOE next to it`, `write ${code}ZZ and put a ${reveal.object} next to it`])
+    assert.ok(readRecordComment(header(label)).problem, label);
+  const evidence = extractRecords(p.bundle.comments[commentIndexFor(p.bundle, 8)].body)[0].record;
+  assert.ok(readRecordComment(`MEKU proof-of-work record: seq 8 evidence_submitted (${SYNTHETIC.pilotId}) - REJECTED\n\n${JSON.stringify(evidence)}\n![Image](${SYNTHETIC.attachmentUrl})`).problem);
+  // A matching instruction naming another code fails H03.
+  p.bundle.comments[i].body = header(`write K7QX29MD${reveal.suffix} and put a ${reveal.object} next to it`);
+  assert.match(check(verify(p), "H03").details.join(" "), /tells the human to write K7QX29MD/);
+});
+
+test("review 4 N2, N3: the evidence is always exported first; beside it only a location fails", async () => {
+  const p = await pilot();
+  const extra = Array.from({ length: 25 }, (_, k) => `https://github.com/user-attachments/assets/00000000-0000-4000-8000-0000000001${String(k).padStart(2, "0")}`);
+  appendRecordless(p.bundle, SYNTHETIC.operator, extra.map((u) => `![x](${u})`).join("\n"), commentIndexFor(p.bundle, 5));
+  const png = p.files.get(p.bundle.evidence_files[0].file);
+  const fetchImpl = async (u) => {
+    const s = String(u);
+    if (s.startsWith("https://api.github.com/")) {
+      if (!s.includes("/comments")) return new Response(JSON.stringify({ html_url: SYNTHETIC.issueUrl }), { status: 200 });
+      const page = Number(new URL(s).searchParams.get("page"));
+      const all = p.bundle.comments.map((c) => ({ id: c.id, user: { login: c.author }, created_at: c.created_at, updated_at: c.updated_at, html_url: c.html_url, body: c.body }));
+      return new Response(JSON.stringify(page === 1 ? all : []), { status: 200 });
+    }
+    return new Response(png, { status: 200 });
+  };
+  const out = join(mkdtempSync(join(tmpdir(), "pow-export-")), "ledger");
+  const bundle = await exportLedger({ issueUrl: SYNTHETIC.issueUrl, outDir: out, fetchImpl });
+  const evidenceEntry = bundle.evidence_files.find((e) => e.url === SYNTHETIC.attachmentUrl);
+  assert.ok(evidenceEntry?.file, "the evidence is downloaded even after many other images");
+  assert.ok(bundle.evidence_files.some((e) => !e.file && /not downloaded/.test(e.error)), "the cap applies to the other images");
+  // Ordinary metadata in a side image is a warning; a location fails.
+  const q = await hostile();
+  const url = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000042";
+  appendRecordless(q.bundle, SYNTHETIC.operator, `![x](${url})`, commentIndexFor(q.bundle, 5));
+  const added = q.bundle.comments[commentIndexFor(q.bundle, 5) + 1];
+  q.bundle.evidence_files.push({ comment_id: added.id, url, file: "evidence/side.jpg", sha256: "x" });
+  q.files.set("evidence/side.jpg", makeJpeg({ app: [[0xe1, Buffer.concat([Buffer.from("Exif\0\0", "latin1"), Buffer.from("II*\0\x08\0\0\0\0\0", "latin1")])]] }));
+  let r = verify(q);
+  assert.equal(check(r, "E04").status, "WARN");
+  assert.equal(r.verdict, "PASS");
+  q.files.set("evidence/side.jpg", makeJpeg({ app: [[0xe1, Buffer.concat([Buffer.from("Exif\0\0", "latin1"), tiffWithGps()])]] }));
+  r = verify(q);
+  assert.equal(check(r, "E04").status, "FAIL");
+});
+
+test("review 4 N4: a record out of place is not counted, a stop counts whatever its seq, a contradiction fails", async () => {
+  // The human pastes the evidence block instead of the consent: not counted, then the consent counts.
+  const p = await hostile();
+  truncateAfter(p.bundle, 5);
+  appendRecordless(p.bundle, SYNTHETIC.human, `${recordComment(evidenceRecord({ pilotId: SYNTHETIC.pilotId }))}\n![Image](${SYNTHETIC.attachmentUrl})`, p.bundle.comments.length - 1);
+  appendRecord(p.bundle, SYNTHETIC.human, consentRecord({ pilotId: SYNTHETIC.pilotId }));
+  let r = verify(p);
+  assert.equal(r.record_count, 7);
+  assert.match(check(r, "L04").details.join(" "), /out of place \(expected seq 6: human_consent or stop\)/);
+  // A stop typed with the wrong seq still counts, and so does the close after it.
+  const q = await hostile();
+  truncateAfter(q.bundle, 9);
+  appendRecordless(q.bundle, SYNTHETIC.human, "STOP", q.bundle.comments.length - 1);
+  appendRecord(q.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 9, role: "operator", reason: "The human asked to stop" }));
+  appendRecord(q.bundle, SYNTHETIC.operator, closedRecord({ pilotId: SYNTHETIC.pilotId, seq: 10, outcome: "stopped" }));
+  r = verify(q);
+  assert.equal(r.verdict, "STOPPED", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+  assert.match(check(r, "L04").details.join(" "), /says seq 9; it is counted as seq 10/);
+  // record.mjs computes the next seq from an exported bundle.
+  const dir = mkdtempSync(join(tmpdir(), "pow-next-"));
+  writeFileSync(join(dir, "bundle.json"), JSON.stringify((await hostile()).bundle));
+  const stop = spawnSync(process.execPath, [join(here, "record.mjs"), "stop", "--pilot", SYNTHETIC.pilotId, "--bundle", join(dir, "bundle.json"), "--role", "operator", "--reason", "x"], { encoding: "utf8" });
+  assert.equal(extractRecords(stop.stdout)[0].record.seq, 12);
+});
+
+test("review 4 N4: the developer tools print only the comment to post on standard output", async () => {
+  const p = await hostile();
+  const dir = mkdtempSync(join(tmpdir(), "pow-stdout-"));
+  writeFileSync(join(dir, "pow-request.json"), JSON.stringify(p.prepared));
+  truncateAfter(p.bundle, 6);
+  writeFileSync(join(dir, "bundle.json"), JSON.stringify(p.bundle));
+  const out = spawnSync(process.execPath, [join(here, "request.mjs"), "reveal", "--request", join(dir, "pow-request.json"), "--bundle", join(dir, "bundle.json")], { encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  assert.ok(readRecordComment(out.stdout).record, "standard output is exactly one countable comment");
+  assert.match(out.stderr, /Copy only what follows/);
+});
+
+test("review 4 N5: a review by the same person as the key issuer must be disclosed, and is surfaced", async () => {
+  const p = await hostile();
+  rewrite(p.bundle, 3, (r) => (r.reviewer_same_person_as_key_issuer = true));
+  const r = verify(p);
+  assert.equal(check(r, "R04").status, "WARN");
+  assert.match(check(r, "R04").details.join(" "), /separate only by account/);
+  const q = await hostile();
+  rewrite(q.bundle, 3, (r2) => delete r2.reviewer_same_person_as_key_issuer);
+  assert.notEqual(verify(q).verdict, "PASS", "the disclosure is required");
 });

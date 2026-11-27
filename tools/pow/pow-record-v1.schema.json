@@ -505,7 +505,8 @@
         "code",
         "decision",
         "reviewer_role",
-        "reviewer_is_key_issuer"
+        "reviewer_is_key_issuer",
+        "reviewer_same_person_as_key_issuer"
       ],
       "properties": {
         "pow": {
@@ -555,6 +556,9 @@
         },
         "reviewer_is_key_issuer": {
           "const": false
+        },
+        "reviewer_same_person_as_key_issuer": {
+          "type": "boolean"
         },
         "note": {
           "type": "string",

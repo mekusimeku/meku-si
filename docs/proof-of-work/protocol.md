@@ -18,7 +18,7 @@ The pilot is unpaid. No token, wallet or payment is involved at any point, and n
 
 | Step | Where it happens | Status on 2026-11-28 |
 | --- | --- | --- |
-| Discovery (`initialize`, `tools/list`) | MEKU's live MCP server, `https://meku.farm/api/public/mcp` | Live. Outside clients observed it on 2026-11-14 and 2026-11-21 ([issue #31](https://github.com/mekusimeku/meku-si/issues/31)). |
+| Discovery (`initialize`, `tools/list`) | MEKU's live MCP server, `https://meku.farm/api/public/mcp` | Live. Confirmed by a live outside-client check on 2026-11-14 and by an independent tester's MCP Inspector run on 2026-11-21 ([issue #31](https://github.com/mekusimeku/meku-si/issues/31)). |
 | Pilot key | Issued by a MEKU operator | Live feature. Request-capable keys have no expiry, so the operator revokes the key when the pilot closes. |
 | Request (`meku_request_human`) | MEKU's live MCP server | Live in the deployed site (build of 2026-11-27 09:30 UTC). No independent authenticated use has been published yet; this pilot would be the first. |
 | Review | MEKU's SEEK review queue (`meku.farm/seek`) | Live. Requests made with an agent key belong to the account that issued the key, and the review screen refuses a review by that account ("a different reviewer must review it"). A **second MEKU reviewer** is therefore required. |

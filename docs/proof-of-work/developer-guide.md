@@ -128,7 +128,9 @@ node tools/pow/request.mjs status --receipt pow-receipt.json
 node tools/pow/request.mjs import-status --receipt pow-receipt.json --response-text-file status-result.txt
 ```
 
-When the status is `approved`, post the printed block. If the tool reports that your code is missing from the stored text, post a stop and report it.
+When the status is `approved` **and** the operator's `request_reviewed` (seq 3) is in the ledger, post the printed block. MEKU often shows `approved` before seq 3 is posted; a block posted before seq 3 does not count, so post it again after seq 3 (running `status` again is fine). If the tool reports that your code is missing from the stored text, post a stop and report it.
+
+If the verifier says one of your records was not counted because its seq was wrong, post exactly the same text again with the right number. Never post a different version of a record you already posted in its turn: that fails the pilot.
 
 ## 9. Reveal the object after consent: `object_revealed` (seq 7)
 

@@ -216,6 +216,7 @@ export function verifyBundle(
     // by the account that holds its role, can count. Every other comment by a roster account is
     // listed in full afterwards, for a person to read (M05 for the human, M06 for the others).
     const sequenced = [];
+    const invalidRecords = []; // records by a participant in their role that failed the schema
     const reasons = new Map(); // comment -> why its record was not counted
     for (const f of found) {
       const role = roleOf(f.comment.author);
@@ -249,6 +250,7 @@ export function verifyBundle(
       const problems = recordProblems(record);
       if (problems.length) {
         reasons.set(f.comment, problems.join("; "));
+        if (typeof record.type === "string") invalidRecords.push({ record, comment: f.comment, image: f.image ?? null });
         continue;
       }
       sequenced.push({ record, comment: f.comment, image: f.image ?? null, label: f.label ?? null });
@@ -263,36 +265,50 @@ export function verifyBundle(
     for (const { record } of sequenced) if (record.pilot_id !== pilotId) fail("L03", `seq ${record.seq} has pilot_id ${record.pilot_id}`);
     if (results.get("L03").status !== "FAIL") pass("L03", pilotId);
 
-    // Each kind of record is posted once. A second record of the same kind by the same role says
-    // the same thing (a repeat, perhaps with its seq corrected) or contradicts the first, which
-    // fails: so a negative record can never be outvoted by a later positive one, and the evidence
-    // the operator checked can never be swapped. Stops are exempt: any stop is a stop.
-    // A record joins the chain when its type may come next and its seq is the next one; a record
-    // out of place is not counted, and the participant posts it again. A stop or a close counts
-    // whatever seq was typed, because a typo must never keep a stop from counting.
+    // Each kind of record is posted once. A record posted in its turn states what that kind
+    // says, even if its seq is wrong: a later record of the same kind by the same role that says
+    // anything else (apart from its seq) fails, so a negative record can never be outvoted by a
+    // later positive one, and the evidence the operator checked can never be swapped. The same
+    // record with its seq corrected is a repeat. Stops are exempt: any stop is a stop.
+    // A record posted before its turn is not counted and states nothing, so it may be posted
+    // again, even with new content (a status read again, a new photo), when its turn comes.
+    // A stop or a close counts whatever seq was typed, because a typo must never keep a stop
+    // from counting.
     // Two images are the same when their addresses are, or when the bundle holds both files and
-    // their bytes are identical (the same screenshot uploaded again gets a new address).
+    // their bytes are identical (the same screenshot uploaded again gets a new address). When a
+    // file is missing they cannot be compared; that is reported, and the counted one stands.
     const files = Array.isArray(bundle.evidence_files) ? bundle.evidence_files : [];
     const imageHash = (e) => {
       const file = files.find((f) => String(f?.comment_id) === String(e.comment.id) && typeof f?.url === "string" && f.url.toLowerCase() === String(e.image).toLowerCase())?.file;
       const bytes = file ? loadEvidence(file) : null;
       return bytes ? sha256Hex(bytes) : null;
     };
-    const sameImage = (a, b) => (a.image ?? null) === (b.image ?? null) || (a.image && b.image && imageHash(a) !== null && imageHash(a) === imageHash(b));
+    const imageMatch = (a, b) => {
+      if ((a.image ?? null) === (b.image ?? null)) return true;
+      if (!a.image || !b.image) return false;
+      const [ha, hb] = [imageHash(a), imageHash(b)];
+      return ha === null || hb === null ? null : ha === hb;
+    };
     const content = (e) => canon({ ...e.record, seq: null });
-    const sameContent = (a, b) => content(a) !== null && content(a) === content(b) && sameImage(a, b);
-    const firstOfKind = new Map(); // type + role -> first valid record of that kind
+    // true: says the same; false: says something else; null: the same record, beside a
+    // screenshot that could not be compared.
+    const compare = (a, b) => (content(a) === null || content(a) !== content(b) ? false : imageMatch(a, b));
+    const statements = new Map(); // type + role -> the record that states what this kind says
+    const outOfTurn = []; // posted before their turn: not counted, stating nothing
     for (const entry of sequenced) {
       const { record, comment } = entry;
       const kind = `${record.type}|${record.role}`;
-      const first = firstOfKind.get(kind);
-      if (record.type !== "stop" && first && !sameContent(first, entry)) {
-        fail("L04", `a second ${record.type} posted at ${comment.created_at} says something different from the one posted at ${first.comment.created_at}`);
-        reasons.set(comment, `contradicts the ${record.type} posted at ${first.comment.created_at}`);
-        continue;
+      const statement = statements.get(kind);
+      if (record.type !== "stop" && statement) {
+        const same = compare(statement, entry);
+        if (same === false) {
+          fail("L04", `a second ${record.type} posted at ${comment.created_at} says something different from the one posted at ${statement.comment.created_at}`);
+          reasons.set(comment, `contradicts the ${record.type} posted at ${statement.comment.created_at}`);
+          continue;
+        }
+        if (same === null) warn("L04", `the screenshot posted at ${comment.created_at} could not be compared with the one posted at ${statement.comment.created_at}, because the bundle lacks a file; the first one stands. Export again with its attachments`);
       }
-      if (!first) firstOfKind.set(kind, entry);
-      if (chain.some((e) => e.record.type === record.type && sameLogin(e.comment.author, comment.author) && (record.type !== "stop" || sameContent(e, entry)))) {
+      if (chain.some((e) => e.record.type === record.type && sameLogin(e.comment.author, comment.author) && (record.type !== "stop" || compare(e, entry) === true))) {
         warn("L04", `${record.type} was posted again at ${comment.created_at}; the repeat is ignored`);
         reasons.set(comment, `a repeat of the counted ${record.type}`);
         continue;
@@ -302,14 +318,30 @@ export function verifyBundle(
       const stopped = chain.some((e) => e.record.type === "stop");
       const allowed = allowedNext(last?.record ?? null, { closed, stopped });
       const lenient = record.type === "stop" || record.type === "pilot_closed";
-      if (!allowed.includes(record.type) || (record.seq !== chain.length && !lenient)) {
-        const expected = allowed.length ? `seq ${chain.length}: ${allowed.join(" or ")}` : "nothing more";
-        warn("L04", `seq ${record.seq} ${record.type} posted at ${comment.created_at} is out of place (expected ${expected}); it is not counted`);
+      const expected = allowed.length ? `seq ${chain.length}: ${allowed.join(" or ")}` : "nothing more";
+      if (!allowed.includes(record.type)) {
+        warn("L04", `seq ${record.seq} ${record.type} posted at ${comment.created_at} is out of place (expected ${expected}); it is not counted and states nothing, so post it again when its turn comes`);
+        reasons.set(comment, `out of place: expected ${expected}`);
+        outOfTurn.push(entry);
+        continue;
+      }
+      if (!statement && record.type !== "stop") statements.set(kind, entry);
+      if (record.seq !== chain.length && !lenient) {
+        warn("L04", `seq ${record.seq} ${record.type} posted at ${comment.created_at} is out of place (expected ${expected}); it is not counted: post exactly the same record again with seq ${chain.length}, since any other change fails`);
         reasons.set(comment, `out of place: expected ${expected}`);
         continue;
       }
       if (record.seq !== chain.length) warn("L04", `the ${record.type} posted at ${comment.created_at} says seq ${record.seq}; it is counted as seq ${chain.length}`);
       chain.push(entry);
+    }
+    // A record that does not count states nothing, but when it says something other than the
+    // record of its kind that counts, both must be read (M05, M06): it may be a negative check or
+    // a rejection that was posted badly.
+    for (const other of [...outOfTurn, ...invalidRecords]) {
+      if (other.record.type === "stop") continue;
+      const counted = chain.find((e) => e.record.type === other.record.type && e.record.role === other.record.role);
+      if (counted && compare(counted, other) !== true)
+        warn("L04", `the ${other.record.type} posted at ${other.comment.created_at}, which does not count, says something other than the one that counts (posted at ${counted.comment.created_at}): read both`);
     }
     if (results.get("L04").status !== "FAIL") pass("L04", `${chain.length} records in order`);
 

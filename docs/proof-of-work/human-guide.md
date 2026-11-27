@@ -118,7 +118,7 @@ Post it within 48 hours of the object being named. If you forgot the screenshot,
 
 ## Important
 
-- **Never edit or delete** your comments. If something is wrong, post a new comment or tell the operator. An edited comment stops the pilot from passing unless a stop is recorded, because its first version might have said stop. If a block was not accepted (for example, you added words to it), post the block again, alone, in a new comment.
+- **Never edit or delete** your comments. If something is wrong, post a new comment or tell the operator. An edited comment stops the pilot from passing unless a stop is recorded, because its first version might have said stop. If a block was not accepted (for example, you added words to it), post the block again, alone, in a new comment; for the evidence, attach the same screenshot again.
 - **To stop**, post a comment that says only `STOP` (or only 🛑), or tell the operator. The same word in many other languages also counts, for example berhenti, batal, arrête, 停止, やめて or 그만. A comment like that prevents the pilot from passing until a stop is recorded, even after the pilot has closed. If you want to give a reason, post it in a second comment. Everything you write in the ledger is printed in full for the people who check the pilot, so a request to stop in any other words is also seen. Stopping is never held against you.
 - **Post no other images** in the ledger. Every image a participant posts is checked, and one that carries a location fails the whole pilot.
 - **If one of your comments ever disappears,** tell the developer, who is not part of MEKU. GitHub's notification emails keep your own copy of every comment (see **Subscribe** above).

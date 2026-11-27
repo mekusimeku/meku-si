@@ -1666,6 +1666,129 @@ test("review 5: JavaScript and Python count the same records when a kind is post
   }
 });
 
+// ---- Findings of the sixth independent review (2026-11-28) -------------------------------
+
+const postEarly = (p, seq, before, change) => {
+  const i = commentIndexFor(p.bundle, seq);
+  const j = commentIndexFor(p.bundle, before);
+  const record = extractRecords(p.bundle.comments[i].body)[0].record;
+  const c = { ...clone(p.bundle.comments[i]), id: 6000 + seq, created_at: new Date(Date.parse(p.bundle.comments[j].created_at) - 60_000).toISOString() };
+  c.updated_at = c.created_at;
+  c.body = recordComment(change(clone(record)));
+  p.bundle.comments.splice(j, 0, c);
+  return c;
+};
+
+test("review 6: a record posted before its turn states nothing, so it may be posted again with new content", async () => {
+  // MEKU shows "approved" before the operator posts seq 3: the developer posts seq 4 early,
+  // then reads the status again after seq 3. The two reads differ; only the second counts.
+  const p = await hostile();
+  postEarly(p, 4, 3, (r) => ({ ...r, observed_at: "2026-01-01T00:00:00.000Z", response_text_sha256: "0".repeat(64) }));
+  let r = verify(p);
+  assert.equal(r.verdict, "PASS", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+  const l04 = check(r, "L04").details.join(" ");
+  assert.match(l04, /states nothing, so post it again when its turn comes/);
+  assert.match(l04, /which does not count, says something other than the one that counts .*: read both/);
+  // A close posted before its turn does not fix the outcome.
+  const q = await hostile();
+  truncateAfter(q.bundle, 9);
+  appendRecord(q.bundle, SYNTHETIC.operator, closedRecord({ pilotId: SYNTHETIC.pilotId, seq: 10, outcome: "completed" }));
+  appendRecord(q.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 10, role: "operator", reason: "The human asked to stop" }));
+  appendRecord(q.bundle, SYNTHETIC.operator, closedRecord({ pilotId: SYNTHETIC.pilotId, seq: 11, outcome: "stopped" }));
+  r = verify(q);
+  assert.equal(r.verdict, "STOPPED", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+  // An evidence comment posted before the object was named does not lock its photo.
+  const z = await hostile();
+  const otherUrl = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000066";
+  const pre = postEarly(z, 8, 7, (rec) => rec);
+  pre.body = `${pre.body}\n![Image](${otherUrl})`;
+  z.bundle.evidence_files.push({ comment_id: pre.id, url: otherUrl, file: "evidence/early.png", sha256: "x" });
+  z.files.set("evidence/early.png", makePng(330, 250));
+  r = verify(z);
+  assert.equal(r.verdict, "PASS", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+  assert.equal(r.evidence.url, SYNTHETIC.attachmentUrl);
+  assert.match(check(r, "L04").details.join(" "), /read both/);
+});
+
+test("review 6: a record posted in its turn with the wrong seq states what its kind says", async () => {
+  // The evidence typed with seq 9, then posted again with seq 8: the same screenshot passes,
+  // a new photo fails.
+  for (const sameBytes of [true, false]) {
+    const p = await hostile();
+    const i = commentIndexFor(p.bundle, 8);
+    const original = p.bundle.comments[i];
+    const record = extractRecords(original.body)[0].record;
+    const misnumbered = { ...clone(original), id: 6608, created_at: new Date(Date.parse(original.created_at) - 60_000).toISOString() };
+    misnumbered.updated_at = misnumbered.created_at;
+    const firstUrl = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000068";
+    misnumbered.body = `${recordComment({ ...record, seq: 9 })}\n![Image](${firstUrl})`;
+    p.bundle.comments.splice(i, 0, misnumbered);
+    p.bundle.evidence_files.push({ comment_id: misnumbered.id, url: firstUrl, file: "evidence/first.png", sha256: "x" });
+    p.files.set("evidence/first.png", sameBytes ? p.files.get(p.bundle.evidence_files[0].file) : makePng(330, 250));
+    const r = verify(p);
+    assert.equal(r.verdict, sameBytes ? "PASS" : "FAIL", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+    assert.match(check(r, "L04").details.join(" "), sameBytes ? /post exactly the same record again with seq 8/ : /a second evidence_submitted .* says something different/);
+  }
+});
+
+test("review 6: a screenshot that cannot be compared warns, and the first one stands", async () => {
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 8);
+  const record = extractRecords(p.bundle.comments[i].body)[0].record;
+  const otherUrl = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000077";
+  // Posted again under a new address, and its file is missing, as when a download failed.
+  appendRecordless(p.bundle, SYNTHETIC.human, `${recordComment(record)}\n![Image](${otherUrl})`, i);
+  const r = verify(p);
+  assert.equal(check(r, "L04").status, "WARN");
+  assert.match(check(r, "L04").details.join(" "), /could not be compared .* the first one stands/);
+  assert.equal(r.evidence.url, SYNTHETIC.attachmentUrl);
+});
+
+test("review 6: an invalid record that says something else than the counted one is named", async () => {
+  // A negative MEKU check with a malformed code, then a valid positive one.
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 9);
+  const positive = extractRecords(p.bundle.comments[i].body)[0].record;
+  const bad = { ...clone(p.bundle.comments[i]), id: 6699, created_at: new Date(Date.parse(p.bundle.comments[i].created_at) - 60_000).toISOString() };
+  bad.updated_at = bad.created_at;
+  bad.body = recordComment({ ...positive, code: positive.code.toLowerCase(), meku_check: { ...positive.meku_check, no_personal_data_visible: false } });
+  p.bundle.comments.splice(i, 0, bad);
+  const r = verify(p);
+  assert.match(check(r, "L04").details.join(" "), /result_returned posted at .*, which does not count, says something other than the one that counts/);
+  assert.ok(JSON.stringify(r.uncounted_comments).includes("6699"), "it is printed in full for M06");
+});
+
+test("review 6: JavaScript and Python agree on records posted before their turn", async (t) => {
+  if (spawnSync("python3", ["--version"]).status !== 0) return t.skip("python3 not installed");
+  const both = (p, skip) => {
+    const dir = mkdtempSync(join(tmpdir(), "pow-p6-"));
+    writeFileSync(join(dir, "bundle.json"), JSON.stringify(p.bundle));
+    const py = spawnSync("python3", ["-I", join(here, "digest_reference.py"), join(dir, "bundle.json"), ...(skip ? ["--skip", skip] : [])], { encoding: "utf8" });
+    return { js: verify(p).ledger_digest, py: py.status === 0 ? py.stdout.split(" ")[0] : null };
+  };
+  const p = await hostile();
+  postEarly(p, 4, 3, (r) => ({ ...r, observed_at: "2026-01-01T00:00:00.000Z" }));
+  let o = both(p);
+  assert.equal(o.py, o.js, "seq 4 posted before seq 3, then read again");
+  const q = await hostile();
+  truncateAfter(q.bundle, 9);
+  appendRecord(q.bundle, SYNTHETIC.operator, closedRecord({ pilotId: SYNTHETIC.pilotId, seq: 10, outcome: "completed" }));
+  appendRecord(q.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 10, role: "operator", reason: "The human asked to stop" }));
+  appendRecord(q.bundle, SYNTHETIC.operator, closedRecord({ pilotId: SYNTHETIC.pilotId, seq: 11, outcome: "stopped" }));
+  o = both(q);
+  assert.equal(o.py, o.js, "a close before its turn, then a stop and a close");
+  // A record that fails the schema is not counted by verify.mjs; Python is told with --skip.
+  const z = await hostile();
+  const i9 = commentIndexFor(z.bundle, 9);
+  const positive = extractRecords(z.bundle.comments[i9].body)[0].record;
+  const bad = { ...clone(z.bundle.comments[i9]), id: 6609, created_at: new Date(Date.parse(z.bundle.comments[i9].created_at) - 60_000).toISOString() };
+  bad.updated_at = bad.created_at;
+  bad.body = recordComment({ ...positive, code: positive.code.toLowerCase() });
+  z.bundle.comments.splice(i9, 0, bad);
+  o = both(z, "6609");
+  assert.equal(o.py, o.js, "an invalid record skipped as the verifier lists it");
+});
+
 test("review 4 N1: a header line can carry only the reveal's instruction, and it must match", async () => {
   const p = await hostile();
   const i = commentIndexFor(p.bundle, 7);

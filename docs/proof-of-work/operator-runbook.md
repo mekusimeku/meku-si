@@ -175,6 +175,7 @@ Publish the [report](report-template.md) as a pull request that adds `pilots/POW
 ## Never
 
 - Edit or delete any comment, or post a record in someone else's role. GitHub's API does not return deleted comments, so a deletion silently removes evidence.
+- Post a different version of a record you already posted in its turn: that fails the pilot. If only its seq was wrong, post exactly the same text again with the right number. A record posted before its turn says nothing; post it again when its turn comes.
 - Use the developer's key, or let the account that issued the key approve the request.
 - Offer or imply payment, tokens or rewards, or create a mission.
 - Choose a human who works for MEKU, or ask for anything beyond the protocol task.

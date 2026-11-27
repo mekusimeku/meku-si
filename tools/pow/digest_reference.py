@@ -207,7 +207,7 @@ def main(path, expect_operator, skip):
     )
     roles = {"operator": operator, "developer": developer, "human": human}
     chain = []  # (comment, record, image)
-    first_of_kind = {}  # (type, role) -> the first record of that kind
+    statements = {}  # (type, role) -> the record posted in its turn that states what this kind says
     contradictions = []
     for c, read in entries:
         role = next((name for name, login in roles.items() if same(c["author"], login)), None)
@@ -220,15 +220,14 @@ def main(path, expect_operator, skip):
             continue
         if record.get("role") != role:
             continue  # a record in another participant's role is not counted
-        # Each kind of record is posted once: a later one of the same kind must say the same,
-        # apart from its seq. Any stop is a stop. The digest covers records, not images, so a
-        # second screenshot (which verify.mjs fails) cannot change it.
+        # Each kind of record is posted once: once one was posted in its turn, a later one of the
+        # same kind must say the same, apart from its seq. Any stop is a stop. The digest covers
+        # records, not images, so a second screenshot (which verify.mjs fails) cannot change it.
         kind = (record.get("type"), role)
-        first = first_of_kind.get(kind)
-        if record.get("type") != "stop" and first is not None and without_seq(first) != without_seq(record):
+        statement = statements.get(kind)
+        if record.get("type") != "stop" and statement is not None and without_seq(statement) != without_seq(record):
             contradictions.append(str(c["id"]))
-            continue  # contradicts the first record of its kind (verify.mjs fails the ledger)
-        first_of_kind.setdefault(kind, record)
+            continue  # contradicts the record of its kind (verify.mjs fails the ledger)
         if any(r.get("type") == record.get("type") and same(old["author"], c["author"]) and (record.get("type") != "stop" or without_seq(r) == without_seq(record)) for old, r, _ in chain):
             continue  # posted again, perhaps with its seq corrected: the counted one stands
         last = chain[-1] if chain else None
@@ -236,8 +235,12 @@ def main(path, expect_operator, skip):
         stopped = any(r.get("type") == "stop" for _, r, _ in chain)
         allowed = allowed_next(last[1] if last else None, closed, stopped)
         lenient = record.get("type") in ("stop", "pilot_closed")
-        if record.get("type") not in allowed or (not is_seq(record.get("seq"), len(chain)) and not lenient):
-            continue  # out of place, so not counted
+        if record.get("type") not in allowed:
+            continue  # before its turn: not counted, and it states nothing
+        if record.get("type") != "stop":
+            statements.setdefault(kind, record)
+        if not is_seq(record.get("seq"), len(chain)) and not lenient:
+            continue  # its turn but the wrong seq: not counted, yet it states what its kind says
         chain.append((c, record, image))
     digest = sha256_hex(f"{PROTOCOL}|{opening['pilot_id']}")
     for _, record, _ in chain:

@@ -410,7 +410,7 @@ async function main(argv) {
       console.error(`MEKU request status: ${status}. Code intact in stored text: ${codeIntact}.`);
       if (!codeIntact) console.error("STOP: the stored description does not contain your code. Post a stop record and report it.");
       if (record) {
-        console.error("\nPost this as a new comment in the ledger. Copy only what follows:\n");
+        console.error("\nPost this only once the operator's review (seq 3) is in the ledger. If you posted it earlier, post it again after seq 3. Copy only what follows:\n");
         console.log(postableComment(record));
       }
       return 0;
@@ -458,7 +458,7 @@ async function main(argv) {
       console.error(`MEKU request status: ${status}. Code intact in stored text: ${codeIntact}. Receipt: ${out}`);
       if (!codeIntact) console.error("STOP: the stored description does not contain your code. Post a stop record and report it.");
       if (record) {
-        console.error("\nPost this as a new comment in the ledger. Copy only what follows:\n");
+        console.error("\nPost this only once the operator's review (seq 3) is in the ledger. If you posted it earlier, post it again after seq 3. Copy only what follows:\n");
         console.log(postableComment(record));
       } else console.error("Not approved yet. Check again later by hand; this tool never polls.");
       return 0;

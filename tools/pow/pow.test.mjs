@@ -237,6 +237,33 @@ test("the independent Python digest matches the JavaScript verifier", async (t) 
   assert.equal(out.split(" ")[0], verify(p).ledger_digest);
 });
 
+test("an independent JSON Schema validator accepts every record and rejects tampered ones", async (t) => {
+  const probe = spawnSync("python3", ["-I", "-c", "import jsonschema"]);
+  if (probe.status !== 0) return t.skip("python3 with jsonschema not installed");
+  const p = await pilot();
+  const records = verify(p).records_in_order;
+  const tampered = [
+    { ...records[6], adult_18_plus: false },
+    { ...records[1], agent: "x‮y" },
+    { ...records[2], payment: "MEKU SI 10" },
+    { ...records[7], object: "KNIFE" },
+    { ...records[11], extra: true },
+  ];
+  const script = [
+    "import json, sys, jsonschema",
+    "schema = json.load(open(sys.argv[1]))",
+    "jsonschema.Draft202012Validator.check_schema(schema)",
+    "v = jsonschema.Draft202012Validator(schema)",
+    "data = json.load(sys.stdin)",
+    "print(json.dumps([[v.is_valid(r) for r in data['good']], [v.is_valid(r) for r in data['bad']]]))",
+  ].join("\n");
+  const run = spawnSync("python3", ["-I", "-c", script, join(here, "pow-record-v1.schema.json")], { input: JSON.stringify({ good: records, bad: tampered }), encoding: "utf8" });
+  assert.equal(run.status, 0, run.stderr);
+  const [good, bad] = JSON.parse(run.stdout);
+  assert.deepEqual(good, records.map(() => true));
+  assert.deepEqual(bad, tampered.map(() => false));
+});
+
 // ---- Planted faults: each must turn the verdict into FAIL at the named check ---------
 
 const FAULTS = [

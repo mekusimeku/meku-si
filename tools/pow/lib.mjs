@@ -388,6 +388,7 @@ const ENVELOPE = ["pow", "pilot_id", "seq", "type", "role"];
 
 // Control and bidirectional-override characters could make a printed report lie about itself.
 const UNSAFE_TEXT = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+const SAFE_TEXT_PATTERN = "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$";
 
 function checkValue(spec, value, path, problems, ctx) {
   if (typeof value === "string" && UNSAFE_TEXT.test(value)) {
@@ -484,15 +485,17 @@ export function recordJsonSchema() {
       case "boolean":
         return { type: "boolean" };
       case "login":
-        return { type: "string", pattern: GITHUB_LOGIN.source };
+        // Real GitHub logins, plus the underscore form used only by synthetic test ledgers
+        // (verify.mjs additionally refuses that form outside POW-SYNTHETIC-* pilots).
+        return { type: "string", pattern: `^(?:${GITHUB_LOGIN.source.slice(1, -1)}|${SYNTHETIC_LOGIN.source.slice(1, -1)})$` };
       case "nullable-string":
-        return { type: ["string", "null"], maxLength: spec.max };
+        return { type: ["string", "null"], maxLength: spec.max, pattern: SAFE_TEXT_PATTERN };
       case "string":
         return {
           type: "string",
           minLength: spec.min,
           maxLength: spec.max,
-          ...(spec.patternSource ? { pattern: spec.patternSource } : {}),
+          pattern: spec.patternSource ?? SAFE_TEXT_PATTERN,
         };
       case "array":
         return { type: "array", maxItems: spec.max, items: toSchema(spec.item) };

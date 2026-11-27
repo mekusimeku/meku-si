@@ -8,6 +8,7 @@ Rules for every record comment:
 - Never edit a record comment. GitHub records edits, and check L05 fails on any edited record.
 - Only accounts on the roster count. `pilot_opened` names the operator and developer; `task_offered` names the human. Record-shaped comments from anyone else are ignored and reported as a warning (L07).
 - No timestamps are typed by hand. GitHub's server time on each comment is the clock (L06).
+- No string may contain control characters or text-direction overrides (L02). The verifier also escapes everything it prints.
 
 ## Envelope
 

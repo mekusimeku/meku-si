@@ -162,7 +162,7 @@ test("a clean PNG or JPEG passes; metadata, location and bad files fail", () => 
   assert.ok(locatedXmp.findings.some((f) => f.code === "XMP_LOCATION" && f.level === "FAIL"));
   const jpegXmp = scanImage(makeJpeg({ app: [[0xe1, Buffer.from("http://ns.adobe.com/xap/1.0/\0<photoshop:City>X</photoshop:City>", "latin1")]] }));
   assert.ok(jpegXmp.findings.some((f) => f.code === "XMP_LOCATION"));
-  assert.ok(scanImage(makeJpeg({ app: [[0xed, Buffer.from("Photoshop 3.0\0", "latin1")]] })).findings.some((f) => f.code === "IPTC_PRESENT"));
+  assert.ok(scanImage(makeJpeg({ app: [[0xed, Buffer.from("Photoshop 3.0\0", "latin1")]] })).findings.some((f) => f.code === "JPEG_METADATA_SEGMENT"));
 
   assert.ok(scanImage(makePng(100, 100)).findings.some((f) => f.code === "TOO_SMALL"));
   assert.ok(scanImage(Buffer.from("GIF89a....")).findings.some((f) => f.code === "UNSUPPORTED_TYPE"));
@@ -173,7 +173,8 @@ test("a bare pasted record (no backtick fences) is accepted, with an image after
   const consent = consentRecord({ pilotId: "POW-001" });
   const bare = `${JSON.stringify(consent, null, 2)}\n\n<img width="320" alt="x" src="${SYNTHETIC.attachmentUrl}" />`;
   assert.deepEqual(extractRecords(bare).map((f) => f.record), [consent]);
-  assert.deepEqual(extractRecords("I agree! {not json} meku.pow/1")[0].error.length > 0, true);
+  assert.deepEqual(extractRecords("I agree! {not json} meku.pow/1"), [], "prose that does not start with { is never parsed");
+  assert.ok(extractRecords("{not json} meku.pow/1")[0].error.length > 0);
   assert.deepEqual(extractRecords("just chatting {x: 1}"), []);
   // The human pastes bare JSON in the synthetic ledger: same verdict, same digest.
   const p = await pilot();
@@ -215,7 +216,7 @@ test("the synthetic ledger passes every automated check and has a fixed digest",
   assert.equal(r.manual.length, 4);
   assert.equal(r.record_count, 12);
   // Regression anchor: any change to records, hashing or the template changes this value.
-  assert.equal(r.ledger_digest, "064e24e4ffe5171bfbba4239e2ab420e33492c33dc7e6ebfb6378de8e2a7d21c");
+  assert.equal(r.ledger_digest, "1b2c3b2328275de6429d8a2579eb3b7f0dfc72c618672e639439bd10014e7935");
   assert.equal(r.ledger_digest, ledgerDigest(SYNTHETIC.pilotId, r.records_in_order));
   assert.match(formatReport(r), /SYNTHETIC TEST DATA - NOT EVIDENCE/);
 });
@@ -271,7 +272,18 @@ const FAULTS = [
   ["L03 a record names another pilot", "L03", (b) => rewrite(b, 7, (r) => (r.pilot_id = "POW-SYNTHETIC-2"))],
   ["E03 evidence image too small", "E03", (b, p) => p.files.set(b.evidence_files[0].file, makePng(200, 150))],
   ["L05 edited record comment", "L05", (b) => (b.comments[commentIndexFor(b, 6)].updated_at = "2026-01-06T00:00:00.000Z")],
-  ["L04 duplicate seq", "L04", (b) => b.comments.splice(commentIndexFor(b, 7), 0, { ...clone(b.comments[commentIndexFor(b, 6)]), id: 99 })],
+  [
+    "L04 a second, different record with the same seq",
+    "L04",
+    (b) => {
+      const i = commentIndexFor(b, 7);
+      const copy = { ...clone(b.comments[i]), id: 99 };
+      const t = new Date(Date.parse(copy.created_at) + 30_000).toISOString();
+      Object.assign(copy, { created_at: t, updated_at: t });
+      copy.body = copy.body.replace(/"salt": "[0-9a-f]{32}"/, `"salt": "${"0".repeat(32)}"`);
+      b.comments.splice(i + 1, 0, copy);
+    },
+  ],
   ["L06 reveal at the same second as consent", "L06", (b) => shiftTime(b, 7, -10)],
   ["L04 reveal posted before consent", "L04", (b) => shiftTime(b, 7, -15)],
   ["L02 payment field not none", "L02", (b) => rewrite(b, 2, (r) => (r.payment = "MEKU SI 10"))],
@@ -588,7 +600,7 @@ test("export pages comments, downloads only evidence attachments, and never send
   assert.equal(r.verdict, "PASS");
 });
 
-test("export refuses attachments redirected off GitHub", async () => {
+test("export records an attachment redirected off GitHub as failed, without saving it", async () => {
   const p = await pilot();
   const fetchImpl = async (url) => {
     if (String(url).startsWith("https://api.github.com/"))
@@ -598,7 +610,12 @@ test("export refuses attachments redirected off GitHub", async () => {
     return response;
   };
   const out = join(mkdtempSync(join(tmpdir(), "pow-export-")), "ledger");
-  await assert.rejects(exportLedger({ issueUrl: SYNTHETIC.issueUrl, outDir: out, fetchImpl }), /unexpected host/);
+  const bundle = await exportLedger({ issueUrl: SYNTHETIC.issueUrl, outDir: out, fetchImpl });
+  assert.equal(bundle.evidence_files.length, 1);
+  assert.equal(bundle.evidence_files[0].file, null);
+  assert.match(bundle.evidence_files[0].error, /unexpected host/);
+  const r = verifyBundle(bundle, { loadEvidence: () => null, allowSynthetic: true });
+  assert.equal(check(r, "E02").status, "FAIL");
 });
 
 // ---- CLIs --------------------------------------------------------------------------------
@@ -614,6 +631,8 @@ test("command-line tools: synthetic example, verify exit codes, schema, human re
   assert.equal(refused.status, 1);
   const usage = spawnSync(process.execPath, [join(here, "verify.mjs")], { encoding: "utf8" });
   assert.equal(usage.status, 3);
+  const flagAsValue = spawnSync(process.execPath, [join(here, "verify.mjs"), "--json", "--allow-synthetic", join(dir, "bundle.json")], { encoding: "utf8" });
+  assert.equal(flagAsValue.status, 3, "a flag is never taken as the --json file name");
   // Path traversal in the bundle cannot read files outside its folder.
   const evil = JSON.parse(readFileSync(join(dir, "bundle.json"), "utf8"));
   evil.evidence_files[0].file = "../../../../etc/passwd";
@@ -635,3 +654,277 @@ test("the object list holds only harmless household items", () => {
 });
 
 void root;
+
+// ---- Findings of the independent review (2026-11-28), one test each ---------------------
+
+const hostile = async () => {
+  const p = await pilot();
+  return p;
+};
+
+test("review F1: the human's plain-text STOP blocks PASS until a stop record follows", async () => {
+  const p = await hostile();
+  appendRecordless(p.bundle, SYNTHETIC.human, "STOP. I withdraw my consent - please do not use my photo.", commentIndexFor(p.bundle, 8));
+  let r = verify(p);
+  assert.equal(r.verdict, "FAIL");
+  assert.equal(check(r, "H05").status, "FAIL");
+  // Recorded properly: the operator posts a stop right after it, then closes.
+  const q = await hostile();
+  truncateAfter(q.bundle, 8);
+  appendRecordless(q.bundle, SYNTHETIC.human, "stop please", q.bundle.comments.length - 1);
+  appendRecord(q.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 9, role: "operator", reason: "The human asked to stop" }));
+  appendRecord(q.bundle, SYNTHETIC.operator, closedRecord({ pilotId: SYNTHETIC.pilotId, seq: 10, outcome: "stopped" }));
+  r = verify(q);
+  assert.equal(r.verdict, "STOPPED");
+  assert.equal(check(r, "H05").status, "PASS");
+});
+
+test("review F2b/F9: malformed participant data gives a FAIL report, never a crash", async () => {
+  const p = await hostile();
+  rewrite(p.bundle, 0, (r) => (r.roster.operator = 7));
+  let r = verify(p);
+  assert.equal(r.verdict, "FAIL");
+  assert.ok(formatReport(r).includes("VERDICT: FAIL"));
+  const q = await hostile();
+  const i = commentIndexFor(q.bundle, 2);
+  q.bundle.comments[i].body = q.bundle.comments[i].body.replace('"seq": 2', '"seq": 2.0');
+  r = verify(q);
+  assert.equal(r.verdict, "FAIL");
+  assert.equal(check(r, "L02").status, "FAIL");
+  const z = await hostile();
+  z.bundle.comments[commentIndexFor(z.bundle, 3)].body = recordComment({ pow: "meku.pow/1", pilot_id: ["POW-SYNTHETIC-1"], seq: 3, type: ["request_reviewed"], role: "operator" });
+  r = verify(z);
+  assert.equal(r.verdict, "FAIL");
+});
+
+test("review F3: a record hidden in an HTML comment does not count", async () => {
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 10);
+  p.bundle.comments[i].body = `I REJECT this result.\n<!--\n${p.bundle.comments[i].body}\n-->`;
+  const r = verify(p);
+  assert.notEqual(r.verdict, "PASS");
+  assert.ok(!r.records_in_order.some((x) => x.type === "requester_decision"));
+});
+
+test("review F13: an image hosted elsewhere, or a second image under an upper-case host, fails E01", async () => {
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 8);
+  const record = extractRecords(p.bundle.comments[i].body)[0].record;
+  p.bundle.comments[i].body = `${recordComment(record)}\n![x](https://i.imgur.com/abc.png)\n<!-- ${SYNTHETIC.attachmentUrl} -->`;
+  assert.equal(check(verify(p), "E01").status, "FAIL");
+  const q = await hostile();
+  q.bundle.comments[commentIndexFor(q.bundle, 8)].body += "\n![b](https://GITHUB.COM/user-attachments/assets/00000000-0000-4000-8000-000000000002)";
+  assert.equal(check(verify(q), "E01").status, "FAIL");
+});
+
+test("review F4-F6b: the image check is an allow-list, including data after the end", () => {
+  const codes = (bytes) => scanImage(bytes).findings.filter((f) => f.level === "FAIL").map((f) => f.code);
+  const rawProfile = pngChunk("zTXt", Buffer.concat([Buffer.from("Raw profile type exif\0\0", "latin1"), Buffer.from([0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01])]));
+  assert.ok(codes(makePng(320, 240, [rawProfile])).includes("PNG_METADATA_CHUNK"), "F4 text chunk");
+  assert.ok(codes(makePng(320, 240, [pngChunk("caBX", Buffer.from("c2pa"))])).includes("PNG_METADATA_CHUNK"), "C2PA chunk");
+  assert.ok(codes(makePng(320, 240, [pngChunk("tEXt", Buffer.from("Comment\0hi", "latin1"))])).includes("PNG_METADATA_CHUNK"));
+  const afterIend = Buffer.concat([makePng(), pngChunk("eXIf", tiffWithGps())]);
+  assert.ok(codes(afterIend).includes("DATA_AFTER_END"), "F6 data after IEND");
+  const exifApp = [0xe1, Buffer.concat([Buffer.from("Exif\0\0", "latin1"), tiffWithGps()])];
+  const secondJpeg = Buffer.concat([makeJpeg(), makeJpeg({ app: [exifApp] })]);
+  assert.ok(codes(secondJpeg).includes("DATA_AFTER_END"), "F5 second image after EOI");
+  assert.ok(codes(makeJpeg({ app: [[0xfe, Buffer.from("GPS 6.1754S 106.8272E")]] })).includes("JPEG_METADATA_SEGMENT"), "F5b comment");
+  assert.ok(codes(makeJpeg({ app: [[0xeb, Buffer.from("JP\0\0jumb")]] })).includes("JPEG_METADATA_SEGMENT"), "APP11 JUMBF/C2PA");
+  assert.ok(codes(makeJpeg({ app: [[0xe2, Buffer.from("MPF\0data")]] })).includes("JPEG_METADATA_SEGMENT"), "APP2 MPF");
+  // F6b: an EXIF segment placed after the start-of-scan data is still found.
+  const plain = makeJpeg();
+  const eoi = plain.length - 2;
+  const exifSeg = Buffer.concat([Buffer.from([0xff, 0xe1, 0, 0]), exifApp[1]]);
+  exifSeg.writeUInt16BE(exifApp[1].length + 2, 2);
+  const late = Buffer.concat([plain.subarray(0, eoi), exifSeg, plain.subarray(eoi)]);
+  assert.ok(codes(late).includes("EXIF_PRESENT"), "F6b EXIF after SOS");
+  // Allowed colour data stays clean.
+  assert.deepEqual(codes(makePng(320, 240, [pngChunk("sRGB", Buffer.from([0])), pngChunk("pHYs", Buffer.alloc(9))])), []);
+  assert.deepEqual(codes(makeJpeg({ app: [[0xe0, Buffer.from("JFIF\0\x01\x01\0\0\x01\0\x01\0\0", "latin1")], [0xe2, Buffer.from("ICC_PROFILE\0\x01\x01", "latin1")]] })), []);
+});
+
+test("review F7: the decision hashes the human's image, not an outsider's copy of the record", async () => {
+  const p = await hostile();
+  truncateAfter(p.bundle, 9);
+  // An outsider posts the identical evidence record with another image before the human did.
+  const evidence = extractRecords(p.bundle.comments[commentIndexFor(p.bundle, 8)].body)[0].record;
+  const other = makePng(320, 240);
+  other[other.length - 20] ^= 1;
+  const otherUrl = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-0000000000aa";
+  const t = new Date(Date.parse(p.bundle.comments[commentIndexFor(p.bundle, 8)].created_at) - 60_000).toISOString();
+  p.bundle.comments.splice(commentIndexFor(p.bundle, 8), 0, { id: 2000, author: "copycat-x", created_at: t, updated_at: t, html_url: "#", body: recordComment(evidence) + `\n![x](${otherUrl})` });
+  p.files.set("evidence/other.png", other);
+  p.bundle.evidence_files.push({ comment_id: 2000, url: otherUrl, file: "evidence/other.png" });
+  const { decisionRecord } = await import("./record.mjs");
+  const checks = { code_visible: true, code_matches: true, object_visible: true, object_matches: true, no_personal_data_visible: true };
+  const d = decisionRecord({ bundlePath: { bundle: p.bundle, loadEvidence: p.loadEvidence }, accept: true, checks, reason: "ok" });
+  assert.equal(d.evidence_sha256, sha256Hex(p.files.get(p.bundle.evidence_files[0].file)));
+});
+
+test("review F10: MEKU reporting personal data blocks an ACCEPTED pass", async () => {
+  const p = await hostile();
+  rewrite(p.bundle, 9, (r) => (r.meku_check.no_personal_data_visible = false));
+  const r = verify(p);
+  assert.equal(r.verdict, "FAIL");
+  assert.equal(check(r, "D04").status, "FAIL");
+});
+
+test("review F11: an outside verification is matched against this ledger's digest", async () => {
+  const p = await hostile();
+  appendRecord(p.bundle, "outside-checker", {
+    pow: "meku.pow/1", pilot_id: "POW-SYNTHETIC-9", type: "independent_verification", role: "verifier", verdict: "PASS", ledger_digest: "0".repeat(64), tool: "x",
+    manual_checks: { code_legible_and_matching: true, object_matching: true, no_personal_data_visible: true, physical_arrangement: true },
+  }, 1);
+  const r = verify(p);
+  assert.equal(r.independent_verifications[0].matches_this_ledger, false);
+  assert.match(formatReport(r), /0 PASS with all manual checks true for this exact ledger digest/);
+});
+
+test("review F12: fractional numbers are refused identically by JavaScript and Python", async (t) => {
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 1);
+  p.bundle.comments[i].body = p.bundle.comments[i].body.replace('"seq": 1', '"seq": 1.0');
+  assert.equal(check(verify(p), "L02").status, "FAIL");
+  assert.throws(() => JSON.parse("{}") && extractRecords("```json\n{\"pow\":\"meku.pow/1\",\"x\":1e3}\n```")[0].record.x, TypeError);
+  if (spawnSync("python3", ["--version"]).status !== 0) return t.skip("python3 not installed");
+  const dir = mkdtempSync(join(tmpdir(), "pow-f12-"));
+  writeFileSync(join(dir, "bundle.json"), JSON.stringify(p.bundle));
+  const out = spawnSync("python3", ["-I", join(here, "digest_reference.py"), join(dir, "bundle.json")], { encoding: "utf8" });
+  assert.notEqual(out.status, 0, "Python also drops the malformed record, so the chain breaks at seq 1");
+});
+
+test("review F17: ordinary prose and Quote replies do not break a genuine ledger", async () => {
+  const p = await hostile();
+  appendRecordless(p.bundle, SYNTHETIC.operator, "Reminder (meku.pow/1): post your record {as shown in the guide}.", 0);
+  const consent = p.bundle.comments[commentIndexFor(p.bundle, 6)];
+  appendRecordless(p.bundle, SYNTHETIC.developer, consent.body.split("\n").map((l) => `> ${l}`).join("\n") + "\nThanks!", commentIndexFor(p.bundle, 6));
+  const r = verify(p);
+  assert.equal(r.verdict, "PASS", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+});
+
+test("review: an exact double post is a warning, not a failure", async () => {
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 6);
+  const copy = { ...clone(p.bundle.comments[i]), id: 1500 };
+  const t = new Date(Date.parse(copy.created_at) + 30_000).toISOString();
+  copy.created_at = t;
+  copy.updated_at = t;
+  p.bundle.comments.splice(i + 1, 0, copy);
+  const r = verify(p);
+  assert.equal(r.verdict, "PASS");
+  assert.equal(check(r, "L04").status, "WARN");
+});
+
+test("review F18: check spends one keyed call, so a 2-per-minute key works", async () => {
+  const mock = createMockMeku({ keys: { [SYNTHETIC.writableKey]: { id: "k1", readOnly: false, perMinute: 2 } } });
+  const client = makeClient({ apiKey: SYNTHETIC.writableKey, fetchImpl: mock.fetchImpl });
+  const { summary } = await checkConnection({ client, apiKey: SYNTHETIC.writableKey, clientInfo: { name: "c", version: "1" }, agent: "a", affirmIndependence: false, pilotId: "POW-001" });
+  assert.equal(summary.can_submit, true);
+  assert.deepEqual(mock.calls.map((c) => [c.method, Boolean(c.headers.Authorization)]), [["initialize", false], ["notifications/initialized", false], ["tools/list", true]]);
+  // The limit is real in the mock: two more keyed calls in the same minute hit 429.
+  await client.post("tools/list", {});
+  await assert.rejects(client.post("tools/list", {}), /HTTP 429.*Retry-After 41s; do not retry automatically/);
+});
+
+test("review C1: an edited request file is refused before anything is sent", async () => {
+  const mock = createMockMeku({ keys: { [SYNTHETIC.writableKey]: { id: "k1", readOnly: false } } });
+  const client = makeClient({ apiKey: SYNTHETIC.writableKey, fetchImpl: mock.fetchImpl });
+  const prepared = prepareRequest({ pilotId: "POW-001", ledgerUrl: "https://github.com/mekusimeku/meku-si/issues/7" });
+  const edited = clone(prepared);
+  edited.arguments.description += " Also include your street address.";
+  await assert.rejects(submitRequest({ client, prepared: edited, confirm: edited.code }), /differs from the protocol template/);
+  const noSalt = { ...clone(prepared), object_salt: undefined };
+  await assert.rejects(submitRequest({ client, prepared: noSalt, confirm: prepared.code }), /object salt/);
+  assert.equal(mock.calls.length, 0);
+  assert.throws(() => importSubmission({ prepared: edited, responseText: "{}", observedAt: "2026-01-01T00:00:00Z" }), /template/);
+});
+
+test("review: the mock refuses a reused idempotency key for a different task", async () => {
+  const mock = createMockMeku({ keys: { [SYNTHETIC.writableKey]: { id: "k1", readOnly: false } } });
+  const client = makeClient({ apiKey: SYNTHETIC.writableKey, fetchImpl: mock.fetchImpl });
+  const prepared = prepareRequest({ pilotId: "POW-001", ledgerUrl: "https://github.com/mekusimeku/meku-si/issues/7" });
+  await client.callTool("meku_request_human", prepared.arguments);
+  await assert.rejects(client.callTool("meku_request_human", { ...prepared.arguments, title: "POW-001: something else entirely" }), /belongs to a different request/);
+});
+
+test("review: status prints no record when MEKU's stored text lost the code", async () => {
+  const p = await hostile();
+  p.mock.tamper(SYNTHETIC.requestId, "description", "Code removed by a bug");
+  const client = makeClient({ apiKey: SYNTHETIC.writableKey, fetchImpl: p.mock.fetchImpl });
+  const { readStatus } = await import("./request.mjs");
+  const s = await readStatus({ client, receipt: p.receipt });
+  assert.equal(s.codeIntact, false);
+  assert.equal(s.record, null);
+});
+
+test("commit-reveal: the object cannot be chosen by the developer or predicted before consent", async () => {
+  const p = await hostile();
+  const reveal = extractRecords(p.bundle.comments[commentIndexFor(p.bundle, 7)].body)[0].record;
+  const consentId = p.bundle.comments[commentIndexFor(p.bundle, 6)].id;
+  assert.equal(reveal.consent_comment_id, consentId);
+  const { objectFor, objectCommitment } = await import("./lib.mjs");
+  assert.equal(reveal.object, objectFor(reveal.salt, consentId));
+  const seq2 = extractRecords(p.bundle.comments[commentIndexFor(p.bundle, 2)].body)[0].record;
+  assert.equal(seq2.object_commitment, objectCommitment(reveal.salt));
+  for (const [name, change] of [
+    ["another object", (r) => (r.object = OBJECTS.find((o) => o !== r.object))],
+    ["another salt", (r) => (r.salt = "f".repeat(32))],
+    ["another comment id", (r) => (r.consent_comment_id += 1)],
+  ]) {
+    const q = await hostile();
+    rewrite(q.bundle, 7, change);
+    const r = verify(q);
+    assert.equal(check(r, "H03").status, "FAIL", name);
+  }
+});
+
+test("a report says where its bundle came from", async () => {
+  const p = await hostile();
+  assert.match(formatReport(verify(p)), /Source: a bundle file\. This checks only that file/);
+  const r = verifyBundle(p.bundle, { loadEvidence: p.loadEvidence, allowSynthetic: true, provenance: { exported_by_this_run: true, exported_at: "2026-01-06T00:00:00Z" } });
+  assert.match(formatReport(r), /Source: exported from GitHub by this run at 2026-01-06T00:00:00Z/);
+});
+
+function appendRecordless(bundle, author, text, afterIndex) {
+  const before = bundle.comments[afterIndex];
+  const nextTime = bundle.comments[afterIndex + 1] ? Date.parse(bundle.comments[afterIndex + 1].created_at) : Date.parse(before.created_at) + 120_000;
+  const t = new Date((Date.parse(before.created_at) + nextTime) / 2).toISOString();
+  bundle.comments.splice(afterIndex + 1, 0, { id: 5000 + afterIndex, author, created_at: t, updated_at: t, html_url: "#", body: text });
+}
+
+test("commit-reveal: a new salt with a consistently recomputed object still fails on the commitment", async () => {
+  const p = await hostile();
+  const { objectFor } = await import("./lib.mjs");
+  rewrite(p.bundle, 7, (r) => {
+    r.salt = "a".repeat(32);
+    r.object = objectFor(r.salt, r.consent_comment_id);
+  });
+  const r = verify(p);
+  assert.equal(check(r, "H03").status, "FAIL");
+  assert.match(check(r, "H03").details[0], /object_commitment/);
+});
+
+test("E01: one GitHub attachment plus any other visible image or link fails", async () => {
+  const p = await hostile();
+  p.bundle.comments[commentIndexFor(p.bundle, 8)].body += "\n![decoy](https://i.imgur.com/decoy.png)";
+  const r = verify(p);
+  assert.equal(check(r, "E01").status, "FAIL");
+  assert.match(check(r, "E01").details[0], /2 link\(s\) or image\(s\), 1 of them GitHub attachments/);
+});
+
+test("a hostile in-memory bundle still yields a FAIL report instead of an exception", () => {
+  const evil = {
+    format: "meku.pow-bundle/1",
+    source: { issue_url: SYNTHETIC.issueUrl },
+    comments: [
+      {
+        get author() {
+          throw new Error("boom");
+        },
+      },
+    ],
+  };
+  const r = verifyBundle(evil, { allowSynthetic: true });
+  assert.equal(r.verdict, "FAIL");
+  assert.match(check(r, "L01").details.join(" "), /boom/);
+});

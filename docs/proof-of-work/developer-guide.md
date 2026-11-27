@@ -29,21 +29,23 @@ Email contact@meku.farm with the subject **"MEKU POW-001 pilot"**. Include your 
 
 The MEKU operator will then:
 
-- send you a **pilot key** privately, never through GitHub. It can submit and read its own requests, and nothing else. It is rate-limited to about 2 calls a minute and 20 a day.
+- send you a **pilot key** privately, never through GitHub. It can submit and read its own requests, and nothing else. It is limited to about 5 calls a minute and 30 a day. Every call that carries the key counts, including the 3 calls an MCP host makes to connect.
 - open the **ledger issue** in this repository, with a `pilot_opened` record (seq 0) naming your GitHub login.
 
 Never paste the key into a file you commit, a GitHub comment, a screenshot, a prompt shared with others, or a report. If it leaks, tell the operator so it can be revoked.
+
+Subscribe to the ledger issue (**Subscribe** on GitHub), so that GitHub's notification emails keep your own copy of every comment. Do not rename your GitHub account until the report is published: roles are matched by login.
 
 ## 3. Get the tools (no installs)
 
 ```sh
 git clone https://github.com/mekusimeku/meku-si && cd meku-si
-node --test tools/pow/*.test.mjs          # offline; all tests should pass
+node --test tools/pow/pow.test.mjs tools/pow/pow-docs.test.mjs   # offline; all tests should pass
 node tools/pow/synthetic.mjs /tmp/pow-try   # a SYNTHETIC example ledger
 node tools/pow/verify.mjs /tmp/pow-try/bundle.json --allow-synthetic
 ```
 
-The tools are small, dependency-free Node.js files in [`tools/pow/`](../../tools/pow/README.md). Read them before you trust them.
+The tools are small, dependency-free Node.js files in [`tools/pow/`](../../tools/pow/README.md). Read them before you trust them. Your private files (`pow-request.json`, receipts, exports) are already listed in `.gitignore`; keep them out of any commit.
 
 Put the key in your environment for this terminal only:
 
@@ -72,7 +74,9 @@ node tools/pow/request.mjs check --pilot POW-001 \
   --agent "Describe your agent, model and runtime" --affirm-independence
 ```
 
-Path B: ask your agent to connect and list MEKU's tools. Confirm that `meku_request_human` appears, then:
+Path A spends one keyed call: initialization goes without the key, and only `tools/list` carries it.
+
+Path B: ask your agent to connect and list MEKU's tools. Confirm that `meku_request_human` appears, then run the following, listing exactly the tools your host showed:
 
 ```sh
 node tools/pow/request.mjs ready-manual --pilot POW-001 \
@@ -89,7 +93,7 @@ Post the printed block as a **new comment** in the ledger. If `meku_request_huma
 node tools/pow/request.mjs prepare --ledger https://github.com/mekusimeku/meku-si/issues/<N>
 ```
 
-This creates `pow-request.json` with a fresh random code and prints the exact request. A real person will read it, so read it yourself first. The text is fixed by the protocol; the verifier fails any change, extra request or field.
+This creates `pow-request.json` with a fresh random code and a secret object salt, and prints the exact request. A real person will read it, so read it yourself first. The text is fixed by the protocol: the tool refuses to send an edited file, and the verifier fails any change, extra request or field. Keep `pow-request.json` private until step 9, because it holds the salt.
 
 ## 7. Submit once and post `request_submitted` (seq 2)
 
@@ -121,23 +125,31 @@ node tools/pow/request.mjs import-status --receipt pow-receipt.json --response-t
 
 When the status is `approved`, post the printed block. If the tool reports that your code is missing from the stored text, post a stop and report it.
 
-## 9. Name the object after consent: `object_revealed` (seq 7)
+## 9. Reveal the object after consent: `object_revealed` (seq 7)
 
 Wait until the human's `human_consent` comment (seq 6) is in the ledger. Only then:
 
 ```sh
-node tools/pow/request.mjs reveal --pilot POW-001
+node tools/pow/export.mjs https://github.com/mekusimeku/meku-si/issues/<N> pow-ledger-6
+node tools/pow/request.mjs reveal --request pow-request.json --bundle pow-ledger-6/bundle.json
 ```
 
-Post the printed block. The object is chosen at random from the protocol list.
+Post the printed block. Neither you nor anyone else chooses the object. It follows from your salt, committed in seq 2, and from GitHub's id for the consent comment, and anyone can recompute it. Without exporting, you can pass `--consent-comment-id <number>` instead; the number is at the end of the consent comment's link, after `#issuecomment-`.
+
+**As soon as the human posts the evidence (seq 8), check it at once and tell the operator the result:**
+
+```sh
+node tools/pow/verify.mjs --from-issue https://github.com/mekusimeku/meku-si/issues/<N> --out pow-ledger-8
+```
+
+Look at check E04 (metadata). If it fails, tell the operator immediately, because the image may reveal a location. The operator posts the result (seq 9) only after E04 has passed.
 
 ## 10. Check the result and decide: `requester_decision` (seq 10)
 
 After the operator's `result_returned` (seq 9):
 
 ```sh
-node tools/pow/export.mjs https://github.com/mekusimeku/meku-si/issues/<N> pow-ledger
-node tools/pow/verify.mjs pow-ledger/bundle.json
+node tools/pow/verify.mjs --from-issue https://github.com/mekusimeku/meku-si/issues/<N> --out pow-ledger
 ```
 
 Open the image in `pow-ledger/evidence/` and look at it yourself. Accept only if your code is written by hand and legible, the named object is there, and nothing personal is visible:
@@ -153,7 +165,7 @@ The decision commits to the exact ledger digest over records 0–9, so it can on
 
 ## 11. After the close
 
-When the operator posts `pilot_closed` (seq 11), export and verify again. The verdict should be `PASS`. You may publish your own account using the [report template](report-template.md). Ask a third person to verify independently.
+When the operator posts `pilot_closed` (seq 11), run `verify.mjs --from-issue` again. The verdict should be `PASS`. You may publish your own account using the [report template](report-template.md). Ask a third person to verify independently, starting from the live issue rather than from a file you send them.
 
 ## Stopping
 
@@ -166,6 +178,6 @@ node tools/pow/record.mjs stop --pilot POW-001 --seq <next seq number> --role de
 ## Errors
 
 - **HTTP 401 / JSON-RPC -32001.** The key is wrong, expired or revoked. Stop and tell the operator.
-- **HTTP 429.** You hit the rate limit. Wait; the tool prints `Retry-After` when MEKU sends it, and never retries on its own.
+- **HTTP 429.** You hit the rate limit. Wait; the tool prints `Retry-After` when MEKU sends it, and never retries on its own. If connecting alone hits it, the key's per-minute limit is too low: ask the operator for 5.
 - **`isError: true` with HTTP 200.** A tool-level refusal. The tool prints MEKU's message. Do not change the request to get around it.
 - **A timeout on submit.** Use `submit --retry`, never a fresh call.

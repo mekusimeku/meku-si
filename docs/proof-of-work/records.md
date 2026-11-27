@@ -5,10 +5,15 @@ The ledger is one public GitHub issue in `mekusimeku/meku-si`. Each step of the 
 Rules for every record comment:
 
 - One record per comment. A comment with two records fails check L02.
+- Only what GitHub shows counts. Text inside HTML comments (`<!-- -->`) and quoted lines (starting with `>`, as in a Quote reply) are ignored.
+- A record may also be pasted bare, without the backtick lines, if the comment starts with `{`. An image may follow it.
+- Numbers must be whole numbers: `1.0` or `1e3` makes the record invalid. JavaScript and Python would otherwise hash them differently.
+- An exact repeat of your previous record (a double post) is ignored with a warning.
 - Never edit a record comment. GitHub records edits, and check L05 fails on any edited record.
 - Only accounts on the roster count. `pilot_opened` names the operator and developer; `task_offered` names the human. Record-shaped comments from anyone else are ignored and reported as a warning (L07).
 - No timestamps are typed by hand. GitHub's server time on each comment is the clock (L06).
 - No string may contain control characters or text-direction overrides (L02). The verifier also escapes everything it prints.
+- Never delete a comment, and do not rename your GitHub account until the report is published. GitHub's API does not return deleted comments, so a verifier cannot see them. Roles are matched by login.
 
 ## Envelope
 
@@ -28,12 +33,12 @@ Every record starts with:
 | --- | --- | --- | --- |
 | 0 | `pilot_opened` | operator | `protocol` (URL of this protocol), `mcp_endpoint` = `https://meku.farm/api/public/mcp`, `variant` = `operator-relayed`, `roster` {`operator`, `developer`}, `task` (fixed protocol constants), `payment` = `none` |
 | 1 | `developer_ready` | developer | `client` {`name`, `version`}, `agent` (what made the calls), `server` {`name` = `meku-human-cloud`, `version`, `protocol_version`}, `tools_listed`, `independence` (four statements, all `true`), `payment` = `none` |
-| 2 | `request_submitted` | developer | `code`, `arguments` (exactly what was sent to `meku_request_human`), `arguments_sha256`, `request_id_sha256`, `response` {`status`, `created_at`, `deduplicated`}, `response_text_sha256`, `observed_at`, `payment` = `none` |
+| 2 | `request_submitted` | developer | `code`, `object_commitment` (see below), `arguments` (exactly what was sent to `meku_request_human`), `arguments_sha256`, `request_id_sha256`, `response` {`status`, `created_at`, `deduplicated`}, `response_text_sha256`, `observed_at`, `payment` = `none` |
 | 3 | `request_reviewed` | operator | `code` (as shown in the request the reviewer saw), `decision` (`approved` or `rejected`), `reviewer_role` (`seek_reviewer` or `admin`), `reviewer_is_key_issuer` = `false`, optional `note` |
 | 4 | `request_status_observed` | developer | `request_id_sha256`, `stored_request` (the request exactly as `meku_get_request_status` returned it, without its id), `stored_request_sha256`, `response_text_sha256`, `observed_at` |
 | 5 | `task_offered` | operator | `code`, `human` (GitHub login), `human_is_registered_meku_human`, `task_shown` = `ledger-seq-4` (the human reads the exact stored text in seq 4), `channel`, `payment` = `none` |
 | 6 | `human_consent` | human | `consents` {`voluntary_participation`, `may_reject_or_stop`, `responsible_for_safety`, `safety_checklist`}, `adult_18_plus`, `unpaid_understood`, `publication` {`photo_public`, `github_login_public`}, `independence` {`not_meku_staff_or_contractor`, `not_the_developer`}; every value `true` |
-| 7 | `object_revealed` | developer | `object` (one of SPOON, CUP, PLATE, BOWL, SOCK, TOWEL, PEN, SHOE) |
+| 7 | `object_revealed` | developer | `object` (one of SPOON, CUP, PLATE, BOWL, SOCK, TOWEL, PEN, SHOE), `salt` (the secret committed in seq 2), `consent_comment_id` (GitHub's numeric id of the seq 6 comment) |
 | 8 | `evidence_submitted` | human | `statements` {`code_physically_written`, `object_placed_after_reveal`, `no_people_or_personal_data`, `metadata_removed`}, all `true`; `evidence` = `attached-in-this-comment`. The screenshot is attached to the same comment. |
 | 9 | `result_returned` | operator | `code`, `evidence` = `ledger-seq-8` (the one attachment in seq 8), `meku_check` {`code_visible`, `object_visible`, `no_personal_data_visible`}, optional `note` |
 | 10 | `requester_decision` | developer | `decision` (`ACCEPTED` or `REJECTED`), `checks` {`code_visible`, `code_matches`, `object_visible`, `object_matches`, `no_personal_data_visible`}, `evidence_sha256`, `ledger_digest` (records 0–9), `reason` |
@@ -53,7 +58,15 @@ All hashes are lowercase hex SHA-256 over UTF-8 bytes.
 - **Record hash:** `sha256(JCS(record))`.
 - **Request id commitment:** `sha256("meku.pow/1|request-id|" + lowercase(request_id))`. It links the developer's records (seq 2 and 4) to one MEKU request without publishing the id. The operator's records name the same request by its fresh code, which appears in the stored request text.
 - **`arguments_sha256`** and **`stored_request_sha256`:** `sha256(JCS(value))`.
-- **`response_text_sha256`:** `sha256` of the exact tool-result text MEKU returned. The developer keeps that text in a private receipt.
+- **`response_text_sha256`:** `sha256` of the exact tool-result text MEKU returned. The developer keeps that text in a private receipt. MEKU's answers are not signed, so these records report what the developer received.
+- **Object commit-reveal.** At `prepare`, the developer's client draws a secret `salt` (32 lowercase hex characters) and seq 2 publishes `object_commitment = sha256("meku.pow/1|object-salt|" + salt)`. Seq 7 reveals the salt, and the object is fixed by:
+
+  ```text
+  n = first 8 hex characters of sha256("meku.pow/1|object|" + salt + "|" + consent_comment_id), read as a number
+  object = ["SPOON","CUP","PLATE","BOWL","SOCK","TOWEL","PEN","SHOE"][n mod 8]
+  ```
+
+  The developer cannot choose the object, because the salt is fixed before the consent comment exists. Nobody can predict it before that comment gets its id, and the human cannot compute it before seq 7 reveals the salt.
 - **Ledger digest** over records in seq order:
 
   ```text
@@ -65,22 +78,24 @@ All hashes are lowercase hex SHA-256 over UTF-8 bytes.
 
 ## Bundle
 
-`tools/pow/export.mjs <ledger-url> <dir>` reads the issue through GitHub's public API and writes `<dir>/bundle.json`, with every comment exactly as GitHub serves it, and `<dir>/evidence/<sha256>.<ext>` for each attachment on an `evidence_submitted` comment. Format:
+`tools/pow/export.mjs <ledger-url> <dir>` reads the issue through GitHub's public API. It writes `<dir>/bundle.json` with the comment fields the verifier needs, as GitHub serves them, including the numeric `user_id`, which survives a login rename. It also writes `<dir>/evidence/<sha256>.<ext>` for the attachment on the roster human's `evidence_submitted` comment. A failed download is recorded, not fatal. Format:
 
 ```json
 {
   "format": "meku.pow-bundle/1",
   "source": { "repo": "mekusimeku/meku-si", "issue_number": 0, "issue_url": "https://github.com/mekusimeku/meku-si/issues/0", "exported_at": "…", "exporter": "meku.pow-export/1" },
-  "comments": [{ "id": 0, "author": "login", "created_at": "…", "updated_at": "…", "html_url": "…", "body": "…" }],
+  "comments": [{ "id": 0, "author": "login", "user_id": 0, "author_association": "NONE", "created_at": "…", "updated_at": "…", "html_url": "…", "body": "…" }],
   "evidence_files": [{ "comment_id": 0, "url": "https://github.com/user-attachments/assets/…", "file": "evidence/<sha256>.png", "sha256": "…", "bytes": 0, "content_type": "image/png" }]
 }
 ```
 
-The verifier recomputes every file hash itself. It opens only files inside the bundle's folder.
+The verifier recomputes every file hash itself. It opens only regular files inside the bundle's folder, and it resolves symlinks before deciding that.
+
+**A bundle file proves nothing by itself.** Anyone can write one, including a complete fake ledger. A verification counts only when the verifier exported the bundle from the live issue themselves. `node tools/pow/verify.mjs --from-issue <ledger-url>` does both steps and says so in its report; a report made from a supplied file says that it checked only that file.
 
 ## Automated checks
 
-`tools/pow/verify.mjs` runs these 32 checks. A check is `NOT_REACHED` until the ledger gets that far.
+`tools/pow/verify.mjs` runs these 33 checks. A check is `NOT_REACHED` until the ledger gets that far. A few checks only confirm what a participant attests: R04 (reviewer separation), Q01 (the tool list the developer saw) and C01's "key revoked". They are labelled as attested in the output.
 
 | ID | Check | What it compares |
 | --- | --- | --- |
@@ -94,7 +109,7 @@ The verifier recomputes every file hash itself. It opens only files inside the b
 | R01 | pilot_opened is posted by the expected MEKU operator account | author of seq 0, `roster.operator` and `mekusimeku` |
 | R02 | Every record is posted by the account that holds its role | comment author against the record's `role` |
 | R03 | Developer, operator and human are three different accounts | the three logins, case-insensitive |
-| R04 | The request reviewer is attested not to be the key issuer | `reviewer_is_key_issuer` = `false` |
+| R04 | The reviewer is attested, not proven, not to be the key issuer | `reviewer_is_key_issuer` = `false`; MEKU's review screen refuses the key issuer, but its database does not enforce it yet |
 | Q01 | The developer's key could submit requests (meku_request_human listed by meku-human-cloud) | `tools_listed` |
 | Q02 | The request is exactly the protocol template for this code and ledger | `arguments` against the template built from `code` and the ledger URL; MEKU's length limits |
 | Q03 | arguments_sha256 matches the submitted arguments | recomputed hash |
@@ -104,18 +119,19 @@ The verifier recomputes every file hash itself. It opens only files inside the b
 | Q07 | stored_request_sha256 matches the stored request | recomputed hash |
 | H01 | The offer points the human to the stored request text, which holds the code | the code in the stored description of seq 4 |
 | H02 | The human consented from their own account after the offer | consent author is the offered human |
-| H03 | The object was named by the developer after consent, from the protocol list | object list and comment times |
+| H03 | The object follows from the committed salt and the consent comment, named after consent | salt against `object_commitment`; `consent_comment_id` against the seq 6 comment; the derived object; comment times |
 | H04 | Evidence was posted by the human after the object was named and within 48 hours | comment times |
-| E01 | The evidence comment carries exactly one GitHub attachment | attachment URLs in the comment |
+| H05 | No plain-text STOP or withdrawal by the human was left unrecorded | any comment by the human, without a record, containing stop or withdraw requires a stop record in the ledger |
+| E01 | The evidence comment shows exactly one image, and it is a GitHub attachment | every visible URL in the comment: exactly one, and it is a GitHub attachment (host case-insensitive) |
 | E02 | The attachment is in the bundle and its SHA-256 matches the developer's decision | file hash against `evidence_sha256` in seq 10 |
 | E03 | The file is a PNG or JPEG of usable size | file signature, dimensions (shorter side at least 240 px), size (at most 10 MiB) |
-| E04 | The file carries no EXIF, GPS, IPTC or location metadata | EXIF and GPS, IPTC, XMP location fields and text chunks fail; other XMP or text gives a WARN |
+| E04 | The file carries only pixel and colour data: no EXIF, GPS, XMP location or other metadata | allow-list. PNG: only pixel, palette, transparency and colour chunks, plus XMP without location fields (WARN). JPEG: only JFIF, ICC profile, Adobe, tables, frame and scan segments. Anything else fails, including bytes after the end of the image |
 | D01 | MEKU returned the result after the evidence it refers to | seq 9 follows seq 8 |
 | D02 | The developer's decision commits to the exact ledger through seq 9 | recomputed ledger digest |
 | D03 | An ACCEPTED decision has every developer check true and lands within 168 hours | `checks` and comment times |
-| D04 | MEKU's own check agrees with the developer's checks | `meku_check` against `checks` (WARN on disagreement) |
+| D04 | MEKU's own check agrees with an ACCEPTED decision | any `false` in `meku_check` fails an ACCEPTED decision; with REJECTED it is a WARN |
 | C01 | The pilot was closed with the key revoked and a matching outcome | `outcome` against the path taken |
-| C02 | No record involves payment | every `payment` field |
+| C02 | No record involves payment | every `payment` field (also enforced by the schema) |
 
 **Verdicts and exit codes.** `PASS` (exit 0) needs every check to pass, a developer `ACCEPTED` decision and a closed pilot. Any `FAIL` gives verdict `FAIL` (exit 1). `STOPPED`, `REJECTED_BY_REVIEW`, `COMPLETED_REJECTED` and `INCOMPLETE` exit with 2. With `INCOMPLETE`, the verifier names the next expected record. Usage errors exit with 3. `--json result.json` writes the full result, including every record in order, for the [report](report-template.md).
 

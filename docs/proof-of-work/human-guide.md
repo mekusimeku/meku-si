@@ -8,6 +8,8 @@ An independent developer's AI agent has asked, through MEKU, for one small task:
 - You must **not** work for MEKU, and you must **not** be the developer who asked.
 - It is **unpaid**. No money, token or reward, now or later.
 - Your **photo** and your **GitHub username** will be public. Use a new GitHub account with any name if you prefer. Never put your real name, address, phone number or email in the ledger.
+- Before you agree, the operator will ask whether your GitHub username may be named in the ledger. It appears there when the task is offered to you.
+- Do not rename your GitHub account until the pilot report is published. Tap **Subscribe** on the ledger issue so that GitHub emails you a copy of every comment.
 - You may **refuse or stop at any time**, without giving a reason.
 
 ## The safety checklist you agree to
@@ -59,7 +61,7 @@ The developer will post a comment naming one object: spoon, cup, plate, bowl, so
 1. Write the **code** from the request clearly by hand on a piece of paper. Every character is a capital letter or a digit, and the code never uses I, L, O or U.
 2. Put the **named object** next to the paper on a plain surface such as a table or the floor.
 3. Take **one photo** showing only the paper and the object.
-4. Take a **screenshot** of that photo. On an iPhone, open the photo and press the side button and volume up together. On most Android phones, press power and volume down together. You may crop it. A screenshot normally carries no location data.
+4. Take a **screenshot** of that photo. On an iPhone, open the photo and press the side button and volume up together. On most Android phones, press power and volume down together. **Crop it to the photo only**, without the phone's status bar. A screenshot normally carries no location data, and the verifier checks the file anyway.
 
 ## Step 4: post the evidence
 
@@ -87,5 +89,5 @@ Post it within 48 hours of the object being named. That is all; the operator and
 ## Important
 
 - **Do not edit** your comments after posting. If something is wrong, tell the operator.
-- **To stop**, post a comment that says `STOP` (a reason is optional), or tell the operator. The operator will record it. Stopping is never held against you.
-- **If you see anything personal** in your posted image, delete the comment at once and tell the operator.
+- **To stop**, post a comment that says `STOP` (a reason is optional), or tell the operator. That alone prevents the pilot from passing until the operator records your stop. Stopping is never held against you.
+- **If you see anything personal** in your posted image, tell the operator at once. Deleting the comment hides it, but the uploaded image stays reachable at its address until GitHub Support removes it. The operator will ask GitHub Support to remove it.

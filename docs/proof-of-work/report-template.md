@@ -14,6 +14,7 @@ Copy this file to `pilots/POW-001/README.md` and replace every `[bracketed]` par
 | **Ledger** | [https://github.com/mekusimeku/meku-si/issues/N] |
 | **Ledger digest, all records** | `[sha256 printed by verify.mjs]` |
 | **Python reference digest** | `[sha256 printed by digest_reference.py; must be identical]` |
+| **Exported from the live issue by** | [who ran `verify.mjs --from-issue`, and when; a supplied bundle file does not count] |
 | **Protocol and tools** | `meku.pow/1`, `tools/pow/` at commit `[commit id]` |
 | **Independent verification** | [links to `independent_verification` comments by accounts outside the roster, or **none yet**] |
 
@@ -71,10 +72,9 @@ Elapsed: request to decision [h]; object named to evidence [h].
 ## 7. Automated verification
 
 ```text
-$ node tools/pow/export.mjs [ledger URL] pilots/POW-001
-$ node tools/pow/verify.mjs pilots/POW-001/bundle.json --json pilots/POW-001/verification.json
+$ node tools/pow/verify.mjs --from-issue [ledger URL] --out pilots/POW-001 --json pilots/POW-001/verification.json
 [paste the complete output, unedited]
-$ python3 tools/pow/digest_reference.py pilots/POW-001/bundle.json
+$ python3 -I tools/pow/digest_reference.py pilots/POW-001/bundle.json
 [paste the output]
 ```
 
@@ -93,19 +93,18 @@ Exit code: [0 / 1 / 2]. Checks: [n] PASS, [n] WARN, [n] FAIL, [n] NOT_REACHED. E
 
 ```sh
 git clone https://github.com/mekusimeku/meku-si && cd meku-si && git checkout [commit id]
-node --test tools/pow/*.test.mjs
-node tools/pow/export.mjs [ledger URL] /tmp/pow-check
-node tools/pow/verify.mjs /tmp/pow-check/bundle.json
-python3 tools/pow/digest_reference.py /tmp/pow-check/bundle.json
+node --test tools/pow/pow.test.mjs tools/pow/pow-docs.test.mjs
+node tools/pow/verify.mjs --from-issue [ledger URL] --out /tmp/pow-check
+python3 -I tools/pow/digest_reference.py /tmp/pow-check/bundle.json
 ```
 
-Compare the digest with the one at the top of this report and look at the image yourself. If your result differs, open an issue.
+Compare the digest with the one at the top of this report and look at the image yourself. If your result differs, open an issue. Do not rely on the copy of `bundle.json` in this folder: it is a snapshot, and only an export you make yourself from the live issue counts.
 
 ## 10. What this shows, and what it does not
 
-It shows that the developer's agent submitted this exact request to MEKU's live MCP server, which stored it unaltered. MEKU's review approved it. An account different from the developer's and MEKU's consented, then posted a photo with a code that did not exist before the request and an object named only after the consent. MEKU returned that file for the same request, and the developer decided on it. No record was edited, and GitHub's server clocks fix the order.
+It shows that the developer's own records report this exact request, sent with a request-capable MEKU key, stored by MEKU unaltered and approved. An account different from the developer's and MEKU's then consented, and posted a photo showing the request's code and an object that nobody could know before that consent comment existed. MEKU returned that evidence for the same code and its own check agreed, and the developer decided on it. No record comment was edited, and GitHub's server clocks fix the order.
 
-It does not show who the human is or that they are independent of MEKU beyond separate accounts and signed statements, that the photo was not edited, that MEKU can deliver work inside its own product (this pilot used a manual relay), or anything about payments, tokens, scale, or an AI acting on its own.
+It does not show that MEKU's unsigned answers were as reported, or that the calls used MCP rather than MEKU's REST agent API. It does not show who the human is, or that the participants are independent beyond separate accounts and signed statements, or that the developer and the human did not coordinate. It does not show that the photo was not edited, or anything about comments that were deleted. It does not show that MEKU can deliver work inside its own product (this pilot used a manual relay), or anything about payments, tokens, scale, or an AI acting on its own.
 
 ## 11. Problems found
 

@@ -149,7 +149,12 @@ export async function buildSyntheticPilot() {
   post(S.operator, 0, openedRecord({ pilotId: S.pilotId, operator: S.operator, developer: S.developer, protocolUrl: "https://github.com/mekusimeku/meku-si/blob/main/docs/proof-of-work/protocol.md" }));
   const ready = await checkConnection({ client, apiKey: S.writableKey, clientInfo: { name: "meku-pow-request", version: "1.0.0" }, agent: "Synthetic test agent (no real model)", affirmIndependence: true, pilotId: S.pilotId });
   post(S.developer, 10, ready.record);
-  const prepared = prepareRequest({ pilotId: S.pilotId, ledgerUrl: S.issueUrl, randomSource: () => Buffer.from([0x5a, 0x3c, 0x96, 0xe1, 0x07]) });
+  const prepared = prepareRequest({
+    pilotId: S.pilotId,
+    ledgerUrl: S.issueUrl,
+    randomSource: () => Buffer.from([0x5a, 0x3c, 0x96, 0xe1, 0x07]),
+    saltSource: () => Buffer.from("synthetic-salt!!", "latin1"),
+  });
   const submitted = await submitRequest({ client, prepared, confirm: prepared.code });
   post(S.developer, 20, submitted.record);
   post(S.operator, 60, reviewedRecord({ pilotId: S.pilotId, code: prepared.code, decision: "approved", reviewerRole: "seek_reviewer", note: "Synthetic review" }));
@@ -159,7 +164,7 @@ export async function buildSyntheticPilot() {
   post(S.developer, 70, status.record);
   post(S.operator, 80, offeredRecord({ bundlePath: source, human: S.human, registered: true, channel: "github" }));
   post(S.human, 120, consentRecord({ pilotId: S.pilotId }));
-  post(S.developer, 130, revealObject({ pilotId: S.pilotId, pick: () => 0 }));
+  post(S.developer, 130, revealObject({ prepared, consentCommentId: bundle.comments.at(-1).id }));
   const png = makePng();
   const file = `evidence/${sha256Hex(png)}.png`;
   files.set(file, png);

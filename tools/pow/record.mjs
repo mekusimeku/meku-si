@@ -122,7 +122,7 @@ export function evidenceRecord({ pilotId }) {
 }
 
 function evidenceFromLedger(bundle, loadEvidence, url) {
-  const entry = (bundle.evidence_files ?? []).find((e) => e?.url === url);
+  const entry = (bundle.evidence_files ?? []).find((e) => typeof e?.url === "string" && e.url.toLowerCase() === url.toLowerCase());
   const bytes = entry ? loadEvidence(entry.file) : null;
   if (!bytes) throw new Error("the evidence file is not in the bundle; export it first with export.mjs");
   return { bytes, sha256: sha256Hex(bytes), scan: scanImage(bytes) };
@@ -141,14 +141,12 @@ export function returnedRecord({ bundlePath, codeVisible, objectVisible, noPerso
 }
 
 export function decisionRecord({ bundlePath, accept, checks, reason }) {
-  const { bundle, loadEvidence, records } = ledgerState(bundlePath);
+  const { bundle, loadEvidence, result, records } = ledgerState(bundlePath);
   const returned = requireLast(records, "result_returned");
-  const evidenceRecordIn = records.find((r) => r.type === "evidence_submitted");
-  const wanted = canonicalize(evidenceRecordIn);
-  const comment = bundle.comments.find((c) => extractRecords(c.body).some((f) => f.record && canonicalize(f.record) === wanted));
-  const urls = extractAttachmentUrls(comment?.body);
-  if (urls.length !== 1) throw new Error(`the evidence comment has ${urls.length} attachments; exactly one is required`);
-  const file = evidenceFromLedger(bundle, loadEvidence, urls[0]);
+  // The evidence is the attachment of the roster human's evidence comment, as the verifier
+  // found it, never a copy of the same record posted by someone else.
+  if (!result.evidence?.url) throw new Error("the verifier found no single evidence attachment from the human");
+  const file = evidenceFromLedger(bundle, loadEvidence, result.evidence.url);
   if (accept && Object.values(checks).some((v) => v !== true)) throw new Error("ACCEPTED requires every check to be true; otherwise use --reject");
   return ensureValid({
     ...envelope(returned.pilot_id, returned.seq + 1, "requester_decision", "developer"),

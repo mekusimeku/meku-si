@@ -2,7 +2,9 @@
 // example only. It is NOT the live server and proves nothing about it. Behaviour mirrors
 // https://meku.farm/docs as of 2026-11-28: keyless initialize/tools/list, keyed tools/call,
 // search-only keys list only meku_search_humans, request text trimmed and capped, an
-// idempotency key returns the saved request, status scoped to the submitting key.
+// idempotency key returns the saved request and refuses a different task, status scoped to
+// the submitting key, and every keyed call (initialization included) counts against the
+// key's per-minute limit.
 
 const LIMITS = { title: 120, action: 200, description: 2000, country: 80, region: 80, deliverable: 300, timeframe: 120, budget_text: 80 };
 const DECLARED = new Set(["title", "action", "description", "country", "region", "skills", "deliverable", "timeframe", "budget_text", "travel_required", "equipment_required", "idempotencyKey"]);
@@ -10,6 +12,7 @@ const TOOL_NAMES = ["meku_search_humans", "meku_request_human", "meku_get_reques
 
 export function createMockMeku({ keys = {}, ids = [], clock = () => new Date("2026-01-05T10:00:00Z") } = {}) {
   const requests = new Map();
+  const usage = new Map(); // key id -> timestamps of keyed calls
   const calls = [];
   const idQueue = [...ids];
   const json = (status, body, headers = {}) =>
@@ -27,6 +30,13 @@ export function createMockMeku({ keys = {}, ids = [], clock = () => new Date("20
     calls.push({ url: String(url), method: body.method, headers: { ...init.headers }, body });
     const agent = key ? keys[key] : null;
     if (key && !agent) return json(401, err(null, -32001, "Invalid API key."));
+    if (agent?.perMinute) {
+      const now = clock().getTime();
+      const recent = (usage.get(agent.id) ?? []).filter((t) => now - t < 60_000);
+      if (recent.length >= agent.perMinute)
+        return json(429, err(null, -32001, `Rate limit reached. Limit: ${agent.perMinute} per minute, 20 per day.`), { "Retry-After": "41" });
+      usage.set(agent.id, [...recent, now]);
+    }
     if (body.method === "initialize")
       return json(200, rpc(body.id, { protocolVersion: "2025-06-18", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "meku-human-cloud", version: "1.0.0" } }));
     if (body.method === "notifications/initialized") return new Response(null, { status: 202 });
@@ -54,7 +64,11 @@ export function createMockMeku({ keys = {}, ids = [], clock = () => new Date("20
       };
       if (saved.title.length < 4) return json(200, rpc(body.id, toolError("Title must be at least 4 characters")));
       const existing = [...requests.values()].find((r) => r.keyId === agent.id && r.idempotencyKey && r.idempotencyKey === args.idempotencyKey);
-      if (existing) return json(200, rpc(body.id, text({ id: existing.id, status: existing.status, created_at: existing.created_at, deduplicated: true })));
+      if (existing) {
+        const same = Object.keys(saved).every((k) => JSON.stringify(saved[k]) === JSON.stringify(existing[k]));
+        if (!same) return json(200, rpc(body.id, toolError("This idempotency key belongs to a different request.")));
+        return json(200, rpc(body.id, text({ id: existing.id, status: existing.status, created_at: existing.created_at, deduplicated: true })));
+      }
       const id = idQueue.shift() ?? crypto.randomUUID();
       const row = { ...saved, id, status: "submitted", created_at: clock().toISOString(), keyId: agent.id, idempotencyKey: args.idempotencyKey ?? null };
       requests.set(id, row);

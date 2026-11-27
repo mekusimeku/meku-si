@@ -97,6 +97,15 @@ export function sha256Hex(data) {
 
 export const recordHash = (record) => sha256Hex(canonicalize(record));
 
+/** canonicalize() that answers null instead of throwing, for comparing untrusted input. */
+export function canon(value) {
+  try {
+    return canonicalize(value);
+  } catch {
+    return null;
+  }
+}
+
 /** Public commitment to a MEKU request id: links records without publishing the id. */
 export function requestIdCommitment(requestId) {
   if (typeof requestId !== "string" || !/^[0-9a-f-]{36}$/i.test(requestId)) throw new Error("Invalid request id.");
@@ -259,6 +268,7 @@ export const RECORD_TYPES = Object.freeze({
     roles: ["developer"],
     fields: {
       code: CODE_FIELD,
+      object_commitment: sha(),
       arguments: REQUEST_ARGUMENTS,
       arguments_sha256: sha(),
       request_id_sha256: sha(),
@@ -311,7 +321,11 @@ export const RECORD_TYPES = Object.freeze({
   },
   object_revealed: {
     roles: ["developer"],
-    fields: { object: oneOf(...OBJECTS) },
+    fields: {
+      object: oneOf(...OBJECTS),
+      salt: str(32, 32, { pattern: /^[0-9a-f]{32}$/, patternSource: "^[0-9a-f]{32}$" }),
+      consent_comment_id: { kind: "integer", min: 1, max: Number.MAX_SAFE_INTEGER },
+    },
   },
   evidence_submitted: {
     roles: ["human"],
@@ -405,6 +419,9 @@ function checkValue(spec, value, path, problems, ctx) {
     case "boolean":
       if (typeof value !== "boolean") problems.push(`${path} must be true or false`);
       return;
+    case "integer":
+      if (!Number.isSafeInteger(value) || value < spec.min || value > spec.max) problems.push(`${path} must be an integer ${spec.min}-${spec.max}`);
+      return;
     case "login":
       if (!isGithubLogin(value, ctx)) problems.push(`${path} must be a GitHub login`);
       return;
@@ -461,10 +478,10 @@ export function recordProblems(record) {
     return [`record cannot be canonicalized: ${error.message}`];
   }
   if (record.pow !== PROTOCOL) problems.push(`pow must be "${PROTOCOL}"`);
-  if (!PILOT_ID.test(record.pilot_id ?? "")) problems.push("pilot_id must look like POW-001");
-  const spec = RECORD_TYPES[record.type];
+  if (typeof record.pilot_id !== "string" || !PILOT_ID.test(record.pilot_id)) problems.push("pilot_id must look like POW-001");
+  const spec = typeof record.type === "string" && Object.hasOwn(RECORD_TYPES, record.type) ? RECORD_TYPES[record.type] : null;
   if (!spec) return [...problems, `type must be one of ${Object.keys(RECORD_TYPES).join(", ")}`];
-  if (!spec.roles.includes(record.role)) problems.push(`role for ${record.type} must be ${spec.roles.join(" or ")}`);
+  if (typeof record.role !== "string" || !spec.roles.includes(record.role)) problems.push(`role for ${record.type} must be ${spec.roles.join(" or ")}`);
   if (spec.unsequenced) {
     if (Object.hasOwn(record, "seq")) problems.push("independent_verification records have no seq");
   } else if (!Number.isSafeInteger(record.seq) || record.seq < 0 || record.seq > 99) problems.push("seq must be an integer 0-99");
@@ -484,6 +501,8 @@ export function recordJsonSchema() {
         return { enum: spec.values };
       case "boolean":
         return { type: "boolean" };
+      case "integer":
+        return { type: "integer", minimum: spec.min, maximum: spec.max };
       case "login":
         // Real GitHub logins, plus the underscore form used only by synthetic test ledgers
         // (verify.mjs additionally refuses that form outside POW-SYNTHETIC-* pilots).
@@ -536,34 +555,68 @@ export function recordJsonSchema() {
 }
 
 // ---------------------------------------------------------------------------
-// Comment parsing.
+// Comment parsing. Only what GitHub shows a reader counts: HTML comments are dropped
+// (GitHub hides them), and quoted lines (a "Quote reply") are not the poster's own record.
 
-/** Records in a comment body: every ```json block that declares "pow": "meku.pow/1".
- *  A comment with no such block may instead hold one bare JSON object (what a phone copies
- *  from a rendered code block): the text from its first "{" to its last "}". */
+/** The part of a comment body a reader actually sees as the poster's own words. */
+export function visibleText(body) {
+  return String(body ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
+    .split("\n")
+    .filter((line) => !/^[ \t]*>/.test(line))
+    .join("\n");
+}
+
+/** JSON for records: refuses fractional and exponent numbers, which JavaScript and Python
+ *  would hash differently ("1.0" is 1 in one and 1.0 in the other). */
+export function parseRecordJson(text) {
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === "-" || (c >= "0" && c <= "9")) {
+      let j = i;
+      while (j < text.length && /[-+0-9.eE]/.test(text[j])) j += 1;
+      if (/[.eE]/.test(text.slice(i, j))) throw new Error("records may not contain fractional or exponent numbers");
+      i = j - 1;
+    }
+  }
+  return JSON.parse(text);
+}
+
+const isRecordObject = (v) => v && typeof v === "object" && !Array.isArray(v) && v.pow === PROTOCOL;
+
+/** Records in a comment body: every visible ```json block that declares "pow": "meku.pow/1".
+ *  A comment with no fenced block may instead be one bare JSON record (what a phone copies
+ *  from a rendered code block): it must start with "{", and an image may follow it. */
 export function extractRecords(body) {
   const found = [];
-  const text = String(body ?? "").replace(/\r\n/g, "\n");
-  const isRecord = (v) => v && typeof v === "object" && !Array.isArray(v) && v.pow === PROTOCOL;
+  const text = visibleText(body);
   for (const match of text.matchAll(/```json[^\n]*\n([\s\S]*?)```/g)) {
     let parsed;
     try {
-      parsed = JSON.parse(match[1]);
-    } catch {
-      if (match[1].includes(PROTOCOL)) found.push({ error: "a meku.pow block is not valid JSON" });
+      parsed = parseRecordJson(match[1]);
+    } catch (error) {
+      if (match[1].includes(PROTOCOL)) found.push({ error: `a meku.pow block is not valid: ${error.message}` });
       continue;
     }
-    if (isRecord(parsed)) found.push({ record: parsed });
+    if (isRecordObject(parsed)) found.push({ record: parsed });
   }
-  if (found.length || text.includes("```")) return found;
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start || !text.includes(PROTOCOL)) return found;
+  const trimmed = text.trim();
+  if (found.length || text.includes("```") || !trimmed.startsWith("{") || !trimmed.includes(PROTOCOL)) return found;
   try {
-    const parsed = JSON.parse(text.slice(start, end + 1));
-    if (isRecord(parsed)) found.push({ record: parsed });
-  } catch {
-    found.push({ error: "a meku.pow record is not valid JSON" });
+    const parsed = parseRecordJson(trimmed.slice(0, trimmed.lastIndexOf("}") + 1));
+    if (isRecordObject(parsed)) found.push({ record: parsed });
+  } catch (error) {
+    found.push({ error: `a meku.pow record is not valid: ${error.message}` });
   }
   return found;
 }
@@ -574,7 +627,8 @@ export function displaySafe(value) {
 }
 
 /** The roster as the verifier sees it: seq 0 posted by the expected operator account (or, for
- *  synthetic test ledgers, the first seq 0), and the human named in that operator's task_offered. */
+ *  synthetic test ledgers, the first synthetic seq 0), and the human named in that operator's
+ *  task_offered. Roster values that are not strings are treated as absent. */
 export function rosterFromComments(comments, { expectOperator = "mekusimeku" } = {}) {
   const records = [];
   for (const comment of comments) for (const f of extractRecords(comment.body)) if (f.record) records.push({ comment, record: f.record });
@@ -584,51 +638,87 @@ export function rosterFromComments(comments, { expectOperator = "mekusimeku" } =
     openings.find((e) => isSyntheticPilot(e.record.pilot_id)) ??
     openings[0] ??
     null;
+  const text = (v) => (typeof v === "string" ? v : null);
   if (!opening) return { opening: null, operator: null, developer: null, human: null };
-  const operator = opening.record.roster?.operator ?? null;
+  const operator = text(opening.record.roster?.operator);
   const offered = records.find((e) => e.record.type === "task_offered" && sameLogin(e.comment.author, operator));
-  return { opening, operator, developer: opening.record.roster?.developer ?? null, human: offered?.record.human ?? null };
+  return { opening, operator, developer: text(opening.record.roster?.developer), human: text(offered?.record.human) };
 }
 
+const ATTACHMENT_ONLY = new RegExp(`^${ATTACHMENT_URL.source}$`, "i");
+
+/** GitHub attachment URLs in the visible text (host matched case-insensitively). */
 export function extractAttachmentUrls(body) {
-  return [...new Set(String(body ?? "").match(ATTACHMENT_URL) ?? [])];
+  const urls = (visibleText(body).match(new RegExp(ATTACHMENT_URL.source, "gi")) ?? []).map(normalizeAttachmentUrl);
+  return [...new Set(urls)];
+}
+
+/** Every distinct http(s) URL a reader could see or load from the comment. */
+export function extractAllUrls(body) {
+  const urls = visibleText(body).match(/https?:\/\/[^\s<>"'()[\]]+/gi) ?? [];
+  return [...new Set(urls.map((u) => (ATTACHMENT_ONLY.test(u) ? normalizeAttachmentUrl(u) : u)))];
+}
+
+function normalizeAttachmentUrl(url) {
+  const u = new URL(url);
+  return `https://${u.hostname.toLowerCase()}${u.pathname}`;
 }
 
 // ---------------------------------------------------------------------------
-// Evidence image checks (PNG and JPEG only). Metadata can reveal where and with
-// which device a photo was taken, so the published file must carry none.
+// Object commit-reveal: neither the developer nor the human can choose the object.
+// The developer commits to a secret salt in seq 2 and reveals it in seq 7; the object then
+// follows from the salt and GitHub's id for the human's consent comment, which nobody knows
+// before that comment exists.
+
+export const isObjectSalt = (value) => typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
+export const generateObjectSalt = (randomSource = randomBytes) => Buffer.from(randomSource(16)).toString("hex");
+export const objectCommitment = (salt) => sha256Hex(`${PROTOCOL}|object-salt|${salt}`);
+export function objectFor(salt, consentCommentId) {
+  if (!isObjectSalt(salt) || !Number.isSafeInteger(consentCommentId) || consentCommentId < 1) throw new Error("Invalid salt or comment id.");
+  return OBJECTS[Number.parseInt(sha256Hex(`${PROTOCOL}|object|${salt}|${consentCommentId}`).slice(0, 8), 16) % OBJECTS.length];
+}
+
+// ---------------------------------------------------------------------------
+// Evidence image checks (PNG and JPEG only). This is an ALLOW-LIST: only structures known to
+// carry pixels or colour information pass. Anything else, including data after the end of
+// the image, fails, because metadata can reveal where and with which device a photo was taken.
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+// Pixel, palette, transparency and colour chunks only.
+const PNG_ALLOWED = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "iCCP", "sBIT", "sRGB", "cICP", "mDCv", "cLLi", "pHYs", "bKGD", "iDOT"]);
 const LOCATION_TEXT =
   /GPS|exif:GPS|photoshop:(?:City|State|Country)|Iptc4xmpCore:(?:Location|City|CountryCode)|Iptc4xmpExt:Location|LocationShown|LocationCreated|latitude|longitude/i;
 
-function exifFindings(tiff) {
-  // tiff: Buffer starting at the TIFF header ("II*\0" or "MM\0*").
-  const findings = [{ level: "FAIL", code: "EXIF_PRESENT", detail: "EXIF metadata is present" }];
-  if (tiff.length < 8) return findings;
+const fail = (code, detail) => ({ level: "FAIL", code, detail });
+const warnF = (code, detail) => ({ level: "WARN", code, detail });
+
+function tiffHasGps(tiff) {
+  if (tiff.length < 8) return false;
   const little = tiff[0] === 0x49 && tiff[1] === 0x49;
-  const big = tiff[0] === 0x4d && tiff[1] === 0x4d;
-  if (!little && !big) return findings;
+  if (!little && !(tiff[0] === 0x4d && tiff[1] === 0x4d)) return false;
   const u16 = (o) => (little ? tiff.readUInt16LE(o) : tiff.readUInt16BE(o));
   const u32 = (o) => (little ? tiff.readUInt32LE(o) : tiff.readUInt32BE(o));
   const ifd0 = u32(4);
-  if (ifd0 + 2 > tiff.length) return findings;
-  const count = u16(ifd0);
-  for (let i = 0; i < count; i += 1) {
+  if (ifd0 + 2 > tiff.length) return false;
+  for (let i = 0; i < u16(ifd0); i += 1) {
     const entry = ifd0 + 2 + i * 12;
     if (entry + 12 > tiff.length) break;
-    if (u16(entry) === 0x8825) {
-      findings.push({ level: "FAIL", code: "GPS_PRESENT", detail: "EXIF GPS location data is present: remove the photo from public view now" });
-      break;
-    }
+    if (u16(entry) === 0x8825) return true;
   }
-  return findings;
+  return false;
+}
+
+function exifFindings(tiff) {
+  return [
+    fail("EXIF_PRESENT", "EXIF metadata is present"),
+    ...(tiffHasGps(tiff) ? [fail("GPS_PRESENT", "EXIF GPS location data is present: treat the image as public and request removal now")] : []),
+  ];
 }
 
 function xmpFindings(text) {
   return LOCATION_TEXT.test(text)
-    ? [{ level: "FAIL", code: "XMP_LOCATION", detail: "XMP metadata contains location fields" }]
-    : [{ level: "WARN", code: "XMP_PRESENT", detail: "XMP metadata is present (no location fields found)" }];
+    ? [fail("XMP_LOCATION", "XMP metadata contains location fields")]
+    : [warnF("XMP_PRESENT", "XMP metadata is present (no location fields found)")];
 }
 
 function scanPng(bytes) {
@@ -641,59 +731,57 @@ function scanPng(bytes) {
     const dataStart = offset + 8;
     const dataEnd = dataStart + length;
     if (dataEnd + 4 > bytes.length) {
-      out.findings.push({ level: "FAIL", code: "PNG_TRUNCATED", detail: `chunk ${type} runs past the end of the file` });
+      out.findings.push(fail("PNG_TRUNCATED", `chunk ${JSON.stringify(type)} runs past the end of the file`));
       return out;
     }
     const data = bytes.subarray(dataStart, dataEnd);
     if (type === "IHDR" && length >= 8) {
       out.width = data.readUInt32BE(0);
       out.height = data.readUInt32BE(4);
-    } else if (type === "eXIf") {
+    } else if (type === "eXIf" || type === "zxIf") {
       out.findings.push(...exifFindings(data));
-    } else if (type === "tEXt" || type === "zTXt" || type === "iTXt") {
-      out.findings.push(...pngTextFindings(type, data));
-    } else if (type === "IEND") {
+    } else if (type === "iTXt" && data.toString("latin1", 0, 18) === "XML:com.adobe.xmp\0") {
+      out.findings.push(...pngXmpFindings(data));
+    } else if (!PNG_ALLOWED.has(type)) {
+      out.findings.push(fail("PNG_METADATA_CHUNK", `chunk ${JSON.stringify(type)} is not allowed in evidence (only pixel and colour chunks are)`));
+    }
+    offset = dataEnd + 4;
+    if (type === "IEND") {
       sawEnd = true;
       break;
     }
-    offset = dataEnd + 4;
   }
-  if (!sawEnd) out.findings.push({ level: "FAIL", code: "PNG_TRUNCATED", detail: "no IEND chunk" });
+  if (!sawEnd) out.findings.push(fail("PNG_TRUNCATED", "no IEND chunk"));
+  else if (offset < bytes.length) out.findings.push(fail("DATA_AFTER_END", `${bytes.length - offset} bytes follow the end of the image`));
   return out;
 }
 
-function pngTextFindings(type, data) {
-  const zero = data.indexOf(0);
-  const keyword = zero > 0 ? data.toString("latin1", 0, zero) : "";
-  let text = "";
+function pngXmpFindings(data) {
+  // iTXt: keyword\0 flag method language\0 translated\0 text
   try {
-    if (type === "tEXt") text = data.toString("latin1", zero + 1);
-    else if (type === "zTXt") text = inflateSync(data.subarray(zero + 2)).toString("latin1");
-    else {
-      // iTXt: keyword\0 compressionFlag compressionMethod languageTag\0 translatedKeyword\0 text
-      const flag = data[zero + 1];
-      const langEnd = data.indexOf(0, zero + 3);
-      const transEnd = data.indexOf(0, langEnd + 1);
-      const raw = data.subarray(transEnd + 1);
-      text = (flag === 1 ? inflateSync(raw) : raw).toString("utf8");
-    }
+    const zero = 17;
+    const flag = data[zero + 1];
+    const langEnd = data.indexOf(0, zero + 3);
+    const transEnd = data.indexOf(0, langEnd + 1);
+    if (langEnd === -1 || transEnd === -1) return [fail("PNG_METADATA_CHUNK", "malformed XMP chunk")];
+    const raw = data.subarray(transEnd + 1);
+    return xmpFindings((flag === 1 ? inflateSync(raw) : raw).toString("utf8"));
   } catch {
-    return [{ level: "FAIL", code: "PNG_TEXT_UNREADABLE", detail: `unreadable ${type} metadata chunk "${keyword}"` }];
+    return [fail("PNG_METADATA_CHUNK", "unreadable XMP chunk")];
   }
-  if (/xmp/i.test(keyword)) return xmpFindings(text);
-  return LOCATION_TEXT.test(`${keyword} ${text}`)
-    ? [{ level: "FAIL", code: "TEXT_LOCATION", detail: `text metadata "${keyword}" mentions location` }]
-    : [{ level: "WARN", code: "TEXT_METADATA", detail: `text metadata chunk "${keyword}" is present` }];
 }
 
 const JPEG_SOF = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+// Tables and frame/scan headers carry pixels and coding data, not metadata.
+const JPEG_TABLES = new Set([0xc4, 0xcc, 0xdb, 0xdd]);
 
 function scanJpeg(bytes) {
   const out = { mediaType: "image/jpeg", width: null, height: null, findings: [] };
   let offset = 2;
-  while (offset + 4 <= bytes.length) {
+  let sawEnd = false;
+  while (offset + 2 <= bytes.length) {
     if (bytes[offset] !== 0xff) {
-      out.findings.push({ level: "FAIL", code: "JPEG_MALFORMED", detail: `expected a marker at byte ${offset}` });
+      out.findings.push(fail("JPEG_MALFORMED", `expected a marker at byte ${offset}`));
       return out;
     }
     const marker = bytes[offset + 1];
@@ -701,49 +789,69 @@ function scanJpeg(bytes) {
       offset += 1; // fill byte
       continue;
     }
-    if (marker === 0xd9 || marker === 0xda) break; // end of image, or start of scan data
-    if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
+    if (marker === 0xd9) {
+      offset += 2;
+      sawEnd = true;
+      break;
+    }
+    if (marker >= 0xd0 && marker <= 0xd7) {
       offset += 2;
       continue;
     }
+    if (offset + 4 > bytes.length) break;
     const length = bytes.readUInt16BE(offset + 2);
-    const segStart = offset + 4;
     const segEnd = offset + 2 + length;
     if (length < 2 || segEnd > bytes.length) {
-      out.findings.push({ level: "FAIL", code: "JPEG_TRUNCATED", detail: `segment 0x${marker.toString(16)} runs past the end` });
+      out.findings.push(fail("JPEG_TRUNCATED", `segment 0x${marker.toString(16)} runs past the end`));
       return out;
     }
-    const seg = bytes.subarray(segStart, segEnd);
-    if (marker === 0xe1 && seg.subarray(0, 6).equals(Buffer.from("Exif\0\0", "latin1"))) out.findings.push(...exifFindings(seg.subarray(6)));
-    else if (marker === 0xe1 && seg.toString("latin1", 0, 29) === "http://ns.adobe.com/xap/1.0/\0")
-      out.findings.push(...xmpFindings(seg.toString("utf8", 29)));
-    else if (marker === 0xe1)
-      out.findings.push({ level: "FAIL", code: "APP1_UNKNOWN", detail: "unrecognised APP1 metadata segment" });
-    else if (marker === 0xed)
-      out.findings.push({ level: "FAIL", code: "IPTC_PRESENT", detail: "IPTC/Photoshop metadata is present" });
-    else if (marker === 0xfe)
-      out.findings.push({ level: "WARN", code: "JPEG_COMMENT", detail: "a JPEG comment segment is present" });
-    else if (JPEG_SOF.has(marker) && seg.length >= 5) {
-      out.height = seg.readUInt16BE(1);
-      out.width = seg.readUInt16BE(3);
+    const seg = bytes.subarray(offset + 4, segEnd);
+    if (marker === 0xe0 && (seg.toString("latin1", 0, 5) === "JFIF\0" || seg.toString("latin1", 0, 5) === "JFXX\0")) {
+      // JFIF header: resolution only.
+    } else if (marker === 0xe2 && seg.toString("latin1", 0, 12) === "ICC_PROFILE\0") {
+      // Colour profile.
+    } else if (marker === 0xee && seg.toString("latin1", 0, 5) === "Adobe") {
+      // Adobe colour transform flag.
+    } else if (marker === 0xe1 && seg.subarray(0, 6).equals(Buffer.from("Exif\0\0", "latin1"))) {
+      out.findings.push(...exifFindings(seg.subarray(6)));
+    } else if (marker === 0xe1 && seg.toString("latin1", 0, 29) === "http://ns.adobe.com/xap/1.0/\0") {
+      out.findings.push(...xmpFindings(seg.toString("utf8", 29)).map((f) => ({ ...f, level: "FAIL" })));
+    } else if (JPEG_SOF.has(marker)) {
+      if (seg.length >= 5) {
+        out.height = seg.readUInt16BE(1);
+        out.width = seg.readUInt16BE(3);
+      }
+    } else if (JPEG_TABLES.has(marker)) {
+      // Huffman, arithmetic, quantisation and restart tables.
+    } else if (marker === 0xda) {
+      // Start of scan: skip the entropy-coded data up to the next real marker.
+      let i = segEnd;
+      while (i + 1 < bytes.length && !(bytes[i] === 0xff && bytes[i + 1] !== 0x00 && !(bytes[i + 1] >= 0xd0 && bytes[i + 1] <= 0xd7))) i += 1;
+      offset = i;
+      continue;
+    } else {
+      out.findings.push(fail("JPEG_METADATA_SEGMENT", `segment 0x${marker.toString(16)} is not allowed in evidence (only pixel and colour segments are)`));
     }
     offset = segEnd;
   }
+  if (!sawEnd) out.findings.push(fail("JPEG_TRUNCATED", "no end-of-image marker"));
+  else if (offset < bytes.length) out.findings.push(fail("DATA_AFTER_END", `${bytes.length - offset} bytes follow the end of the image`));
   return out;
 }
 
-/** Media type, dimensions and metadata findings for an evidence file. */
+/** Media type, dimensions and findings for an evidence file. A FAIL finding blocks PASS. */
 export function scanImage(bytes) {
   if (!Buffer.isBuffer(bytes)) bytes = Buffer.from(bytes);
   let result;
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(PNG_SIGNATURE)) result = scanPng(bytes);
   else if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) result = scanJpeg(bytes);
-  else return { mediaType: null, width: null, height: null, findings: [{ level: "FAIL", code: "UNSUPPORTED_TYPE", detail: "evidence must be a PNG or JPEG file" }] };
-  if (bytes.length > MAX_EVIDENCE_BYTES)
-    result.findings.push({ level: "FAIL", code: "TOO_LARGE", detail: `file is larger than ${MAX_EVIDENCE_BYTES} bytes` });
-  if (!result.width || !result.height)
-    result.findings.push({ level: "FAIL", code: "NO_DIMENSIONS", detail: "image dimensions could not be read" });
+  else return { mediaType: null, width: null, height: null, findings: [fail("UNSUPPORTED_TYPE", "evidence must be a PNG or JPEG file")] };
+  if (bytes.length > MAX_EVIDENCE_BYTES) result.findings.push(fail("TOO_LARGE", `file is larger than ${MAX_EVIDENCE_BYTES} bytes`));
+  if (!result.width || !result.height) result.findings.push(fail("NO_DIMENSIONS", "image dimensions could not be read"));
   else if (Math.min(result.width, result.height) < MIN_EVIDENCE_SHORT_SIDE)
-    result.findings.push({ level: "FAIL", code: "TOO_SMALL", detail: `shorter side is below ${MIN_EVIDENCE_SHORT_SIDE} pixels` });
+    result.findings.push(fail("TOO_SMALL", `shorter side is below ${MIN_EVIDENCE_SHORT_SIDE} pixels`));
   return result;
 }
+
+/** Findings that concern the file's shape rather than its metadata. */
+export const SHAPE_FINDINGS = new Set(["UNSUPPORTED_TYPE", "TOO_LARGE", "NO_DIMENSIONS", "TOO_SMALL", "PNG_TRUNCATED", "JPEG_MALFORMED", "JPEG_TRUNCATED"]);

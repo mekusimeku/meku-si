@@ -8,16 +8,18 @@
 // submit unless you type back the code you reviewed. It cannot move money: MEKU's MCP
 // server has no payment tool.
 
-import { randomInt } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
   MCP_ENDPOINT,
-  OBJECTS,
   PROTOCOL,
   buildRequestArguments,
   canonicalize,
   generateCode,
+  generateObjectSalt,
+  isObjectSalt,
+  objectCommitment,
+  objectFor,
   isLedgerUrl,
   recordProblems,
   requestArgumentProblems,
@@ -51,10 +53,12 @@ export function makeClient({ endpoint = MCP_ENDPOINT, apiKey, fetchImpl = fetch,
   if (keyKind(apiKey) === "missing") throw new Error("Set MEKU_API_KEY in your environment (never in a file you commit).");
   let nextId = 0;
   let initialized = false;
-  async function post(method, params, { notification = false } = {}) {
+  // keyed: false sends a public discovery call without the key. MEKU counts every keyed call,
+  // initialization included, against the key's rate limit.
+  async function post(method, params, { notification = false, keyed = true } = {}) {
     const payload = notification ? { jsonrpc: "2.0", method, params } : { jsonrpc: "2.0", id: ++nextId, method, params };
     const headers = {
-      Authorization: `Bearer ${apiKey}`,
+      ...(keyed ? { Authorization: `Bearer ${apiKey}` } : {}),
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
     };
@@ -102,23 +106,39 @@ const writePrivate = (path, data) => writeFileSync(path, `${JSON.stringify(data,
 
 // ---- Actions -----------------------------------------------------------------
 
-export function prepareRequest({ pilotId, ledgerUrl, randomSource }) {
+export function prepareRequest({ pilotId, ledgerUrl, randomSource, saltSource }) {
   if (!isLedgerUrl(ledgerUrl)) throw new Error("--ledger must be the GitHub issue URL of the pilot ledger.");
   const code = generateCode(randomSource);
   const args = buildRequestArguments({ pilotId, code, ledgerUrl });
   const problems = requestArgumentProblems(args);
   if (problems.length) throw new Error(problems.join("; "));
-  return { format: "meku.pow-request/1", pilot_id: pilotId, ledger_url: ledgerUrl, code, arguments: args };
+  // The salt stays private in this file until the object is revealed (seq 7).
+  return { format: "meku.pow-request/2", pilot_id: pilotId, ledger_url: ledgerUrl, code, object_salt: generateObjectSalt(saltSource), arguments: args };
+}
+
+/** The request may only ever be the protocol template for this pilot, code and ledger. */
+function assertTemplate(prepared) {
+  let expected;
+  try {
+    expected = buildRequestArguments({ pilotId: prepared?.pilot_id, code: prepared?.code, ledgerUrl: prepared?.ledger_url });
+  } catch (error) {
+    throw new Error(`Refusing to submit: ${error.message}`);
+  }
+  if (canonicalize(prepared.arguments ?? null) !== canonicalize(expected))
+    throw new Error("Refusing to submit: the request differs from the protocol template for this code and ledger. Run prepare again; never edit pow-request.json.");
+  if (!isObjectSalt(prepared.object_salt)) throw new Error("Refusing to submit: pow-request.json has no valid object salt. Run prepare again.");
 }
 
 export async function checkConnection({ client, apiKey, clientInfo, agent, affirmIndependence, pilotId }) {
   const kind = keyKind(apiKey);
-  const init = await client.post("initialize", {
-    protocolVersion: PROTOCOL_VERSION,
-    capabilities: {},
-    clientInfo: { name: clientInfo.name, version: clientInfo.version },
-  });
-  await client.post("notifications/initialized", {}, { notification: true });
+  // Public initialization needs no key; only tools/list carries it, so this check costs one
+  // call of the key's rate limit and shows which tools the key can use.
+  const init = await client.post(
+    "initialize",
+    { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: clientInfo.name, version: clientInfo.version } },
+    { keyed: false },
+  );
+  await client.post("notifications/initialized", {}, { notification: true, keyed: false });
   const list = await client.post("tools/list", {});
   const tools = (list.result.tools ?? []).map((t) => t?.name).filter((n) => typeof n === "string");
   const summary = {
@@ -147,8 +167,7 @@ export async function checkConnection({ client, apiKey, clientInfo, agent, affir
 
 export async function submitRequest({ client, prepared, confirm }) {
   if (confirm !== prepared.code) throw new Error("Refusing to submit: --confirm must repeat the exact code shown by prepare, after a person reviewed the request text.");
-  const problems = requestArgumentProblems(prepared.arguments);
-  if (problems.length) throw new Error(problems.join("; "));
+  assertTemplate(prepared);
   const answer = await client.callTool("meku_request_human", prepared.arguments);
   return submissionRecords({ prepared, answer });
 }
@@ -166,6 +185,7 @@ function parseToolText(name, text, observedAt) {
 /** Same records when another MCP host (Claude Code, Cursor, an Agents SDK, Inspector...) made
  *  the call: save the exact text of the tool result, then import it. */
 export function importSubmission({ prepared, responseText, observedAt }) {
+  assertTemplate(prepared);
   return submissionRecords({ prepared, answer: parseToolText("meku_request_human", responseText, observedAt) });
 }
 
@@ -214,6 +234,7 @@ function submissionRecords({ prepared, answer }) {
     type: "request_submitted",
     role: "developer",
     code: prepared.code,
+    object_commitment: objectCommitment(prepared.object_salt),
     arguments: prepared.arguments,
     arguments_sha256: sha256Hex(canonicalize(prepared.arguments)),
     request_id_sha256: requestIdCommitment(r.id),
@@ -246,8 +267,10 @@ function statusRecords({ receipt, answer }) {
     response_text_sha256: sha256Hex(answer.text),
     observed_at: answer.observedAt,
   };
+  const codeIntact = typeof request.description === "string" && request.description.includes(receipt.code);
+  // No record is printed when the stored text lost the code: that ledger must stop instead.
   const record =
-    request.status === "approved"
+    request.status === "approved" && codeIntact
       ? {
           pow: PROTOCOL,
           pilot_id: receipt.pilot_id,
@@ -261,13 +284,32 @@ function statusRecords({ receipt, answer }) {
           observed_at: answer.observedAt,
         }
       : null;
-  const codeIntact = typeof request.description === "string" && request.description.includes(receipt.code);
   return { status: request.status, codeIntact, statusReceipt, record };
 }
 
-export function revealObject({ pilotId, pick = randomInt }) {
-  const object = OBJECTS[pick(OBJECTS.length)];
-  return { pow: PROTOCOL, pilot_id: pilotId, seq: 7, type: "object_revealed", role: "developer", object };
+/** The object follows from the salt committed in seq 2 and GitHub's id for the consent comment;
+ *  revealing the salt lets anyone recompute it. */
+export function revealObject({ prepared, consentCommentId }) {
+  if (!isObjectSalt(prepared?.object_salt)) throw new Error("pow-request.json has no valid object salt.");
+  const id = Number(consentCommentId);
+  return {
+    pow: PROTOCOL,
+    pilot_id: prepared.pilot_id,
+    seq: 7,
+    type: "object_revealed",
+    role: "developer",
+    object: objectFor(prepared.object_salt, id),
+    salt: prepared.object_salt,
+    consent_comment_id: id,
+  };
+}
+
+/** GitHub's id for the human's consent comment, from an exported ledger that ends with it. */
+export function consentCommentIdFrom(result) {
+  const last = result.comments_in_order.at(-1);
+  if (result.verdict === "FAIL") throw new Error("the ledger fails verification; fix that first");
+  if (last?.type !== "human_consent") throw new Error(`the ledger must end with human_consent; it ends with ${last?.type ?? "nothing"}`);
+  return Number(last.comment_id);
 }
 
 // ---- CLI ---------------------------------------------------------------------
@@ -277,7 +319,7 @@ const USAGE = `Usage (run from a checkout of github.com/mekusimeku/meku-si, Node
   node tools/pow/request.mjs check   --pilot POW-001 --client-name <name> --client-version <v> --agent "<your agent>" [--affirm-independence]
   node tools/pow/request.mjs submit  --request pow-request.json --confirm <CODE> [--receipt pow-receipt.json] [--retry]
   node tools/pow/request.mjs status  --receipt pow-receipt.json [--out pow-status-N.json]
-  node tools/pow/request.mjs reveal  --pilot POW-001
+  node tools/pow/request.mjs reveal  --request pow-request.json --bundle pow-ledger/bundle.json   (or --consent-comment-id <id>)
 If your own MCP host (Claude Code, Cursor, an Agents SDK, MCP Inspector...) makes the calls instead:
   node tools/pow/request.mjs ready-manual  --pilot POW-001 --client-name <host> --client-version <v> --agent "<agent>" --server-version <v> --protocol-version <v> --tools a,b,c --affirm-independence
   node tools/pow/request.mjs import-submit --request pow-request.json --response-text-file submit-result.txt [--receipt pow-receipt.json]
@@ -310,9 +352,17 @@ async function main(argv) {
       return 0;
     }
     if (command === "reveal") {
-      const record = revealObject({ pilotId });
-      console.log("Post this ONLY after the human's consent comment (seq 6) is visible in the ledger:\n");
-      console.log(recordComment(record, "object named after consent"));
+      const prepared = JSON.parse(readFileSync(opt("request") ?? "pow-request.json", "utf8"));
+      let consentCommentId = opt("consent-comment-id");
+      if (opt("bundle")) {
+        const { loadBundleFile, verifyBundle } = await import("./verify.mjs");
+        const { bundle, loadEvidence } = loadBundleFile(opt("bundle"));
+        consentCommentId = consentCommentIdFrom(verifyBundle(bundle, { loadEvidence, allowSynthetic: true }));
+      }
+      if (!consentCommentId) throw new Error("reveal needs --bundle <exported ledger> or --consent-comment-id <id from the consent comment's link>");
+      const record = revealObject({ prepared, consentCommentId });
+      console.log("Post this ONLY after the human's consent comment (seq 6) is in the ledger:\n");
+      console.log(recordComment(record, "object derived from the committed salt and the consent comment"));
       return 0;
     }
     const observedAt = opt("observed-at") ?? new Date().toISOString();

@@ -257,6 +257,7 @@
         "role",
         "seq",
         "code",
+        "object_commitment",
         "arguments",
         "arguments_sha256",
         "request_id_sha256",
@@ -291,6 +292,12 @@
           "minLength": 8,
           "maxLength": 8,
           "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+        },
+        "object_commitment": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
         },
         "arguments": {
           "type": "object",
@@ -840,7 +847,9 @@
         "type",
         "role",
         "seq",
-        "object"
+        "object",
+        "salt",
+        "consent_comment_id"
       ],
       "properties": {
         "pow": {
@@ -874,6 +883,17 @@
             "PEN",
             "SHOE"
           ]
+        },
+        "salt": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 32,
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "consent_comment_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
         }
       }
     },

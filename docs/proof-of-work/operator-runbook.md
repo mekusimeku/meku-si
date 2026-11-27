@@ -7,13 +7,13 @@ For the MEKU operator account `mekusimeku`. Every step works from a phone browse
 1. **Developer.** Choose an independent developer who confirms the four statements in the [developer guide](developer-guide.md#0-check-that-you-are-eligible). MEKU staff, contractors and MEKU's own AI workers cannot take this role.
 2. **Second reviewer.** Pick a MEKU account other than the one that will issue the key: a SEEK reviewer or a second admin. MEKU refuses a review by the account that issued the key, because requests made with a key belong to that account.
 3. **Human.** Find a consenting adult who is not MEKU staff, not one of MEKU's AI workers and not the developer, and who has a GitHub account (a new pseudonymous one is fine). Send them the [human guide](human-guide.md). Never offer payment.
-4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 2 per minute and 20 per day. Leave **SEARCH ONLY** and **ENABLE CONCIERGE PROPOSALS** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it.
+4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 5 per minute and 30 per day. MEKU counts every call that carries the key, and an MCP host spends 3 calls just to connect. Leave **SEARCH ONLY** and **ENABLE CONCIERGE PROPOSALS** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it.
 
 Nothing in this pilot creates a mission, starts a payment, uses a wallet, or touches MEKU POCKET.
 
 ## seq 0: open the ledger
 
-Create a new issue in `mekusimeku/meku-si` titled **POW-001 ledger: independent proof-of-work pilot**. Put a short plain explanation and a link to the protocol in the issue text; the issue text is not a record. Then post this as the **first comment**, replacing `DEVELOPER_LOGIN` with the developer's GitHub login (no @):
+Create a new issue in `mekusimeku/meku-si` titled **POW-001 ledger: independent proof-of-work pilot**. Put a short plain explanation and a link to the protocol in the issue text; the issue text is not a record. Then post this as the **first comment**, replacing `DEVELOPER_LOGIN` with the developer's GitHub login (no @). For a link that can never change, you may replace `main` in the protocol address with the commit id shown on GitHub.
 
 ```json
 {
@@ -71,7 +71,7 @@ After a rejection, close the pilot with seq 4 (see [Closing](#seq-11-close)).
 
 ## seq 5: offer the task to the human
 
-Wait for the developer's seq 4, which shows MEKU's stored request as `approved`. Send the human the ledger link and point them to seq 4, which holds the exact stored request text. Then post this, replacing `CODE` and `HUMAN_LOGIN`. Use `false` instead of `true` if the human has no MEKU human profile. `channel` is how you contacted them: `github`, `email`, `in_person`, `phone`, `message` or `other`:
+Wait for the developer's seq 4, which shows MEKU's stored request as `approved`. First ask the human, privately, whether their GitHub username may be named in the ledger. Then send them the ledger link and point them to seq 4, which holds the exact stored request text. Post this, replacing `CODE` and `HUMAN_LOGIN`. Use `false` instead of `true` if the human has no MEKU human profile. `channel` is how you contacted them: `github`, `email`, `in_person`, `phone`, `message` or `other`:
 
 ```json
 {
@@ -93,9 +93,11 @@ The human posts consent (seq 6). The developer then names the object (seq 7), an
 
 ## seq 9: return the result
 
-Open the human's screenshot in seq 8 and look at it.
+First make sure the evidence file carries no metadata. Ask the developer, or any agent working for you, to run `node tools/pow/verify.mjs --from-issue <ledger-url>` and report check **E04**. The command needs no key.
 
-- **Anything personal is visible** (a face, a person, a document, an address, a screen, a view out of a window): ask the human to delete the comment, hide it yourself (**···** → **Hide**), and post a stop. Do not continue.
+Then open the human's screenshot in seq 8 and look at it.
+
+- **E04 failed, or anything personal is visible** (a face, a person, a document, an address, a screen, a view out of a window): hide the comment (**···** → **Hide**) and ask GitHub Support to remove the uploaded file. Deleting the comment does not delete the file. Then post a stop. Do not continue.
 - **Otherwise:** post this, replacing `CODE`. Set each check to `true` or `false` as you see it:
 
 ```json
@@ -150,18 +152,17 @@ Anyone may stop. If the human writes "STOP", if a participant has not acted for 
 
 ## After closing
 
-Anyone, including an agent working for you, can export and check the ledger. Never share the pilot key with them; the commands need none:
+Anyone, including an agent working for you, can export and check the ledger. Never share the pilot key with them; the command needs none:
 
 ```sh
-node tools/pow/export.mjs https://github.com/mekusimeku/meku-si/issues/N pow-ledger
-node tools/pow/verify.mjs pow-ledger/bundle.json --json pow-ledger/verification.json
+node tools/pow/verify.mjs --from-issue https://github.com/mekusimeku/meku-si/issues/N --out pow-ledger --json pow-ledger/verification.json
 ```
 
-Publish the [report](report-template.md) as a pull request that adds `pilots/POW-001/` with the bundle, the evidence file, `verification.json` and the report. Ask someone outside MEKU, the developer and the human to verify it independently.
+Publish the [report](report-template.md) as a pull request that adds `pilots/POW-001/` with the bundle, the evidence file, `verification.json` and the report. The committed bundle is a snapshot for convenience, not the evidence: verifiers start from the live issue. Ask someone outside MEKU, the developer and the human to verify it independently.
 
 ## Never
 
-- Edit any record comment, or post a record in someone else's role.
+- Edit or delete any comment, or post a record in someone else's role. GitHub's API does not return deleted comments, so a deletion silently removes evidence.
 - Use the developer's key, or let the account that issued the key approve the request.
 - Offer or imply payment, tokens or rewards, or create a mission.
 - Choose a human who works for MEKU, or ask for anything beyond the protocol task.

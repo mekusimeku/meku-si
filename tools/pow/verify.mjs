@@ -1,40 +1,52 @@
 #!/usr/bin/env node
 // Offline verifier for a MEKU proof-of-work pilot ledger (meku.pow/1).
-// Input: a bundle exported from the public GitHub issue (export.mjs) plus its evidence files.
-// Output: one line per check (PASS, FAIL, WARN, MANUAL, NOT_REACHED) and a verdict.
-// It makes no network calls and needs no credentials. Exit codes: 0 PASS, 1 FAIL,
-// 2 any other verdict (INCOMPLETE, STOPPED, REJECTED_BY_REVIEW, COMPLETED_REJECTED), 3 usage error.
+// Input: a bundle exported from the public GitHub issue (export.mjs) plus its evidence files,
+// or --from-issue <url> to export and verify in one step. A bundle file proves nothing by
+// itself: anyone can write one. A PASS means something only for a bundle you exported
+// yourself from the live issue.
+// Output: one line per check (PASS, FAIL, WARN, NOT_REACHED), manual checks and a verdict.
+// Exit codes: 0 PASS, 1 FAIL, 2 any other verdict (INCOMPLETE, STOPPED, REJECTED_BY_REVIEW,
+// COMPLETED_REJECTED), 3 usage error.
 
-import { readFileSync, writeFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, resolve, sep } from "node:path";
+import { closeSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   BUNDLE_FORMAT,
   CYCLE_HOURS,
   EVIDENCE_HOURS_AFTER_REVEAL,
+  MAX_EVIDENCE_BYTES,
   OBJECTS,
   PROTOCOL,
+  SHAPE_FINDINGS,
   buildRequestArguments,
-  canonicalize,
+  canon,
+  displaySafe,
+  extractAllUrls,
   extractAttachmentUrls,
   extractRecords,
   isLedgerUrl,
+  isObjectSalt,
   isSyntheticPilot,
   ledgerDigest,
+  objectCommitment,
+  objectFor,
   recordProblems,
   requestArgumentProblems,
   rosterFromComments,
-  displaySafe,
   sameLogin,
   scanImage,
   sha256Hex,
+  visibleText,
 } from "./lib.mjs";
 
-export const VERIFIER_VERSION = "meku.pow-verify/1";
+export const VERIFIER_VERSION = "meku.pow-verify/2";
 const HOUR_MS = 3_600_000;
+const PLAIN_STOP = /\b(?:stop|stopped|withdraw|withdrawn|withdrawing)\b/i;
 
-// Which record may follow which. A stop may follow any record from developer_ready
-// onward except a decision or a close; after a stop or a rejection only a close may follow.
+// Which record may follow which. A stop may follow any record from pilot_opened onward
+// except a decision or a close; after a stop or a rejection only a close may follow.
 function allowedNext(previous) {
   if (!previous) return ["pilot_opened"];
   switch (previous.type) {
@@ -77,7 +89,7 @@ export const CHECKS = [
   ["R01", "pilot_opened is posted by the expected MEKU operator account"],
   ["R02", "Every record is posted by the account that holds its role"],
   ["R03", "Developer, operator and human are three different accounts"],
-  ["R04", "The request reviewer is attested not to be the key issuer"],
+  ["R04", "The reviewer is attested, not proven, not to be the key issuer"],
   ["Q01", "The developer's key could submit requests (meku_request_human listed by meku-human-cloud)"],
   ["Q02", "The request is exactly the protocol template for this code and ledger"],
   ["Q03", "arguments_sha256 matches the submitted arguments"],
@@ -87,21 +99,22 @@ export const CHECKS = [
   ["Q07", "stored_request_sha256 matches the stored request"],
   ["H01", "The offer points the human to the stored request text, which holds the code"],
   ["H02", "The human consented from their own account after the offer"],
-  ["H03", "The object was named by the developer after consent, from the protocol list"],
+  ["H03", "The object follows from the committed salt and the consent comment, named after consent"],
   ["H04", "Evidence was posted by the human after the object was named and within 48 hours"],
-  ["E01", "The evidence comment carries exactly one GitHub attachment"],
+  ["H05", "No plain-text STOP or withdrawal by the human was left unrecorded"],
+  ["E01", "The evidence comment shows exactly one image, and it is a GitHub attachment"],
   ["E02", "The attachment is in the bundle and its SHA-256 matches the developer's decision"],
   ["E03", "The file is a PNG or JPEG of usable size"],
-  ["E04", "The file carries no EXIF, GPS, IPTC or location metadata"],
+  ["E04", "The file carries only pixel and colour data: no EXIF, GPS, XMP location or other metadata"],
   ["D01", "MEKU returned the result after the evidence it refers to"],
   ["D02", "The developer's decision commits to the exact ledger through seq 9"],
   ["D03", "An ACCEPTED decision has every developer check true and lands within 168 hours"],
-  ["D04", "MEKU's own check agrees with the developer's checks"],
+  ["D04", "MEKU's own check agrees with an ACCEPTED decision"],
   ["C01", "The pilot was closed with the key revoked and a matching outcome"],
   ["C02", "No record involves payment"],
 ];
 
-export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator = "mekusimeku", allowSynthetic = false } = {}) {
+export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator = "mekusimeku", allowSynthetic = false, provenance = null } = {}) {
   const results = new Map(CHECKS.map(([id, title]) => [id, { id, title, status: "NOT_REACHED", details: [] }]));
   const fail = (id, detail) => {
     const r = results.get(id);
@@ -118,369 +131,404 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
     if (r.status === "NOT_REACHED") r.status = "PASS";
     if (detail) r.details.push(detail);
   };
+  // Declared before any early return, because finish() reports on them.
   const manual = [];
   const verifications = [];
-  // Declared before any early return, because finish() reports on them.
-  const chain = []; // accepted records in seq order
+  const chain = []; // accepted records in seq order: { record, comment }
   let pilotId = null;
+  let issueUrl = null;
   let evidenceUrl = null;
   let evidenceSha = null;
   let scan = null;
 
-  // ---- L01: bundle shape
-  const comments = Array.isArray(bundle?.comments) ? bundle.comments : null;
-  const issueUrl = bundle?.source?.issue_url;
-  if (bundle?.format !== BUNDLE_FORMAT) fail("L01", `format must be ${BUNDLE_FORMAT}`);
-  if (!isLedgerUrl(issueUrl)) fail("L01", "source.issue_url must be a GitHub issue URL");
-  if (!comments) fail("L01", "comments must be an array");
-  if (results.get("L01").status === "FAIL") return finish();
-  pass("L01", issueUrl);
-
-  const commentOk = (c) =>
-    c && typeof c.author === "string" && typeof c.body === "string" && !Number.isNaN(Date.parse(c.created_at)) && !Number.isNaN(Date.parse(c.updated_at));
-  const ordered = comments
-    .filter((c, i) => commentOk(c) || (fail("L01", `comment #${i} lacks author, body or timestamps`), false))
-    .slice()
-    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || String(a.id).localeCompare(String(b.id)));
-
-  // ---- Find pilot_opened to learn the roster. A seq 0 posted by anyone other than the expected
-  // operator account is ignored, so a stranger cannot hijack the ledger by commenting first.
-  const found = [];
-  for (const comment of ordered) for (const item of extractRecords(comment.body)) found.push({ comment, ...item });
-  const openingEntry = rosterFromComments(ordered, { expectOperator }).opening;
-  const opening = openingEntry ? found.find((f) => f.comment === openingEntry.comment && f.record?.type === "pilot_opened" && f.record?.seq === 0) : null;
-  if (!opening) {
-    fail("L04", "the ledger has no pilot_opened record with seq 0");
-    return finish();
+  try {
+    run();
+  } catch (error) {
+    // Hostile or malformed input must still produce a report, never a crash.
+    fail("L01", `verification stopped on malformed input: ${error?.message ?? error}`);
   }
-  const roster = opening.record.roster ?? {};
-  pilotId = opening.record.pilot_id;
-  const synthetic = isSyntheticPilot(pilotId);
-  if (synthetic && !allowSynthetic) fail("L03", `${pilotId} is synthetic test data, not a real pilot (use --allow-synthetic only for tests)`);
-  if (!sameLogin(opening.comment.author, roster.operator)) fail("R01", `pilot_opened was posted by ${opening.comment.author}, not roster.operator ${roster.operator}`);
-  else if (!synthetic && !sameLogin(roster.operator, expectOperator)) fail("R01", `roster.operator is ${roster.operator}, expected ${expectOperator}`);
-  else pass("R01", `operator ${roster.operator}`);
+  return finish();
 
-  // Human login is learned from task_offered (posted by the operator).
-  const humanLogin = rosterFromComments(ordered, { expectOperator }).human;
-  const roleOf = (author) => {
-    if (sameLogin(author, roster.operator)) return "operator";
-    if (sameLogin(author, roster.developer)) return "developer";
-    if (humanLogin && sameLogin(author, humanLogin)) return "human";
-    return null;
-  };
+  function run() {
+    // ---- L01: bundle shape
+    const comments = Array.isArray(bundle?.comments) ? bundle.comments : null;
+    issueUrl = typeof bundle?.source?.issue_url === "string" ? bundle.source.issue_url : null;
+    if (bundle?.format !== BUNDLE_FORMAT) fail("L01", `format must be ${BUNDLE_FORMAT}`);
+    if (!isLedgerUrl(issueUrl)) fail("L01", "source.issue_url must be a GitHub issue URL");
+    if (!comments) fail("L01", "comments must be an array");
+    if (results.get("L01").status === "FAIL") return;
+    pass("L01", issueUrl);
 
-  // ---- Classify every record-bearing comment.
-  const sequenced = [];
-  const perComment = new Map();
-  for (const f of found) perComment.set(f.comment, (perComment.get(f.comment) ?? 0) + 1);
-  for (const f of found) {
-    const role = roleOf(f.comment.author);
-    if (f.error || perComment.get(f.comment) > 1) {
-      if (role) fail("L02", `${f.comment.html_url ?? f.comment.id}: ${f.error ?? "more than one record in one comment"}`);
-      else warn("L07", `ignored malformed record-like comment by ${f.comment.author}`);
-      continue;
+    const commentOk = (c) =>
+      c && typeof c.author === "string" && typeof c.body === "string" && !Number.isNaN(Date.parse(c.created_at)) && !Number.isNaN(Date.parse(c.updated_at));
+    const ordered = comments
+      .filter((c, i) => {
+        if (commentOk(c)) return true;
+        fail("L01", `comment #${i} lacks author, body or timestamps`);
+        return false;
+      })
+      .slice()
+      .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || String(a.id).localeCompare(String(b.id)));
+
+    // ---- Roster. A seq 0 from anyone but the expected operator account is ignored, so a
+    // stranger cannot hijack the ledger by commenting first.
+    const found = [];
+    for (const comment of ordered) for (const item of extractRecords(comment.body)) found.push({ comment, ...item });
+    const roster = rosterFromComments(ordered, { expectOperator });
+    const opening = roster.opening ? found.find((f) => f.comment === roster.opening.comment && f.record?.type === "pilot_opened" && f.record?.seq === 0) : null;
+    if (!opening) {
+      fail("L04", "the ledger has no pilot_opened record with seq 0");
+      return;
     }
-    if (f !== opening && f.record?.type === "pilot_opened") {
-      warn("L07", `ignored another pilot_opened posted by ${f.comment.author}`);
-      continue;
-    }
-    const record = f.record;
-    if (record.type === "independent_verification") {
-      const problems = recordProblems(record);
-      if (role) warn("L07", `independent_verification by roster account ${f.comment.author} ignored (not independent)`);
-      else if (problems.length) warn("L07", `independent_verification by ${f.comment.author} ignored: ${problems[0]}`);
-      else verifications.push({ author: f.comment.author, created_at: f.comment.created_at, verdict: record.verdict, ledger_digest: record.ledger_digest, tool: record.tool, manual_checks: record.manual_checks });
-      continue;
-    }
-    if (!role) {
-      warn("L07", `ignored ${record.type ?? "record"} posted by non-roster account ${f.comment.author}`);
-      continue;
-    }
-    if (record.role !== role) fail("R02", `seq ${record.seq} ${record.type} claims role ${record.role} but ${f.comment.author} is the ${role}`);
-    sequenced.push({ record, comment: f.comment, problems: recordProblems(record) });
-  }
-  for (const { record, problems } of sequenced) if (problems.length) fail("L02", `seq ${record.seq} ${record.type}: ${problems.join("; ")}`);
-  if (results.get("L02").status !== "FAIL") pass("L02", `${sequenced.length} records`);
-  if (results.get("R02").status !== "FAIL") pass("R02");
-  if (results.get("L07").status === "NOT_REACHED") pass("L07", "none found");
+    pilotId = typeof opening.record.pilot_id === "string" ? opening.record.pilot_id : null;
+    const synthetic = isSyntheticPilot(pilotId);
+    if (synthetic && !allowSynthetic) fail("L03", `${pilotId} is synthetic test data, not a real pilot (use --allow-synthetic only for tests)`);
+    if (!sameLogin(opening.comment.author, roster.operator)) fail("R01", `pilot_opened was posted by ${opening.comment.author}, not roster.operator`);
+    else if (!synthetic && !sameLogin(roster.operator, expectOperator)) fail("R01", `roster.operator is ${roster.operator}, expected ${expectOperator}`);
+    else pass("R01", `operator ${roster.operator}`);
+    const humanLogin = roster.human;
+    const roleOf = (author) => {
+      if (sameLogin(author, roster.operator)) return "operator";
+      if (sameLogin(author, roster.developer)) return "developer";
+      if (sameLogin(author, humanLogin)) return "human";
+      return null;
+    };
 
-  // ---- L03 / L04 / L05 / L06: identity, order, edits, timestamps.
-  for (const { record } of sequenced) if (record.pilot_id !== pilotId) fail("L03", `seq ${record.seq} has pilot_id ${record.pilot_id}`);
-  if (results.get("L03").status !== "FAIL") pass("L03", pilotId);
-
-  let previous = null;
-  for (const entry of sequenced) {
-    const { record } = entry;
-    if (previous?.type === "pilot_closed") {
-      fail("L04", `seq ${record.seq} ${record.type} appears after pilot_closed`);
-      break;
+    // ---- Classify every record-bearing comment.
+    const sequenced = [];
+    const perComment = new Map();
+    for (const f of found) perComment.set(f.comment, (perComment.get(f.comment) ?? 0) + 1);
+    for (const f of found) {
+      const role = roleOf(f.comment.author);
+      if (f.error || perComment.get(f.comment) > 1) {
+        if (role) fail("L02", `${f.comment.html_url ?? f.comment.id}: ${f.error ?? "more than one record in one comment"}`);
+        else warn("L07", `ignored malformed record-like comment by ${f.comment.author}`);
+        continue;
+      }
+      if (f !== opening && f.record?.type === "pilot_opened") {
+        warn("L07", `ignored another pilot_opened posted by ${f.comment.author}`);
+        continue;
+      }
+      const record = f.record;
+      if (record.type === "independent_verification") {
+        const problems = recordProblems(record);
+        if (role) warn("L07", `independent_verification by roster account ${f.comment.author} ignored (not independent)`);
+        else if (problems.length) warn("L07", `independent_verification by ${f.comment.author} ignored: ${problems[0]}`);
+        else verifications.push({ author: f.comment.author, created_at: f.comment.created_at, pilot_id: record.pilot_id, verdict: record.verdict, ledger_digest: record.ledger_digest, tool: record.tool, manual_checks: record.manual_checks });
+        continue;
+      }
+      if (!role) {
+        warn("L07", `ignored ${typeof record.type === "string" ? record.type : "record"} posted by non-roster account ${f.comment.author}`);
+        continue;
+      }
+      if (record.role !== role) fail("R02", `seq ${record.seq} ${record.type} claims role ${record.role} but ${f.comment.author} is the ${role}`);
+      sequenced.push({ record, comment: f.comment, problems: recordProblems(record) });
     }
-    const allowed = allowedNext(previous);
-    if (record.seq !== chain.length) {
-      fail("L04", `expected seq ${chain.length}, found seq ${record.seq} (${record.type})`);
-      break;
+    for (const { record, problems } of sequenced) if (problems.length) fail("L02", `seq ${record.seq} ${record.type}: ${problems.join("; ")}`);
+    if (results.get("L02").status !== "FAIL") pass("L02", `${sequenced.length} records`);
+    if (results.get("R02").status !== "FAIL") pass("R02");
+    if (results.get("L07").status === "NOT_REACHED") pass("L07", "none found");
+
+    // ---- L03 / L04 / L05 / L06: identity, order, edits, timestamps.
+    for (const { record } of sequenced) if (record.pilot_id !== pilotId) fail("L03", `seq ${record.seq} has pilot_id ${record.pilot_id}`);
+    if (results.get("L03").status !== "FAIL") pass("L03", pilotId);
+
+    let previous = null;
+    for (const entry of sequenced) {
+      const { record, comment } = entry;
+      const last = chain.at(-1);
+      // An exact repeat of the previous record by the same account (a double post) adds nothing.
+      if (last && sameLogin(last.comment.author, comment.author) && canon(last.record) !== null && canon(last.record) === canon(record)) {
+        warn("L04", `seq ${record.seq} ${record.type} was posted twice; the repeat is ignored`);
+        continue;
+      }
+      if (previous?.type === "pilot_closed") {
+        fail("L04", `seq ${record.seq} ${record.type} appears after pilot_closed`);
+        break;
+      }
+      const allowed = allowedNext(previous);
+      if (record.seq !== chain.length) {
+        fail("L04", `expected seq ${chain.length}, found seq ${record.seq} (${record.type})`);
+        break;
+      }
+      if (!allowed.includes(record.type)) {
+        fail("L04", `seq ${record.seq}: ${record.type} cannot follow ${previous?.type ?? "the start"} (allowed: ${allowed.join(", ")})`);
+        break;
+      }
+      chain.push(entry);
+      previous = record;
     }
-    if (!allowed.includes(record.type)) {
-      fail("L04", `seq ${record.seq}: ${record.type} cannot follow ${previous?.type ?? "the start"} (allowed: ${allowed.join(", ")})`);
-      break;
+    if (results.get("L04").status !== "FAIL") pass("L04", `${chain.length} records in order`);
+
+    for (const { record, comment } of chain)
+      if (comment.updated_at !== comment.created_at) fail("L05", `seq ${record.seq} comment was edited (${comment.created_at} -> ${comment.updated_at}); post a stop or correction instead`);
+    if (results.get("L05").status !== "FAIL" && chain.length) pass("L05");
+
+    for (let i = 1; i < chain.length; i += 1)
+      if (Date.parse(chain[i].comment.created_at) <= Date.parse(chain[i - 1].comment.created_at)) fail("L06", `seq ${i} is not later than seq ${i - 1}`);
+    if (results.get("L06").status !== "FAIL" && chain.length) pass("L06");
+
+    const at = (type) => chain.find((e) => e.record.type === type);
+    const time = (entry) => Date.parse(entry.comment.created_at);
+    const R = Object.fromEntries(
+      ["developer_ready", "request_submitted", "request_reviewed", "request_status_observed", "task_offered", "human_consent", "object_revealed", "evidence_submitted", "result_returned", "requester_decision", "pilot_closed", "stop"].map((t) => [t, at(t)]),
+    );
+    const str = (v) => (typeof v === "string" ? v : "");
+
+    // ---- R03 / R04
+    const logins = [roster.operator, roster.developer, humanLogin].filter((l) => typeof l === "string").map((l) => l.toLowerCase());
+    if (new Set(logins).size !== logins.length) fail("R03", `accounts are not distinct: ${logins.join(", ")}`);
+    else if (logins.length === 3) pass("R03", logins.join(", "));
+    if (R.request_reviewed) pass("R04", `attested by the operator; reviewer role ${str(R.request_reviewed.record.reviewer_role)}; MEKU's database does not enforce it yet`);
+
+    // ---- Request checks
+    const code = str(R.request_submitted?.record.code);
+    if (R.developer_ready) {
+      const d = R.developer_ready.record;
+      if (!Array.isArray(d.tools_listed) || !d.tools_listed.includes("meku_request_human")) fail("Q01", "tools_listed lacks meku_request_human: the key is search-only");
+      else pass("Q01", `self-reported: ${str(d.client?.name)} ${str(d.client?.version)}; server ${str(d.server?.name)} ${str(d.server?.version)}, protocol ${str(d.server?.protocol_version)}`);
     }
-    chain.push(entry);
-    previous = record;
-  }
-  if (results.get("L04").status !== "FAIL") pass("L04", `${chain.length} records in order`);
-
-  for (const { record, comment } of chain)
-    if (comment.updated_at !== comment.created_at) fail("L05", `seq ${record.seq} comment was edited (${comment.created_at} -> ${comment.updated_at}); post a stop or correction instead`);
-  if (results.get("L05").status !== "FAIL" && chain.length) pass("L05");
-
-  for (let i = 1; i < chain.length; i += 1)
-    if (Date.parse(chain[i].comment.created_at) <= Date.parse(chain[i - 1].comment.created_at))
-      fail("L06", `seq ${i} is not later than seq ${i - 1}`);
-  if (results.get("L06").status !== "FAIL" && chain.length) pass("L06");
-
-  const at = (type) => chain.find((e) => e.record.type === type);
-  const time = (entry) => Date.parse(entry.comment.created_at);
-  const R = Object.fromEntries(
-    ["developer_ready", "request_submitted", "request_reviewed", "request_status_observed", "task_offered", "human_consent", "object_revealed", "evidence_submitted", "result_returned", "requester_decision", "pilot_closed", "stop"].map((t) => [t, at(t)]),
-  );
-
-  // ---- R03 / R04
-  const logins = [roster.operator, roster.developer, humanLogin].filter(Boolean).map((l) => l.toLowerCase());
-  if (new Set(logins).size !== logins.length) fail("R03", `accounts are not distinct: ${logins.join(", ")}`);
-  else if (logins.length === 3) pass("R03", logins.join(", "));
-  if (R.request_reviewed) pass("R04", `reviewer role ${R.request_reviewed.record.reviewer_role}`);
-
-  // ---- Request checks
-  const code = R.request_submitted?.record.code;
-  if (R.developer_ready) {
-    const d = R.developer_ready.record;
-    if (!Array.isArray(d.tools_listed) || !d.tools_listed.includes("meku_request_human")) fail("Q01", "tools_listed lacks meku_request_human: the key is search-only");
-    else pass("Q01", `${d.client?.name} ${d.client?.version}; server ${d.server?.name} ${d.server?.version}, protocol ${d.server?.protocol_version}`);
-  }
-  if (R.request_submitted) {
-    const s = R.request_submitted.record;
-    let expected = null;
-    try {
-      expected = buildRequestArguments({ pilotId, code: s.code, ledgerUrl: issueUrl });
-    } catch (error) {
-      fail("Q02", error.message);
+    if (R.request_submitted) {
+      const s = R.request_submitted.record;
+      let expected = null;
+      try {
+        expected = buildRequestArguments({ pilotId, code: s.code, ledgerUrl: issueUrl });
+      } catch (error) {
+        fail("Q02", error.message);
+      }
+      if (expected) {
+        if (canon(s.arguments) === null || canon(s.arguments) !== canon(expected)) fail("Q02", "arguments differ from the protocol template (any extra request, field or wording is refused)");
+        else {
+          const problems = requestArgumentProblems(s.arguments);
+          if (problems.length) fail("Q02", problems.join("; "));
+          else pass("Q02", `code ${s.code}`);
+        }
+      }
+      const argsCanon = canon(s.arguments);
+      if (argsCanon === null || sha256Hex(argsCanon) !== s.arguments_sha256) fail("Q03", "arguments_sha256 does not match");
+      else pass("Q03");
+      // MEKU's own clock must place the request inside the ledger's lifetime: after the ledger
+      // opened and before the developer reported it (5 minutes of clock tolerance either way).
+      const created = Date.parse(s.response?.created_at);
+      const opened = Date.parse(opening.comment.created_at);
+      const reported = time(R.request_submitted);
+      if (s.response?.status !== "submitted") fail("Q04", `MEKU answered status ${s.response?.status}`);
+      else if (!(created > opened - 5 * 60_000 && created < reported + 5 * 60_000))
+        fail("Q04", `MEKU created_at ${s.response.created_at} is outside the ledger window (${opening.comment.created_at} to ${R.request_submitted.comment.created_at})`);
+      else if (s.response.deduplicated) warn("Q04", "MEKU returned an earlier identical submission (deduplicated: true)");
+      else pass("Q04", `created_at ${s.response.created_at} (developer-reported; MEKU's answers are not signed)`);
     }
-    if (expected) {
-      if (canonicalize(s.arguments ?? null) !== canonicalize(expected)) fail("Q02", "arguments differ from the protocol template (any extra request, field or wording is refused)");
+    // The developer links seq 2 and 4 by the request id commitment; the operator names the
+    // same request by its fresh code in seq 3, 5 and 9.
+    if (R.request_submitted && R.request_status_observed && R.request_status_observed.record.request_id_sha256 !== R.request_submitted.record.request_id_sha256)
+      fail("Q05", "request_id_sha256 differs between request_submitted and request_status_observed");
+    const operatorCodes = ["request_reviewed", "task_offered", "result_returned"].filter((t) => R[t]).map((t) => [t, R[t].record.code]);
+    const wrongCodes = operatorCodes.filter(([, c]) => c !== code);
+    if (wrongCodes.length) fail("Q05", `the operator names another request (code differs) in ${wrongCodes.map(([t]) => t).join(", ")}`);
+    if (R.request_reviewed && results.get("Q05").status !== "FAIL") pass("Q05", `code ${code} in ${operatorCodes.length} operator records`);
+    if (R.request_status_observed && R.request_submitted) {
+      const o = R.request_status_observed.record;
+      const s = R.request_submitted.record;
+      const stored = o.stored_request && typeof o.stored_request === "object" ? o.stored_request : {};
+      const sent = s.arguments && typeof s.arguments === "object" ? s.arguments : {};
+      const expectStored = {
+        title: sent.title,
+        action: sent.action,
+        description: sent.description,
+        country: null,
+        region: null,
+        skills: [],
+        deliverable: sent.deliverable,
+        timeframe: sent.timeframe,
+        budget_text: sent.budget_text,
+        travel_required: false,
+        equipment_required: false,
+        requester_kind: "agent",
+        status: "approved",
+        created_at: s.response?.created_at,
+      };
+      const diffs = Object.keys(expectStored).filter((k) => canon(stored[k] ?? null) === null || canon(stored[k] ?? null) !== canon(expectStored[k] ?? null));
+      if (diffs.length) fail("Q06", `stored request differs in: ${diffs.join(", ")}`);
+      else pass("Q06", "stored text equals the submitted text; status approved (developer-reported)");
+      const storedCanon = canon(stored);
+      if (storedCanon === null || sha256Hex(storedCanon) !== o.stored_request_sha256) fail("Q07", "stored_request_sha256 does not match");
+      else pass("Q07");
+    }
+
+    // ---- Human and consent
+    if (R.task_offered && R.request_status_observed) {
+      const description = str(R.request_status_observed.record.stored_request?.description);
+      if (!code || !description.includes(code)) fail("H01", "the stored request text the human is pointed to does not contain the code");
+      else pass("H01", `human ${humanLogin} pointed to the stored text in seq ${R.request_status_observed.record.seq}`);
+    }
+    if (R.human_consent && R.task_offered) {
+      if (!sameLogin(R.human_consent.comment.author, humanLogin)) fail("H02", "consent was not posted by the offered human");
+      else pass("H02", `consented at ${R.human_consent.comment.created_at}`);
+    }
+    if (R.object_revealed) {
+      const rv = R.object_revealed.record;
+      const consentId = R.human_consent ? Number(R.human_consent.comment.id) : NaN;
+      if (!OBJECTS.includes(rv.object)) fail("H03", `${rv.object} is not on the protocol list`);
+      else if (!R.human_consent || time(R.object_revealed) <= time(R.human_consent)) fail("H03", "the object was named before consent");
+      else if (objectCommitment(rv.salt) !== R.request_submitted?.record.object_commitment) fail("H03", "the revealed salt does not match the object_commitment made in seq 2");
+      else if (rv.consent_comment_id !== consentId) fail("H03", `consent_comment_id ${rv.consent_comment_id} is not the id of the consent comment (${R.human_consent.comment.id})`);
+      else if (!isObjectSalt(rv.salt) || !Number.isSafeInteger(consentId) || consentId < 1) fail("H03", "the salt or the consent comment id is malformed");
+      else if (objectFor(rv.salt, rv.consent_comment_id) !== rv.object) fail("H03", `the salt and consent comment give ${objectFor(rv.salt, rv.consent_comment_id)}, not ${rv.object}`);
+      else pass("H03", `object ${rv.object}, derived from the committed salt and consent comment ${rv.consent_comment_id}`);
+    }
+    if (R.evidence_submitted && R.object_revealed) {
+      const hours = (time(R.evidence_submitted) - time(R.object_revealed)) / HOUR_MS;
+      if (hours <= 0) fail("H04", "evidence predates the object reveal");
+      else if (hours > EVIDENCE_HOURS_AFTER_REVEAL) fail("H04", `evidence came ${hours.toFixed(1)} h after the reveal (limit ${EVIDENCE_HOURS_AFTER_REVEAL} h)`);
+      else pass("H04", `${hours.toFixed(2)} h after the reveal`);
+    }
+    // The human's plain "STOP" (or a withdrawal) ends the cycle: the human's own words are the
+    // authority, so a PASS needs a stop record after any such comment, whatever else follows.
+    const recordComments = new Set(found.map((f) => f.comment));
+    for (const comment of ordered) {
+      if (!sameLogin(comment.author, humanLogin) || recordComments.has(comment)) continue;
+      if (!PLAIN_STOP.test(visibleText(comment.body))) continue;
+      if (!R.stop) fail("H05", `the human wrote "${visibleText(comment.body).trim().slice(0, 80)}" at ${comment.created_at}, but the ledger has no stop record`);
+      else pass("H05", `the human's plain-text stop at ${comment.created_at} is matched by the stop record at seq ${R.stop.record.seq}`);
+    }
+    if (results.get("H05").status === "NOT_REACHED" && chain.length) pass("H05", "no plain-text stop found");
+
+    // ---- Evidence
+    if (R.evidence_submitted) {
+      const all = extractAllUrls(R.evidence_submitted.comment.body);
+      const attachments = extractAttachmentUrls(R.evidence_submitted.comment.body);
+      if (all.length !== 1 || attachments.length !== 1) fail("E01", `the comment shows ${all.length} link(s) or image(s), ${attachments.length} of them GitHub attachments; exactly one attachment and nothing else is required`);
       else {
-        const problems = requestArgumentProblems(s.arguments);
-        if (problems.length) fail("Q02", problems.join("; "));
-        else pass("Q02", `code ${s.code}`);
+        evidenceUrl = attachments[0];
+        pass("E01", evidenceUrl);
       }
     }
-    if (sha256Hex(canonicalize(s.arguments ?? null)) !== s.arguments_sha256) fail("Q03", "arguments_sha256 does not match");
-    else pass("Q03");
-    // MEKU's own clock must place the request inside the ledger's lifetime: after the ledger
-    // opened and before the developer reported it (5 minutes of clock tolerance either way).
-    const created = Date.parse(s.response?.created_at);
-    const opened = Date.parse(opening.comment.created_at);
-    const reported = time(R.request_submitted);
-    if (s.response?.status !== "submitted") fail("Q04", `MEKU answered status ${s.response?.status}`);
-    else if (!(created > opened - 5 * 60_000 && created < reported + 5 * 60_000))
-      fail("Q04", `MEKU created_at ${s.response.created_at} is outside the ledger window (${opening.comment.created_at} to ${R.request_submitted.comment.created_at})`);
-    else if (s.response.deduplicated) warn("Q04", "MEKU returned an earlier identical submission (deduplicated: true)");
-    else pass("Q04", `created_at ${s.response.created_at}`);
-  }
-  // The developer links seq 2 and 4 by the request id commitment; the operator names the
-  // same request by its fresh code in seq 3, 5 and 9.
-  if (R.request_submitted && R.request_status_observed && R.request_status_observed.record.request_id_sha256 !== R.request_submitted.record.request_id_sha256)
-    fail("Q05", "request_id_sha256 differs between request_submitted and request_status_observed");
-  const operatorCodes = ["request_reviewed", "task_offered", "result_returned"].filter((t) => R[t]).map((t) => [t, R[t].record.code]);
-  const wrongCodes = operatorCodes.filter(([, c]) => c !== code);
-  if (wrongCodes.length) fail("Q05", `the operator names another request (code differs) in ${wrongCodes.map(([t]) => t).join(", ")}`);
-  if (R.request_reviewed && results.get("Q05").status !== "FAIL") pass("Q05", `code ${code} in ${operatorCodes.length} operator records`);
-  if (R.request_status_observed && R.request_submitted) {
-    const o = R.request_status_observed.record;
-    const s = R.request_submitted.record;
-    const stored = o.stored_request ?? {};
-    const sent = s.arguments ?? {};
-    const expectStored = {
-      title: sent.title,
-      action: sent.action,
-      description: sent.description,
-      country: null,
-      region: null,
-      skills: [],
-      deliverable: sent.deliverable,
-      timeframe: sent.timeframe,
-      budget_text: sent.budget_text,
-      travel_required: false,
-      equipment_required: false,
-      requester_kind: "agent",
-      status: "approved",
-      created_at: s.response?.created_at,
-    };
-    const diffs = Object.keys(expectStored).filter((k) => canonicalize(stored[k] ?? null) !== canonicalize(expectStored[k] ?? null));
-    if (diffs.length) fail("Q06", `stored request differs in: ${diffs.join(", ")}`);
-    else pass("Q06", "stored text equals the submitted text; status approved");
-    if (sha256Hex(canonicalize(stored)) !== o.stored_request_sha256) fail("Q07", "stored_request_sha256 does not match");
-    else pass("Q07");
-  }
-  // ---- Human and consent
-  if (R.task_offered && R.request_status_observed) {
-    const description = R.request_status_observed.record.stored_request?.description ?? "";
-    if (!code || !description.includes(code)) fail("H01", "the stored request text the human is pointed to does not contain the code");
-    else pass("H01", `human ${humanLogin} pointed to the stored text in seq ${R.request_status_observed.record.seq}`);
-  }
-  if (R.human_consent && R.task_offered) {
-    if (!sameLogin(R.human_consent.comment.author, humanLogin)) fail("H02", "consent was not posted by the offered human");
-    else pass("H02", `consented at ${R.human_consent.comment.created_at}`);
-  }
-  if (R.object_revealed) {
-    const object = R.object_revealed.record.object;
-    if (!OBJECTS.includes(object)) fail("H03", `${object} is not on the protocol list`);
-    else if (!R.human_consent || time(R.object_revealed) <= time(R.human_consent)) fail("H03", "the object was named before consent");
-    else pass("H03", `object ${object}`);
-  }
-  if (R.evidence_submitted && R.object_revealed) {
-    const hours = (time(R.evidence_submitted) - time(R.object_revealed)) / HOUR_MS;
-    if (hours <= 0) fail("H04", "evidence predates the object reveal");
-    else if (hours > EVIDENCE_HOURS_AFTER_REVEAL) fail("H04", `evidence came ${hours.toFixed(1)} h after the reveal (limit ${EVIDENCE_HOURS_AFTER_REVEAL} h)`);
-    else pass("H04", `${hours.toFixed(2)} h after the reveal`);
-  }
+    if (evidenceUrl) {
+      const entry = (Array.isArray(bundle.evidence_files) ? bundle.evidence_files : []).find((e) => typeof e?.url === "string" && e.url.toLowerCase() === evidenceUrl.toLowerCase());
+      const bytes = entry ? loadEvidence(entry.file) : null;
+      if (!bytes) fail("E02", "the attachment is not in the bundle (export it with export.mjs or verify --from-issue)");
+      else {
+        evidenceSha = sha256Hex(bytes);
+        if (entry.sha256 && entry.sha256 !== evidenceSha) warn("E02", "bundle's recorded sha256 differs from the file; the file's own hash is used");
+        const claimed = R.requester_decision?.record.evidence_sha256;
+        if (claimed !== undefined && claimed !== evidenceSha) fail("E02", `file sha256 ${evidenceSha} differs from the developer's evidence_sha256`);
+        else if (claimed !== undefined) pass("E02", `sha256 ${evidenceSha}`);
+        scan = scanImage(bytes);
+        for (const f of scan.findings) {
+          if (SHAPE_FINDINGS.has(f.code)) fail("E03", f.detail);
+          else (f.level === "FAIL" ? fail : warn)("E04", f.detail);
+        }
+        if (results.get("E03").status !== "FAIL") pass("E03", `${scan.mediaType} ${scan.width}x${scan.height}, ${bytes.length} bytes`);
+        if (results.get("E04").status === "NOT_REACHED") pass("E04", "pixel and colour data only");
+      }
+    }
 
-  // ---- Evidence
-  if (R.evidence_submitted) {
-    const urls = extractAttachmentUrls(R.evidence_submitted.comment.body);
-    if (urls.length !== 1) fail("E01", `found ${urls.length} GitHub attachments; exactly one is required`);
-    else {
-      evidenceUrl = urls[0];
-      pass("E01", evidenceUrl);
+    // ---- Result, decision, closure
+    if (R.result_returned) {
+      if (!R.evidence_submitted || time(R.result_returned) <= time(R.evidence_submitted)) fail("D01", "result_returned does not follow the evidence");
+      else if (R.evidence_submitted.record.seq !== 8) fail("D01", "the returned result must refer to the evidence in seq 8");
+      else pass("D01", `returned at ${R.result_returned.comment.created_at}`);
+    }
+    if (R.requester_decision) {
+      const d = R.requester_decision.record;
+      let digest = null;
+      try {
+        digest = ledgerDigest(pilotId, chain.slice(0, d.seq).map((e) => e.record));
+      } catch {
+        fail("D02", "a record before the decision cannot be hashed");
+      }
+      if (digest && digest !== d.ledger_digest) fail("D02", `ledger_digest should be ${digest}`);
+      else if (digest) pass("D02", digest);
+      const hours = R.request_submitted ? (time(R.requester_decision) - time(R.request_submitted)) / HOUR_MS : Infinity;
+      if (hours > CYCLE_HOURS) fail("D03", `decision came ${hours.toFixed(1)} h after the request (limit ${CYCLE_HOURS} h)`);
+      if (d.decision === "ACCEPTED") {
+        const falseChecks = Object.entries(d.checks ?? {}).filter(([, v]) => v !== true).map(([k]) => k);
+        if (falseChecks.length) fail("D03", `ACCEPTED with false checks: ${falseChecks.join(", ")}`);
+      }
+      if (results.get("D03").status !== "FAIL") pass("D03", `${d.decision} after ${hours.toFixed(2)} h`);
+      const m = R.result_returned?.record.meku_check;
+      if (m) {
+        const negatives = ["code_visible", "object_visible", "no_personal_data_visible"].filter((k) => m[k] !== true);
+        // A cycle cannot pass while MEKU itself reports a problem with the evidence.
+        if (negatives.length && d.decision === "ACCEPTED") fail("D04", `MEKU reported false for ${negatives.join(", ")}, but the developer accepted`);
+        else if (negatives.length) warn("D04", `MEKU reported false for ${negatives.join(", ")}`);
+        else pass("D04");
+      }
+    }
+    const outcomeWanted = R.requester_decision ? "completed" : R.stop ? "stopped" : R.request_reviewed?.record.decision === "rejected" ? "rejected_by_review" : null;
+    if (R.pilot_closed) {
+      if (R.pilot_closed.record.outcome !== outcomeWanted) fail("C01", `outcome ${R.pilot_closed.record.outcome} should be ${outcomeWanted}`);
+      else pass("C01", `outcome ${outcomeWanted}; key revoked (attested)`);
+    }
+    const paymentProblems = chain.filter(({ record }) => Object.hasOwn(record, "payment") && record.payment !== "none");
+    if (paymentProblems.length) fail("C02", `payment is not "none" in seq ${paymentProblems.map((e) => e.record.seq).join(", ")}`);
+    else if (chain.length) pass("C02", 'every payment field is "none"; budget_text states no payment');
+
+    // ---- Manual checks for a person looking at the photo.
+    const object = R.object_revealed?.record.object;
+    if (evidenceUrl) {
+      manual.push(
+        { id: "M01", check: `The photo shows the code ${code} written by hand (or physically formed), and it is legible` },
+        { id: "M02", check: `The photo shows a ${str(object).toLowerCase()} next to the paper` },
+        { id: "M03", check: "No person, face, screen, document, address, window view or other personal data is visible" },
+        { id: "M04", check: "It looks like a real paper-and-object arrangement, not a picture of a screen or a composite" },
+      );
     }
   }
-  if (evidenceUrl) {
-    const entry = (bundle.evidence_files ?? []).find((e) => e?.url === evidenceUrl);
-    const bytes = entry ? loadEvidence(entry.file) : null;
-    if (!bytes) fail("E02", "the attachment is not in the bundle (run export.mjs to download it)");
-    else {
-      evidenceSha = sha256Hex(bytes);
-      if (entry.sha256 && entry.sha256 !== evidenceSha) warn("E02", "bundle's recorded sha256 differs from the file; the file's own hash is used");
-      const claimed = R.requester_decision?.record.evidence_sha256;
-      if (claimed !== undefined && claimed !== evidenceSha) fail("E02", `file sha256 ${evidenceSha} differs from the developer's evidence_sha256`);
-      else if (claimed !== undefined) pass("E02", `sha256 ${evidenceSha}`);
-      scan = scanImage(bytes);
-      const shapeFindings = scan.findings.filter((f) => ["UNSUPPORTED_TYPE", "TOO_LARGE", "NO_DIMENSIONS", "TOO_SMALL", "PNG_TRUNCATED", "JPEG_MALFORMED", "JPEG_TRUNCATED"].includes(f.code));
-      for (const f of shapeFindings) fail("E03", f.detail);
-      if (results.get("E03").status !== "FAIL") pass("E03", `${scan.mediaType} ${scan.width}x${scan.height}, ${bytes.length} bytes`);
-      const metaFindings = scan.findings.filter((f) => !shapeFindings.includes(f));
-      for (const f of metaFindings) (f.level === "FAIL" ? fail : warn)("E04", f.detail);
-      if (results.get("E04").status === "NOT_REACHED") pass("E04", "no metadata found");
-    }
-  }
-
-  // ---- Result, decision, closure
-  if (R.result_returned) {
-    if (!R.evidence_submitted || time(R.result_returned) <= time(R.evidence_submitted)) fail("D01", "result_returned does not follow the evidence");
-    else if (R.evidence_submitted.record.seq !== 8) fail("D01", "the returned result must refer to the evidence in seq 8");
-    else pass("D01", `returned at ${R.result_returned.comment.created_at}`);
-  }
-  if (R.requester_decision) {
-    const d = R.requester_decision.record;
-    const through = chain.slice(0, d.seq).map((e) => e.record);
-    const digest = ledgerDigest(pilotId, through);
-    if (digest !== d.ledger_digest) fail("D02", `ledger_digest should be ${digest}`);
-    else pass("D02", digest);
-    const hours = R.request_submitted ? (time(R.requester_decision) - time(R.request_submitted)) / HOUR_MS : Infinity;
-    if (hours > CYCLE_HOURS) fail("D03", `decision came ${hours.toFixed(1)} h after the request (limit ${CYCLE_HOURS} h)`);
-    if (d.decision === "ACCEPTED") {
-      const falseChecks = Object.entries(d.checks ?? {}).filter(([, v]) => v !== true).map(([k]) => k);
-      if (falseChecks.length) fail("D03", `ACCEPTED with false checks: ${falseChecks.join(", ")}`);
-    }
-    if (results.get("D03").status !== "FAIL") pass("D03", `${d.decision} after ${hours.toFixed(2)} h`);
-    const m = R.result_returned?.record.meku_check;
-    if (m) {
-      const pairs = [
-        ["code_visible", m.code_visible, d.checks?.code_visible],
-        ["object_visible", m.object_visible, d.checks?.object_visible],
-        ["no_personal_data_visible", m.no_personal_data_visible, d.checks?.no_personal_data_visible],
-      ];
-      const differ = pairs.filter(([, a, b]) => a !== b).map(([k]) => k);
-      if (differ.length) warn("D04", `MEKU and the developer disagree on ${differ.join(", ")}`);
-      else pass("D04");
-    }
-  }
-  const outcomeWanted = R.requester_decision ? "completed" : R.stop ? "stopped" : R.request_reviewed?.record.decision === "rejected" ? "rejected_by_review" : null;
-  if (R.pilot_closed) {
-    if (R.pilot_closed.record.outcome !== outcomeWanted) fail("C01", `outcome ${R.pilot_closed.record.outcome} should be ${outcomeWanted}`);
-    else pass("C01", `outcome ${outcomeWanted}; key revoked`);
-  }
-  const paymentProblems = chain.filter(({ record }) => Object.hasOwn(record, "payment") && record.payment !== "none");
-  if (paymentProblems.length) fail("C02", `payment is not "none" in seq ${paymentProblems.map((e) => e.record.seq).join(", ")}`);
-  else if (chain.length) pass("C02", 'every payment field is "none"; budget_text states no payment');
-
-  // ---- Manual checks for a person looking at the photo.
-  const object = R.object_revealed?.record.object;
-  if (evidenceUrl) {
-    manual.push(
-      { id: "M01", check: `The photo shows the code ${code} written by hand (or physically formed), and it is legible` },
-      { id: "M02", check: `The photo shows a ${object?.toLowerCase()} next to the paper` },
-      { id: "M03", check: "No person, face, screen, document, address, window view or other personal data is visible" },
-      { id: "M04", check: "It looks like a real paper-and-object arrangement, not a picture of a screen or a composite" },
-    );
-  }
-
-  return finish();
 
   function finish() {
     const checks = [...results.values()];
-    const failed = checks.some((c) => c.status === "FAIL");
-    const has = (t) => chainHas(t);
+    const records = chain.map((e) => e.record);
+    const has = (t) => records.some((r) => r.type === t);
+    const rejected = records.find((r) => r.type === "request_reviewed")?.decision === "rejected";
+    const decision = records.find((r) => r.type === "requester_decision")?.decision;
     let verdict;
-    if (failed) verdict = "FAIL";
-    else if (has("request_reviewed") && rejected()) verdict = has("pilot_closed") ? "REJECTED_BY_REVIEW" : "INCOMPLETE";
+    if (checks.some((c) => c.status === "FAIL")) verdict = "FAIL";
+    else if (rejected) verdict = has("pilot_closed") ? "REJECTED_BY_REVIEW" : "INCOMPLETE";
     else if (has("stop")) verdict = has("pilot_closed") ? "STOPPED" : "INCOMPLETE";
-    else if (!has("requester_decision")) verdict = "INCOMPLETE";
-    else if (decision() === "REJECTED") verdict = has("pilot_closed") ? "COMPLETED_REJECTED" : "INCOMPLETE";
+    else if (!decision) verdict = "INCOMPLETE";
+    else if (decision === "REJECTED") verdict = has("pilot_closed") ? "COMPLETED_REJECTED" : "INCOMPLETE";
     else verdict = has("pilot_closed") ? "PASS" : "INCOMPLETE";
-    const records = chainRecords();
+    let digest = null;
+    try {
+      digest = pilotId && records.length ? ledgerDigest(pilotId, records) : null;
+    } catch {
+      digest = null;
+    }
+    const allManual = (v) => v.manual_checks && Object.values(v.manual_checks).every((x) => x === true);
     return {
-      format: "meku.pow-verification/1",
+      format: "meku.pow-verification/2",
       verifier: VERIFIER_VERSION,
       protocol: PROTOCOL,
       pilot_id: pilotId,
       synthetic: isSyntheticPilot(pilotId),
-      issue_url: issueUrl ?? null,
+      issue_url: issueUrl,
+      provenance: provenance ?? { exported_by_this_run: false, note: "This checks only the bundle file given. Export it yourself from the live issue (or use --from-issue) before relying on a PASS." },
       verdict,
       record_count: records.length,
       next_expected: verdict === "INCOMPLETE" ? allowedNext(records.at(-1) ?? null) : [],
-      ledger_digest: pilotId && records.length ? ledgerDigest(pilotId, records) : null,
+      ledger_digest: digest,
       checks: checks.map(({ id, title, status, details }) => ({ id, title, status, details })),
       manual,
-      independent_verifications: verifications,
-      evidence: evidenceSummary(),
+      independent_verifications: verifications.map((v) => ({ ...v, matches_this_ledger: v.pilot_id === pilotId && v.ledger_digest === digest, all_manual_checks_true: allManual(v) })),
+      evidence: evidenceUrl
+        ? { url: evidenceUrl, sha256: evidenceSha, media_type: scan?.mediaType ?? null, width: scan?.width ?? null, height: scan?.height ?? null, findings: scan?.findings ?? [] }
+        : null,
+      comments_in_order: chain.map(({ record, comment }) => ({ seq: record.seq, type: record.type, comment_id: comment.id, author: comment.author, created_at: comment.created_at, html_url: comment.html_url ?? null })),
       records_in_order: records,
     };
-  }
-  function chainRecords() {
-    return chain.map((e) => e.record);
-  }
-  function evidenceSummary() {
-    return evidenceUrl
-      ? { url: evidenceUrl, sha256: evidenceSha, media_type: scan?.mediaType ?? null, width: scan?.width ?? null, height: scan?.height ?? null, findings: scan?.findings ?? [] }
-      : null;
-  }
-  function chainHas(type) {
-    return chainRecords().some((r) => r.type === type);
-  }
-  function rejected() {
-    return chainRecords().find((r) => r.type === "request_reviewed")?.decision === "rejected";
-  }
-  function decision() {
-    return chainRecords().find((r) => r.type === "requester_decision")?.decision;
   }
 }
 
 export function formatReport(result) {
   const lines = [];
-  const plain = (text) => displaySafe(text);
   lines.push(`MEKU proof-of-work verification (${result.verifier}, protocol ${result.protocol})`);
   lines.push(`Ledger: ${result.issue_url ?? "unknown"}   Pilot: ${result.pilot_id ?? "unknown"}   Records: ${result.record_count}`);
+  lines.push(
+    result.provenance?.exported_by_this_run
+      ? `Source: exported from GitHub by this run at ${result.provenance.exported_at}`
+      : "Source: a bundle file. This checks only that file; export it yourself from the live issue, or use --from-issue, before relying on a PASS.",
+  );
   if (result.synthetic) lines.push("SYNTHETIC TEST DATA - NOT EVIDENCE OF ANY REAL WORK CYCLE");
   lines.push("");
   for (const c of result.checks) {
@@ -493,9 +541,11 @@ export function formatReport(result) {
     for (const m of result.manual) lines.push(`MANUAL      ${m.id}  ${m.check}`);
   }
   if (result.independent_verifications.length) {
+    const matching = result.independent_verifications.filter((v) => v.matches_this_ledger && v.all_manual_checks_true && v.verdict === "PASS");
     lines.push("");
-    lines.push("Independent verification comments found (informational):");
-    for (const v of result.independent_verifications) lines.push(`  ${v.author} at ${v.created_at}: ${v.verdict}, digest ${v.ledger_digest}`);
+    lines.push(`Independent verification comments: ${result.independent_verifications.length} found, ${matching.length} PASS with all manual checks true for this exact ledger digest`);
+    for (const v of result.independent_verifications)
+      lines.push(`  ${v.author} at ${v.created_at}: ${v.verdict}; digest ${v.matches_this_ledger ? "matches" : "DOES NOT MATCH"}; manual checks ${v.all_manual_checks_true ? "all true" : "not all true"}`);
   }
   lines.push("");
   if (result.ledger_digest) lines.push(`Ledger digest through seq ${result.record_count - 1}: ${result.ledger_digest}`);
@@ -507,10 +557,10 @@ export function formatReport(result) {
       : "";
   lines.push(`VERDICT: ${result.verdict}${note}`);
   // Everything printed passes through displaySafe, so record text cannot rewrite the terminal.
-  return lines.map(plain).join("\n");
+  return lines.map((line) => displaySafe(line)).join("\n");
 }
 
-/** Read a bundle file and a loader that only opens evidence files inside the bundle's folder. */
+/** Read a bundle file and a loader that only opens regular evidence files inside its folder. */
 export function loadBundleFile(bundlePath) {
   return { bundle: JSON.parse(readFileSync(bundlePath, "utf8")), loadEvidence: loaderFor(bundlePath) };
 }
@@ -522,44 +572,72 @@ function loaderFor(bundlePath) {
     const full = resolve(base, file);
     if (!full.startsWith(base + sep)) return null;
     try {
-      // Resolve symlinks too: a link inside the bundle folder must not reach files outside it.
+      // Resolve symlinks too, and read only regular files, at most one byte past the size cap.
       const real = realpathSync(full);
-      if (!real.startsWith(base + sep)) return null;
-      return readFileSync(real);
+      if (!real.startsWith(base + sep) || !statSync(real).isFile()) return null;
+      const fd = openSync(real, "r");
+      try {
+        const buffer = Buffer.alloc(Math.min(statSync(real).size, MAX_EVIDENCE_BYTES + 1));
+        const length = readSync(fd, buffer, 0, buffer.length, 0);
+        return buffer.subarray(0, length);
+      } finally {
+        closeSync(fd);
+      }
     } catch {
       return null;
     }
   };
 }
 
-function main(argv) {
+async function main(argv) {
   const args = [...argv];
+  let usageError = false;
   const take = (flag) => {
     const i = args.indexOf(flag);
     if (i === -1) return undefined;
     const value = args[i + 1];
+    if (value === undefined || value.startsWith("--")) usageError = true;
     args.splice(i, 2);
     return value;
   };
   const jsonOut = take("--json");
   const expectOperator = take("--expect-operator") ?? "mekusimeku";
+  const fromIssue = take("--from-issue");
+  const outDir = take("--out");
   const allowSynthetic = args.includes("--allow-synthetic");
   const positional = args.filter((a) => a !== "--allow-synthetic");
-  if (positional.length !== 1 || positional[0].startsWith("--")) {
-    console.error("Usage: node tools/pow/verify.mjs <bundle.json> [--json result.json] [--expect-operator login] [--allow-synthetic]");
+  if (usageError || (fromIssue ? positional.length !== 0 : positional.length !== 1) || positional.some((a) => a.startsWith("--"))) {
+    console.error(
+      "Usage: node tools/pow/verify.mjs --from-issue <ledger-issue-url> [--out dir] [--json result.json]\n" +
+        "   or: node tools/pow/verify.mjs <bundle.json> [--json result.json] [--expect-operator login] [--allow-synthetic]",
+    );
     return 3;
   }
-  let bundle;
+  let bundlePath = positional[0];
+  let provenance = null;
+  if (fromIssue) {
+    const { exportLedger } = await import("./export.mjs");
+    const dir = outDir ?? join(mkdtempSync(join(tmpdir(), "pow-verify-")), "ledger");
+    try {
+      const exported = await exportLedger({ issueUrl: fromIssue, outDir: dir, token: process.env.GITHUB_TOKEN || undefined, expectOperator });
+      provenance = { exported_by_this_run: true, exported_at: exported.source.exported_at, exporter: exported.source.exporter, folder: dir };
+    } catch (error) {
+      console.error(`Cannot export the ledger: ${error.message}`);
+      return 1;
+    }
+    bundlePath = join(dir, "bundle.json");
+  }
+  let loaded;
   try {
-    bundle = JSON.parse(readFileSync(positional[0], "utf8"));
+    loaded = loadBundleFile(bundlePath);
   } catch (error) {
     console.error(`Cannot read bundle: ${error.message}`);
     return 3;
   }
-  const result = verifyBundle(bundle, { loadEvidence: loaderFor(positional[0]), expectOperator, allowSynthetic });
+  const result = verifyBundle(loaded.bundle, { loadEvidence: loaded.loadEvidence, expectOperator, allowSynthetic, provenance });
   console.log(formatReport(result));
   if (jsonOut) writeFileSync(jsonOut, `${JSON.stringify(result, null, 2)}\n`);
   return result.verdict === "PASS" ? 0 : result.verdict === "FAIL" ? 1 : 2;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exitCode = main(process.argv.slice(2));
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exitCode = await main(process.argv.slice(2));

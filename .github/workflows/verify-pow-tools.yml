@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: '22'
       - name: Offline tests, including planted faults and docs-to-tools checks
-        run: node --test tools/pow/*.test.mjs
+        run: node --test tools/pow/pow.test.mjs tools/pow/pow-docs.test.mjs
       - name: Synthetic ledger end to end, JavaScript and independent Python digests agree
         run: |
           node tools/pow/synthetic.mjs "$RUNNER_TEMP/pow"

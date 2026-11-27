@@ -73,10 +73,10 @@ Never edit APPROVED_SHA256 or any repository file.
   post and does not itself state rules A–E; its line "Planned paid tiers are not all live production features"
   understates rule B (no paid tier is live). Rewording it is a founder decision.
 
-## Daily report for watches without network access (pending founder activation)
+## Daily report for watches without network access
 
-`.github/workflows/mint-integrity-daily.yml` runs the same approved checker on GitHub at 07:23 and 08:07 WIB
-(00:23 and 01:07 UTC), before the 09:00 WIB watch, and commits `latest.json` (the current report) and `latest-attempt.json` (the most recent run) to the branch
+`.github/workflows/mint-integrity-daily.yml` runs the same approved checker on GitHub at 00:37, 02:37, 04:37, 06:37, 07:23 and 08:07 WIB
+(17:37, 19:37, 21:37, 23:37 UTC the day before, and 00:23, 01:07 UTC), before the 09:00 WIB watch, and commits `latest.json` (the current report) and `latest-attempt.json` (the most recent run) to the branch
 `mint-integrity-reports` of `mekusimeku/meku-si`. A watch that cannot reach the internet can read that file
 through its GitHub connector instead of running the checker.
 

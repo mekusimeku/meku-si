@@ -7,7 +7,7 @@ For the MEKU operator account `mekusimeku`. Every step works from a phone browse
 1. **Developer.** Choose an independent developer who confirms the four statements in the [developer guide](developer-guide.md#0-check-that-you-are-eligible). MEKU staff, contractors and MEKU's own AI workers cannot take this role.
 2. **Second reviewer.** Pick a MEKU account other than the one that will issue the key: a SEEK reviewer or a second admin. MEKU refuses a review by the account that issued the key, because requests made with a key belong to that account.
 3. **Human.** Find a consenting adult who is not MEKU staff, not one of MEKU's AI workers and not the developer, and who has a GitHub account (a new pseudonymous one is fine). Send them the [human guide](human-guide.md). Never offer payment.
-4. **Pilot key.** In MEKU, go to **Admin → Agent keys**. Agent name `POW-001 DEVELOPER_LOGIN`, search-only **off**, Concierge **off**, 2 per minute, 20 per day. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it.
+4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 2 per minute and 20 per day. Leave **SEARCH ONLY** and **ENABLE CONCIERGE PROPOSALS** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it.
 
 Nothing in this pilot creates a mission, starts a payment, uses a wallet, or touches MEKU POCKET.
 
@@ -45,13 +45,13 @@ Send the developer the ledger link. The developer posts seq 1 and seq 2.
 
 ## seq 3: record the review
 
-The **second reviewer** opens MEKU's request review screen and finds **POW-001: handwritten code photo (unpaid pilot)**. Before deciding, check three things:
+The **second reviewer** signs in, opens `meku.farm/seek`, and finds **POW-001: handwritten code photo (unpaid pilot)** in the **SEEK REVIEW QUEUE**. If MEKU says "You made this request; a different reviewer must review it", you are signed in as the account that issued the key: switch to the second account. Before deciding, check three things:
 
 - the code in the request text equals `code` in the developer's seq 2 record;
 - the text is exactly the protocol text, with nothing asked for beyond it;
 - no other request shows the same code. If one does, reject both and post a stop.
 
-Approve or reject in MEKU. Then post this, replacing `CODE` with the 8-character code. Change `approved` to `rejected` if you rejected it, and `seek_reviewer` to `admin` if the reviewer is an admin:
+Press **APPROVE** or **REJECT**. Then post this, replacing `CODE` with the 8-character code. Change `approved` to `rejected` if you rejected it, and `seek_reviewer` to `admin` if the reviewer is an admin:
 
 ```json
 {
@@ -119,7 +119,7 @@ This is MEKU returning the result to the developer. The developer checks it and 
 
 ## seq 11: close
 
-**First revoke the pilot key** in **Admin → Agent keys**. Then post the close. After the developer's decision it is seq 11 with outcome `completed`. After a stop at seq *n*, it is seq *n*+1 with outcome `stopped`. After a rejected review, it is seq 4 with outcome `rejected_by_review`.
+**First revoke the pilot key**: on `meku.farm/admin/agent-keys`, press **REVOKE** on the POW-001 key. Then post the close. After the developer's decision it is seq 11 with outcome `completed`. After a stop at seq *n*, it is seq *n*+1 with outcome `stopped`. After a rejected review, it is seq 4 with outcome `rejected_by_review`.
 
 ```json
 {

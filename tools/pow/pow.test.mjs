@@ -1789,6 +1789,31 @@ test("review 6: JavaScript and Python agree on records posted before their turn"
   assert.equal(o.py, o.js, "an invalid record skipped as the verifier lists it");
 });
 
+// ---- Findings of the seventh independent review (2026-11-28) -----------------------------
+
+test("review 7: a pilot has one human, so offers naming two humans fail, even one posted before its turn", async () => {
+  // A: an early offer names the human who then consents; the counted offer names someone else.
+  const a = await hostile();
+  rewrite(a.bundle, 5, (r) => (r.human = "synthetic_other"));
+  postEarly(a, 5, 4, (rec) => ({ ...rec, human: SYNTHETIC.human }));
+  let r = verify(a);
+  assert.equal(r.verdict, "FAIL");
+  assert.match(check(r, "H02").details.join(" "), /offers name more than one human \(synthetic_human, synthetic_other\)/);
+  // B: an early offer names someone else; the counted offer names the real human.
+  const b = await hostile();
+  postEarly(b, 5, 4, (rec) => ({ ...rec, human: "synthetic_other" }));
+  r = verify(b);
+  assert.equal(r.verdict, "FAIL", "never INCOMPLETE for ever");
+  assert.equal(check(r, "H02").status, "FAIL");
+  // The same offer posted early and again in its turn is fine, and logins ignore case.
+  for (const human of [SYNTHETIC.human, SYNTHETIC.human.toUpperCase()]) {
+    const c = await hostile();
+    postEarly(c, 5, 4, (rec) => ({ ...rec, human }));
+    r = verify(c);
+    assert.equal(r.verdict, "PASS", JSON.stringify(r.checks.filter((x) => x.status === "FAIL")));
+  }
+});
+
 test("review 4 N1: a header line can carry only the reveal's instruction, and it must match", async () => {
   const p = await hostile();
   const i = commentIndexFor(p.bundle, 7);

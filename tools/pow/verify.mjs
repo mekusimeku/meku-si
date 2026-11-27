@@ -205,6 +205,8 @@ export function verifyBundle(
     else if (!synthetic && !sameLogin(roster.operator, expectOperator)) fail("R01", `roster.operator is ${roster.operator}, expected ${expectOperator}`);
     else pass("R01", `operator ${roster.operator}`);
     const humanLogin = roster.human;
+    if ((roster.humansNamed ?? []).length > 1)
+      fail("H02", `the operator's offers name more than one human (${roster.humansNamed.join(", ")}); a pilot has one human, so this ledger cannot pass`);
     const roleOf = (author) => {
       if (sameLogin(author, roster.operator)) return "operator";
       if (sameLogin(author, roster.developer)) return "developer";
@@ -267,8 +269,9 @@ export function verifyBundle(
 
     // Each kind of record is posted once. A record posted in its turn states what that kind
     // says, even if its seq is wrong: a later record of the same kind by the same role that says
-    // anything else (apart from its seq) fails, so a negative record can never be outvoted by a
-    // later positive one, and the evidence the operator checked can never be swapped. The same
+    // anything else (apart from its seq) fails, so a negative record posted in its turn can never
+    // be outvoted by a later positive one, and the evidence the operator checked can never be
+    // swapped. The same
     // record with its seq corrected is a repeat. Stops are exempt: any stop is a stop.
     // A record posted before its turn is not counted and states nothing, so it may be posted
     // again, even with new content (a status read again, a new photo), when its turn comes.
@@ -472,7 +475,7 @@ export function verifyBundle(
       else pass("H01", `human ${humanLogin} pointed to the stored text in seq ${R.request_status_observed.record.seq}`);
     }
     if (R.human_consent && R.task_offered) {
-      if (!sameLogin(R.human_consent.comment.author, humanLogin)) fail("H02", "consent was not posted by the offered human");
+      if (!sameLogin(R.human_consent.comment.author, R.task_offered.record.human)) fail("H02", "consent was not posted by the human named in the counted offer");
       else pass("H02", `consented at ${R.human_consent.comment.created_at}`);
     }
     if (R.object_revealed) {

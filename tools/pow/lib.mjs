@@ -767,10 +767,13 @@ export function rosterFromComments(comments, { expectOperator = "mekusimeku" } =
   const text = (v) => (typeof v === "string" ? v : null);
   if (!opening) return { opening: null, operator: null, developer: null, human: null };
   const operator = text(opening.record.roster?.operator);
-  const offered = records.find(
+  const offers = records.filter(
     (e) => e.record.type === "task_offered" && e.record.pilot_id === opening.record.pilot_id && sameLogin(e.comment.author, operator),
   );
-  return { opening, operator, developer: text(opening.record.roster?.developer), human: text(offered?.record.human) };
+  // A pilot has one human. Every valid offer must name the same one, even an offer posted
+  // before its turn; the verifier fails a ledger whose offers name more than one.
+  const humansNamed = [...new Set(offers.map((e) => text(e.record.human)).filter(Boolean).map((l) => l.toLowerCase()))];
+  return { opening, operator, developer: text(opening.record.roster?.developer), human: text(offers[0]?.record.human), humansNamed };
 }
 
 const ATTACHMENT_ONLY = new RegExp(`^${ATTACHMENT_URL.source}$`, "i");

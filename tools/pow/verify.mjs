@@ -23,9 +23,12 @@ import {
   buildRequestArguments,
   canon,
   displaySafe,
-  extractAllUrls,
   extractAttachmentUrls,
   extractRecords,
+  freeTextOf,
+  hidesText,
+  imageReferences,
+  isStopWord,
   isLedgerUrl,
   isObjectSalt,
   isSyntheticPilot,
@@ -38,12 +41,11 @@ import {
   sameLogin,
   scanImage,
   sha256Hex,
-  visibleText,
+  suffixFor,
 } from "./lib.mjs";
 
-export const VERIFIER_VERSION = "meku.pow-verify/2";
+export const VERIFIER_VERSION = "meku.pow-verify/3";
 const HOUR_MS = 3_600_000;
-const PLAIN_STOP = /\b(?:stop|stopped|withdraw|withdrawn|withdrawing)\b/i;
 
 // Which record may follow which. A stop may follow any record from pilot_opened onward
 // except a decision or a close; after a stop or a rejection only a close may follow.
@@ -101,11 +103,11 @@ export const CHECKS = [
   ["H02", "The human consented from their own account after the offer"],
   ["H03", "The object follows from the committed salt and the consent comment, named after consent"],
   ["H04", "Evidence was posted by the human after the object was named and within 48 hours"],
-  ["H05", "No plain-text STOP or withdrawal by the human was left unrecorded"],
+  ["H05", "The human's own words: a STOP is recorded, nothing was edited, other words go to manual review"],
   ["E01", "The evidence comment shows exactly one image, and it is a GitHub attachment"],
   ["E02", "The attachment is in the bundle and its SHA-256 matches the developer's decision"],
   ["E03", "The file is a PNG or JPEG of usable size"],
-  ["E04", "The file carries only pixel and colour data: no EXIF, GPS, XMP location or other metadata"],
+  ["E04", "The file carries only pixel and colour data, plus at most a screenshot's size note: no EXIF, GPS or other metadata"],
   ["D01", "MEKU returned the result after the evidence it refers to"],
   ["D02", "The developer's decision commits to the exact ledger through seq 9"],
   ["D03", "An ACCEPTED decision has every developer check true and lands within 168 hours"],
@@ -114,7 +116,7 @@ export const CHECKS = [
   ["C02", "No record involves payment"],
 ];
 
-export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator = "mekusimeku", allowSynthetic = false, provenance = null } = {}) {
+export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator = "mekusimeku", expectRepo = "mekusimeku/meku-si", allowSynthetic = false, provenance = null } = {}) {
   const results = new Map(CHECKS.map(([id, title]) => [id, { id, title, status: "NOT_REACHED", details: [] }]));
   const fail = (id, detail) => {
     const r = results.get(id);
@@ -135,6 +137,7 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
   const manual = [];
   const verifications = [];
   const chain = []; // accepted records in seq order: { record, comment }
+  const humanWords = []; // everything the human wrote besides records, for manual check M05
   let pilotId = null;
   let issueUrl = null;
   let evidenceUrl = null;
@@ -183,6 +186,8 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
     pilotId = typeof opening.record.pilot_id === "string" ? opening.record.pilot_id : null;
     const synthetic = isSyntheticPilot(pilotId);
     if (synthetic && !allowSynthetic) fail("L03", `${pilotId} is synthetic test data, not a real pilot (use --allow-synthetic only for tests)`);
+    if (!synthetic && !issueUrl.toLowerCase().startsWith(`https://github.com/${expectRepo.toLowerCase()}/issues/`))
+      fail("L01", `a real pilot ledger must be an issue in ${expectRepo}`);
     if (!sameLogin(opening.comment.author, roster.operator)) fail("R01", `pilot_opened was posted by ${opening.comment.author}, not roster.operator`);
     else if (!synthetic && !sameLogin(roster.operator, expectOperator)) fail("R01", `roster.operator is ${roster.operator}, expected ${expectOperator}`);
     else pass("R01", `operator ${roster.operator}`);
@@ -225,6 +230,13 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       sequenced.push({ record, comment: f.comment, problems: recordProblems(record) });
     }
     for (const { record, problems } of sequenced) if (problems.length) fail("L02", `seq ${record.seq} ${record.type}: ${problems.join("; ")}`);
+    const withRecords = new Set(found.map((f) => f.comment));
+    for (const comment of ordered)
+      if (roleOf(comment.author) && hidesText(comment.body))
+        warn("L02", `a comment by the ${roleOf(comment.author)} at ${comment.created_at} hides text in an HTML comment; read the raw comment (GitHub's "..." menu, Edit, without saving)`);
+    for (const comment of ordered)
+      if (roleOf(comment.author) && !withRecords.has(comment) && comment.body.includes(PROTOCOL))
+        warn("L02", `a comment by the ${roleOf(comment.author)} at ${comment.created_at} mentions ${PROTOCOL} but holds no record the verifier can read (paste the block as the whole comment, or between \`\`\`json fences)`);
     if (results.get("L02").status !== "FAIL") pass("L02", `${sequenced.length} records`);
     if (results.get("R02").status !== "FAIL") pass("R02");
     if (results.get("L07").status === "NOT_REACHED") pass("L07", "none found");
@@ -374,7 +386,8 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       else if (rv.consent_comment_id !== consentId) fail("H03", `consent_comment_id ${rv.consent_comment_id} is not the id of the consent comment (${R.human_consent.comment.id})`);
       else if (!isObjectSalt(rv.salt) || !Number.isSafeInteger(consentId) || consentId < 1) fail("H03", "the salt or the consent comment id is malformed");
       else if (objectFor(rv.salt, rv.consent_comment_id) !== rv.object) fail("H03", `the salt and consent comment give ${objectFor(rv.salt, rv.consent_comment_id)}, not ${rv.object}`);
-      else pass("H03", `object ${rv.object}, derived from the committed salt and consent comment ${rv.consent_comment_id}`);
+      else if (suffixFor(rv.salt, rv.consent_comment_id) !== rv.suffix) fail("H03", `the salt and consent comment give the suffix ${suffixFor(rv.salt, rv.consent_comment_id)}, not ${rv.suffix}`);
+      else pass("H03", `object ${rv.object} and suffix ${rv.suffix}, derived from the committed salt and consent comment ${rv.consent_comment_id}`);
     }
     if (R.evidence_submitted && R.object_revealed) {
       const hours = (time(R.evidence_submitted) - time(R.object_revealed)) / HOUR_MS;
@@ -382,22 +395,39 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       else if (hours > EVIDENCE_HOURS_AFTER_REVEAL) fail("H04", `evidence came ${hours.toFixed(1)} h after the reveal (limit ${EVIDENCE_HOURS_AFTER_REVEAL} h)`);
       else pass("H04", `${hours.toFixed(2)} h after the reveal`);
     }
-    // The human's plain "STOP" (or a withdrawal) ends the cycle: the human's own words are the
-    // authority, so a PASS needs a stop record after any such comment, whatever else follows.
-    const recordComments = new Set(found.map((f) => f.comment));
-    for (const comment of ordered) {
-      if (!sameLogin(comment.author, humanLogin) || recordComments.has(comment)) continue;
-      if (!PLAIN_STOP.test(visibleText(comment.body))) continue;
-      if (!R.stop) fail("H05", `the human wrote "${visibleText(comment.body).trim().slice(0, 80)}" at ${comment.created_at}, but the ledger has no stop record`);
-      else pass("H05", `the human's plain-text stop at ${comment.created_at} is matched by the stop record at seq ${R.stop.record.seq}`);
+    // The human's own words decide over everything else, in any language. A comment that says
+    // only STOP (or a stop sign) needs a stop record. An edited comment by the human could have
+    // said STOP before, so it fails. Anything else they wrote goes to a person (manual check M05).
+    if (humanLogin) {
+      for (const comment of ordered) {
+        if (!sameLogin(comment.author, humanLogin)) continue;
+        if (comment.updated_at !== comment.created_at)
+          fail("H05", `a comment by the human at ${comment.created_at} was edited; its earlier text may have withdrawn consent, so the cycle cannot pass`);
+        const words = freeTextOf(comment.body);
+        if (!words) continue;
+        if (isStopWord(words)) {
+          if (R.stop) pass("H05", `the human's STOP at ${comment.created_at} is matched by the stop record at seq ${R.stop.record.seq}`);
+          else fail("H05", `the human wrote "${words.slice(0, 40)}" at ${comment.created_at}, but the ledger has no stop record`);
+        } else {
+          humanWords.push({ comment_id: comment.id ?? null, created_at: comment.created_at, text: words.slice(0, 500) });
+          warn("H05", `the human wrote at ${comment.created_at}: "${words.slice(0, 120)}" (read it: manual check M05)`);
+        }
+      }
+      if (results.get("H05").status === "NOT_REACHED" && R.task_offered) pass("H05", "the human posted only protocol records");
     }
-    if (results.get("H05").status === "NOT_REACHED" && chain.length) pass("H05", "no plain-text stop found");
 
     // ---- Evidence
     if (R.evidence_submitted) {
-      const all = extractAllUrls(R.evidence_submitted.comment.body);
-      const attachments = extractAttachmentUrls(R.evidence_submitted.comment.body);
-      if (all.length !== 1 || attachments.length !== 1) fail("E01", `the comment shows ${all.length} link(s) or image(s), ${attachments.length} of them GitHub attachments; exactly one attachment and nothing else is required`);
+      // Judged on the raw comment, so nothing hidden or encoded can add a second image.
+      const raw = R.evidence_submitted.comment.body;
+      const urls = [...new Set(raw.match(/https?:\/\/[^\s<>"'()[\]]+/gi) ?? [])];
+      const attachments = extractAttachmentUrls(raw);
+      const images = imageReferences(raw);
+      if (raw.includes("<!--")) fail("E01", "the evidence comment contains an HTML comment; it must hold only the record and one image");
+      else if (/&(?:#|[A-Za-z]+;)/.test(raw)) fail("E01", "the evidence comment contains HTML entities; it must hold only the record and one image");
+      else if (/^[ \t]*>/m.test(raw)) fail("E01", "the evidence comment contains quoted lines; it must hold only the record and one image");
+      else if (images.length !== 1 || urls.length !== 1 || attachments.length !== 1)
+        fail("E01", `the comment holds ${images.length} image(s) and ${urls.length} link(s), ${attachments.length} of them GitHub attachments; exactly one attachment image and nothing else is required`);
       else {
         evidenceUrl = attachments[0];
         pass("E01", evidenceUrl);
@@ -466,14 +496,20 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
 
     // ---- Manual checks for a person looking at the photo.
     const object = R.object_revealed?.record.object;
+    const suffix = str(R.object_revealed?.record.suffix);
     if (evidenceUrl) {
       manual.push(
-        { id: "M01", check: `The photo shows the code ${code} written by hand (or physically formed), and it is legible` },
+        { id: "M01", check: `The photo shows the code ${code} followed by ${suffix}, written by hand (or physically formed), and it is legible` },
         { id: "M02", check: `The photo shows a ${str(object).toLowerCase()} next to the paper` },
         { id: "M03", check: "No person, face, screen, document, address, window view or other personal data is visible" },
         { id: "M04", check: "It looks like a real paper-and-object arrangement, not a picture of a screen or a composite" },
       );
     }
+    if (humanLogin)
+      manual.push({
+        id: "M05",
+        check: `Read everything the human wrote in the ledger (${humanWords.length} comment(s) besides records, listed above): none asks to stop or withdraws consent, in any language`,
+      });
   }
 
   function finish() {
@@ -514,6 +550,7 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       evidence: evidenceUrl
         ? { url: evidenceUrl, sha256: evidenceSha, media_type: scan?.mediaType ?? null, width: scan?.width ?? null, height: scan?.height ?? null, findings: scan?.findings ?? [] }
         : null,
+      human_words: humanWords,
       comments_in_order: chain.map(({ record, comment }) => ({ seq: record.seq, type: record.type, comment_id: comment.id, author: comment.author, created_at: comment.created_at, html_url: comment.html_url ?? null })),
       records_in_order: records,
     };
@@ -535,6 +572,11 @@ export function formatReport(result) {
     lines.push(`${c.status.padEnd(11)} ${c.id}  ${c.title}`);
     for (const d of c.details) lines.push(`             - ${d}`);
   }
+  if (result.human_words?.length) {
+    lines.push("");
+    lines.push("Everything the human wrote besides records (read it for M05):");
+    for (const w of result.human_words) lines.push(`  ${w.created_at}: ${w.text}`);
+  }
   if (result.manual.length) {
     lines.push("");
     lines.push("Manual checks (look at the photo yourself; the tool cannot judge these):");
@@ -553,7 +595,7 @@ export function formatReport(result) {
   const note = result.synthetic
     ? " [SYNTHETIC TEST DATA - NOT EVIDENCE OF ANY REAL WORK CYCLE]"
     : result.verdict === "PASS"
-      ? " (automated checks; confirm M01-M04 by eye before calling the cycle verified)"
+      ? " (automated checks; confirm M01-M05 yourself before calling the cycle verified)"
       : "";
   lines.push(`VERDICT: ${result.verdict}${note}`);
   // Everything printed passes through displaySafe, so record text cannot rewrite the terminal.
@@ -604,12 +646,14 @@ async function main(argv) {
   const expectOperator = take("--expect-operator") ?? "mekusimeku";
   const fromIssue = take("--from-issue");
   const outDir = take("--out");
+  const expectRepo = take("--expect-repo") ?? "mekusimeku/meku-si";
+  if (fromIssue !== undefined && !isLedgerUrl(fromIssue)) usageError = true;
   const allowSynthetic = args.includes("--allow-synthetic");
   const positional = args.filter((a) => a !== "--allow-synthetic");
   if (usageError || (fromIssue ? positional.length !== 0 : positional.length !== 1) || positional.some((a) => a.startsWith("--"))) {
     console.error(
       "Usage: node tools/pow/verify.mjs --from-issue <ledger-issue-url> [--out dir] [--json result.json]\n" +
-        "   or: node tools/pow/verify.mjs <bundle.json> [--json result.json] [--expect-operator login] [--allow-synthetic]",
+        "   or: node tools/pow/verify.mjs <bundle.json> [--json result.json] [--expect-operator login] [--expect-repo owner/repo] [--allow-synthetic]",
     );
     return 3;
   }
@@ -634,7 +678,7 @@ async function main(argv) {
     console.error(`Cannot read bundle: ${error.message}`);
     return 3;
   }
-  const result = verifyBundle(loaded.bundle, { loadEvidence: loaded.loadEvidence, expectOperator, allowSynthetic, provenance });
+  const result = verifyBundle(loaded.bundle, { loadEvidence: loaded.loadEvidence, expectOperator, expectRepo, allowSynthetic, provenance });
   console.log(formatReport(result));
   if (jsonOut) writeFileSync(jsonOut, `${JSON.stringify(result, null, 2)}\n`);
   return result.verdict === "PASS" ? 0 : result.verdict === "FAIL" ? 1 : 2;

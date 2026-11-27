@@ -20,6 +20,7 @@ import {
   isObjectSalt,
   objectCommitment,
   objectFor,
+  suffixFor,
   isLedgerUrl,
   recordProblems,
   requestArgumentProblems,
@@ -299,6 +300,7 @@ export function revealObject({ prepared, consentCommentId }) {
     type: "object_revealed",
     role: "developer",
     object: objectFor(prepared.object_salt, id),
+    suffix: suffixFor(prepared.object_salt, id),
     salt: prepared.object_salt,
     consent_comment_id: id,
   };
@@ -319,7 +321,7 @@ const USAGE = `Usage (run from a checkout of github.com/mekusimeku/meku-si, Node
   node tools/pow/request.mjs check   --pilot POW-001 --client-name <name> --client-version <v> --agent "<your agent>" [--affirm-independence]
   node tools/pow/request.mjs submit  --request pow-request.json --confirm <CODE> [--receipt pow-receipt.json] [--retry]
   node tools/pow/request.mjs status  --receipt pow-receipt.json [--out pow-status-N.json]
-  node tools/pow/request.mjs reveal  --request pow-request.json --bundle pow-ledger/bundle.json   (or --consent-comment-id <id>)
+  node tools/pow/request.mjs reveal  --request pow-request.json --bundle pow-ledger/bundle.json
 If your own MCP host (Claude Code, Cursor, an Agents SDK, MCP Inspector...) makes the calls instead:
   node tools/pow/request.mjs ready-manual  --pilot POW-001 --client-name <host> --client-version <v> --agent "<agent>" --server-version <v> --protocol-version <v> --tools a,b,c --affirm-independence
   node tools/pow/request.mjs import-submit --request pow-request.json --response-text-file submit-result.txt [--receipt pow-receipt.json]
@@ -353,16 +355,15 @@ async function main(argv) {
     }
     if (command === "reveal") {
       const prepared = JSON.parse(readFileSync(opt("request") ?? "pow-request.json", "utf8"));
-      let consentCommentId = opt("consent-comment-id");
-      if (opt("bundle")) {
-        const { loadBundleFile, verifyBundle } = await import("./verify.mjs");
-        const { bundle, loadEvidence } = loadBundleFile(opt("bundle"));
-        consentCommentId = consentCommentIdFrom(verifyBundle(bundle, { loadEvidence, allowSynthetic: true }));
-      }
-      if (!consentCommentId) throw new Error("reveal needs --bundle <exported ledger> or --consent-comment-id <id from the consent comment's link>");
+      // Always from an exported ledger the verifier accepts, so the reveal can never cite a
+      // consent the verifier does not recognise.
+      if (!opt("bundle")) throw new Error("reveal needs --bundle <ledger exported after the human's consent>");
+      const { loadBundleFile, verifyBundle } = await import("./verify.mjs");
+      const { bundle, loadEvidence } = loadBundleFile(opt("bundle"));
+      const consentCommentId = consentCommentIdFrom(verifyBundle(bundle, { loadEvidence, allowSynthetic: true }));
       const record = revealObject({ prepared, consentCommentId });
       console.log("Post this ONLY after the human's consent comment (seq 6) is in the ledger:\n");
-      console.log(recordComment(record, "object derived from the committed salt and the consent comment"));
+      console.log(recordComment(record, `write ${prepared.code}${record.suffix} and put a ${record.object} next to it`));
       return 0;
     }
     const observedAt = opt("observed-at") ?? new Date().toISOString();

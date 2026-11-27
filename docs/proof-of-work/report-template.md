@@ -20,7 +20,7 @@ Copy this file to `pilots/POW-001/README.md` and replace every `[bracketed]` par
 
 ## 1. What was tested
 
-An independent developer's AI agent requested one small physical task through MEKU's public MCP server, `https://meku.farm/api/public/mcp`. A second MEKU account reviewed the request. A consenting adult wrote a fresh code by hand, placed an object named only after their consent beside it, and posted a screenshot of the photo. MEKU returned the result through the ledger, and the developer accepted or rejected it. Every step is a public GitHub comment, ordered by GitHub's server clock.
+An independent developer's AI agent requested one small physical task through MEKU's public MCP server, `https://meku.farm/api/public/mcp`. A second MEKU account reviewed the request. A consenting adult wrote a fresh code and 2 characters by hand, placed an object beside it, and posted a screenshot of the photo. The characters and the object were named only after their consent. MEKU returned the result through the ledger, and the developer accepted or rejected it. Every step is a public GitHub comment, ordered by GitHub's server clock.
 
 ## 2. Participants
 
@@ -60,7 +60,7 @@ Elapsed: request to decision [h]; object named to evidence [h].
 
 ## 5. Consent, task and evidence
 
-- The human consented at [time], after the offer at [time]. The object `[OBJECT]` was named at [time]. Evidence arrived at [time], [h] after the reveal.
+- The human consented at [time], after the offer at [time]. The object `[OBJECT]` and the suffix `[SUFFIX]` were named at [time]. Evidence arrived at [time], [h] after the reveal.
 - Evidence file: `[evidence/<sha256>.png]`, SHA-256 `[sha256]`, [media type], [width × height], [bytes]. Metadata findings: [none / list].
 
 ## 6. Result and decision
@@ -84,10 +84,11 @@ Exit code: [0 / 1 / 2]. Checks: [n] PASS, [n] WARN, [n] FAIL, [n] NOT_REACHED. E
 
 | Check | [verifier 1] | [verifier 2] |
 | --- | --- | --- |
-| M01 The code is written by hand and legible, and equals `[CODE]` | [yes/no] | [yes/no] |
+| M01 The code is written by hand and legible, and equals `[CODE][SUFFIX]` | [yes/no] | [yes/no] |
 | M02 A `[object]` is next to the paper | [yes/no] | [yes/no] |
 | M03 No person, face, screen, document, address, window view or other personal data | [yes/no] | [yes/no] |
 | M04 A real paper-and-object arrangement, not a screen photo or composite | [yes/no] | [yes/no] |
+| M05 Nothing the human wrote asks to stop or withdraws consent, in any language | [yes/no] | [yes/no] |
 
 ## 9. Reproduce it yourself
 
@@ -102,9 +103,9 @@ Compare the digest with the one at the top of this report and look at the image 
 
 ## 10. What this shows, and what it does not
 
-It shows that the developer's own records report this exact request, sent with a request-capable MEKU key, stored by MEKU unaltered and approved. An account different from the developer's and MEKU's then consented, and posted a photo showing the request's code and an object that nobody could know before that consent comment existed. MEKU returned that evidence for the same code and its own check agreed, and the developer decided on it. No record comment was edited, and GitHub's server clocks fix the order.
+It shows that the developer's own records report this exact request, sent with a request-capable MEKU key, stored by MEKU unaltered and approved. An account different from the developer's and MEKU's then consented, and posted a photo showing the request's code with 2 characters and an object that neither the developer nor the human, acting alone, could know before that consent comment existed. MEKU returned that evidence for the same code and its own check agreed, and the developer decided on it. No record comment was edited, nothing the human wrote withdrew consent, and GitHub's server clocks fix the order.
 
-It does not show that MEKU's unsigned answers were as reported, or that the calls used MCP rather than MEKU's REST agent API. It does not show who the human is, or that the participants are independent beyond separate accounts and signed statements, or that the developer and the human did not coordinate. It does not show that the photo was not edited, or anything about comments that were deleted. It does not show that MEKU can deliver work inside its own product (this pilot used a manual relay), or anything about payments, tokens, scale, or an AI acting on its own.
+It does not show that MEKU's unsigned answers were as reported, or that the calls used MCP rather than MEKU's REST agent API. It does not show who the human is, or that the participants are independent beyond separate accounts and signed statements, or that the developer and the human did not coordinate (together, they could delete and repost consent comments until one gives a combination photographed earlier, at 1 chance in 8,192 per attempt). It does not show that the photo was not edited, or anything about comments that were deleted. It does not show that MEKU can deliver work inside its own product (this pilot used a manual relay), or anything about payments, tokens, scale, or an AI acting on its own (the tools require a person to type the code back before sending, but cannot prove a person approved).
 
 ## 11. Problems found
 

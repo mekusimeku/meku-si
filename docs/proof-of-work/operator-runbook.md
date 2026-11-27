@@ -9,6 +9,14 @@ For the MEKU operator account `mekusimeku`. Every step works from a phone browse
 3. **Human.** Find a consenting adult who is not MEKU staff, not one of MEKU's AI workers and not the developer, and who has a GitHub account (a new pseudonymous one is fine). Send them the [human guide](human-guide.md). Never offer payment.
 4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 5 per minute and 30 per day. MEKU counts every call that carries the key, and an MCP host spends 3 calls just to connect. Leave **SEARCH ONLY** and **ENABLE CONCIERGE PROPOSALS** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it.
 
+5. **Dry run of the human's screenshot.** Phones and apps differ in what they add to an image, so test the human's exact way of posting before the pilot. Create an issue in `mekusimeku/meku-si` titled **POW-001 dry run: test screenshot** and send the human its link. They post one screenshot of a photo of a blank sheet of paper, as the [human guide](human-guide.md#before-you-start-a-dry-run-of-your-screenshot) describes. Then ask any agent working for you to run this command, which needs no key, on the image's link (press and hold the image, then copy its address):
+
+   ```sh
+   node tools/pow/record.mjs check-image https://github.com/user-attachments/assets/...
+   ```
+
+   It must end with `PASS`. A `WARN` about a screenshot note or a time chunk is fine. If it ends with `FAIL`, do not open the ledger: ask the human to try again without cropping, or from a browser instead of the app, and run the check again. If no way passes, post the findings in the dry-run issue and do not run the pilot with that phone. Close the dry-run issue when done. It is not part of the ledger.
+
 Nothing in this pilot creates a mission, starts a payment, uses a wallet, or touches MEKU POCKET.
 
 ## seq 0: open the ledger
@@ -93,7 +101,7 @@ The human posts consent (seq 6). The developer then names the object (seq 7), an
 
 ## seq 9: return the result
 
-First make sure the evidence file carries no metadata. Ask the developer, or any agent working for you, to run `node tools/pow/verify.mjs --from-issue <ledger-url>` and report check **E04**. The command needs no key.
+First make sure the evidence file carries no metadata. Ask the developer, or any agent working for you, to run `node tools/pow/verify.mjs --from-issue <ledger-url>` and report check **E04**, check **H05** and the list of everything the human wrote besides records. The command needs no key. If H05 failed, or anything the human wrote might mean they want to stop, treat it as a stop: post a stop and close.
 
 Then open the human's screenshot in seq 8 and look at it.
 
@@ -137,7 +145,7 @@ This is MEKU returning the result to the developer. The developer checks it and 
 
 ## Stopping and timeouts
 
-Anyone may stop. If the human writes "STOP", if a participant has not acted for 48 hours at their step, or if something is wrong, post this with `NEXT` replaced by the next seq number and a short reason. Then close.
+Anyone may stop. If the human writes STOP (in any language, or 🛑), writes anything else that might mean they want to stop, or tells you so, if a participant has not acted for 48 hours at their step, or if something is wrong, post this with `NEXT` replaced by the next seq number and a short reason. Then close. When in doubt, stop: a stop is a valid outcome, while consent that may have been withdrawn can never be verified.
 
 ```json
 {

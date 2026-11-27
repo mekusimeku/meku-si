@@ -60,7 +60,7 @@ test("every relative link in the pilot docs points at a file that exists", () =>
 test("commands quoted in the guides exist in the tools", () => {
   const usage = {
     "request.mjs": ["prepare", "check", "submit", "status", "reveal", "ready-manual", "import-submit", "import-status"],
-    "record.mjs": ["opened", "reviewed", "offered", "consent", "evidence", "returned", "decision", "closed", "stop", "verification", "digest", "schema", "request-id-sha256", "hash-file"],
+    "record.mjs": ["opened", "reviewed", "offered", "consent", "evidence", "returned", "decision", "closed", "stop", "verification", "digest", "schema", "request-id-sha256", "hash-file", "check-image"],
   };
   for (const name of ["developer-guide.md", "operator-runbook.md", "protocol.md"]) {
     for (const [, tool, command] of read(name).matchAll(/tools\/pow\/(request\.mjs|record\.mjs) ([a-z-]+)/g))

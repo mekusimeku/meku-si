@@ -134,7 +134,7 @@ node tools/pow/export.mjs https://github.com/mekusimeku/meku-si/issues/<N> pow-l
 node tools/pow/request.mjs reveal --request pow-request.json --bundle pow-ledger-6/bundle.json
 ```
 
-Post the printed block. Neither you nor anyone else chooses the object. It follows from your salt, committed in seq 2, and from GitHub's id for the consent comment, and anyone can recompute it. Without exporting, you can pass `--consent-comment-id <number>` instead; the number is at the end of the consent comment's link, after `#issuecomment-`.
+Post the printed block. Its first line tells the human what to write and which object to use: your code followed by 2 more characters, and one object. Neither you nor anyone else chooses them. They follow from your salt, committed in seq 2, and from GitHub's id for the consent comment, and anyone can recompute them. The tool reads that id from the exported ledger, so the reveal always cites the consent the verifier accepts.
 
 **As soon as the human posts the evidence (seq 8), check it at once and tell the operator the result:**
 
@@ -152,7 +152,7 @@ After the operator's `result_returned` (seq 9):
 node tools/pow/verify.mjs --from-issue https://github.com/mekusimeku/meku-si/issues/<N> --out pow-ledger
 ```
 
-Open the image in `pow-ledger/evidence/` and look at it yourself. Accept only if your code is written by hand and legible, the named object is there, and nothing personal is visible:
+Open the image in `pow-ledger/evidence/` and look at it yourself. Accept only if your code followed by the 2 revealed characters is written by hand and legible, the named object is there, and nothing personal is visible:
 
 ```sh
 node tools/pow/record.mjs decision --bundle pow-ledger/bundle.json --accept \
@@ -165,7 +165,7 @@ The decision commits to the exact ledger digest over records 0–9, so it can on
 
 ## 11. After the close
 
-When the operator posts `pilot_closed` (seq 11), run `verify.mjs --from-issue` again. The verdict should be `PASS`. You may publish your own account using the [report template](report-template.md). Ask a third person to verify independently, starting from the live issue rather than from a file you send them.
+When the operator posts `pilot_closed` (seq 11), run `verify.mjs --from-issue` again. The verdict should be `PASS`. You may publish your own account using the [report template](report-template.md). Ask a third person to verify independently, starting from the live issue rather than from a file you send them. They look at the photo and read everything the human wrote (manual checks M01 to M05).
 
 ## Stopping
 

@@ -46,10 +46,45 @@ def sha256_hex(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
+IMAGE_MARKUP = re.compile(r"<img\b[^>]*>|!\[[^\]]*\]\([^)]*\)", re.I)
+TOOL_HEADER = re.compile(r"^MEKU proof-of-work record: seq \d+ [a-z_]+ \(POW-[A-Z0-9-]+\)(?: - [^\n]*)?$", re.M)
+JSON_WHITESPACE = " \t\n\r"
+
+
 def visible(body):
-    """What a reader sees as the poster's own words: no HTML comments, no quoted lines."""
-    text = HTML_COMMENT.sub("", body.replace("\r\n", "\n").replace("\r", "\n"))
-    return "\n".join(line for line in text.split("\n") if not re.match(r"^[ \t]*>", line))
+    """What a reader sees as the poster's own words. Outside code fences, HTML comments and
+    quoted lines are dropped; inside a fence GitHub shows everything, so nothing is dropped."""
+    out, fence, in_comment = [], None, False
+    for line in body.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        if fence:
+            out.append(line)
+            close = FENCE_CLOSE.match(line)
+            if close and close.group(1)[0] == fence[0] and len(close.group(1)) >= len(fence):
+                fence = None
+            continue
+        rest, kept = line, ""
+        while rest:
+            if in_comment:
+                end = rest.find("-->")
+                if end == -1:
+                    rest = ""
+                    break
+                rest, in_comment = rest[end + 3 :], False
+                continue
+            start = rest.find("<!--")
+            if start == -1:
+                kept += rest
+                break
+            kept, rest, in_comment = kept + rest[:start], rest[start + 4 :], True
+        if re.match(r"^[ \t]*>", kept):
+            continue
+        opening = FENCE_OPEN.match(kept)
+        if opening and not in_comment:
+            fence = opening.group(1)
+        out.append(kept)
+    return "\n".join(out)
 
 
 def is_record(value):
@@ -57,8 +92,8 @@ def is_record(value):
 
 
 def records_in(body):
-    """(records, malformed): fenced json blocks; with no fence at all, one bare record
-    that starts the comment ("{" first) and ends at its last "}"."""
+    """(records, malformed): fenced json blocks; with no fence at all, one bare record that
+    starts the comment once image markup and a tool header line are set aside."""
     text = visible(body)
     found, malformed = [], False
     for block in FENCE.findall(text):
@@ -69,8 +104,8 @@ def records_in(body):
             continue
         if is_record(parsed):
             found.append(parsed)
-    trimmed = text.strip()
-    if found or "```" in text or not trimmed.startswith("{") or PROTOCOL not in trimmed:
+    trimmed = TOOL_HEADER.sub("", IMAGE_MARKUP.sub("", text)).strip(JSON_WHITESPACE)
+    if found or "```" in text or not trimmed.startswith("{") or PROTOCOL not in trimmed or "<" in trimmed:
         return found, malformed
     try:
         parsed = parse(trimmed[: trimmed.rfind("}") + 1])
@@ -79,6 +114,10 @@ def records_in(body):
     if is_record(parsed):
         found.append(parsed)
     return found, malformed
+
+
+def is_seq(value, n):
+    return type(value) is int and value == n
 
 
 def when(comment):
@@ -97,7 +136,7 @@ def main(path, expect_operator):
     for c in comments:
         found, malformed = records_in(c["body"])
         entries.append((c, found, malformed))
-    openings = [(c, r) for c, found, _ in entries for r in found if r.get("type") == "pilot_opened" and r.get("seq") == 0]
+    openings = [(c, r) for c, found, _ in entries for r in found if r.get("type") == "pilot_opened" and is_seq(r.get("seq"), 0)]
     preferred = [e for e in openings if same(e[0]["author"], expect_operator) and same((e[1].get("roster") or {}).get("operator"), expect_operator)]
     synthetic = [e for e in openings if str(e[1].get("pilot_id", "")).startswith("POW-SYNTHETIC-")]
     opening_comment, opening = (preferred or synthetic or openings)[0]
@@ -118,11 +157,14 @@ def main(path, expect_operator):
             continue  # an exact double post adds nothing
         chain.append((c, record))
     for index, (_, record) in enumerate(chain):
-        if record.get("seq") != index:
+        if not is_seq(record.get("seq"), index):
             raise SystemExit(f"seq {record.get('seq')} found where {index} was expected; run verify.mjs for details")
     digest = sha256_hex(f"{PROTOCOL}|{opening['pilot_id']}")
-    for _, record in chain:
-        digest = sha256_hex(f"{digest}|{sha256_hex(jcs(record))}")
+    try:
+        for _, record in chain:
+            digest = sha256_hex(f"{digest}|{sha256_hex(jcs(record))}")
+    except UnicodeEncodeError:  # a lone surrogate, which JavaScript's verifier also refuses
+        raise SystemExit("a record cannot be hashed (malformed text); run verify.mjs for details")
     print(f"{digest} (through seq {len(chain) - 1}; {len(chain)} records)")
 
 

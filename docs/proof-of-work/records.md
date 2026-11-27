@@ -1,15 +1,17 @@
 # Ledger records, hashes and checks (`meku.pow/1`)
 
-The ledger is one public GitHub issue in `mekusimeku/meku-si`. Each step of the [protocol](protocol.md) is one comment that holds exactly one fenced `json` block whose object has `"pow": "meku.pow/1"`. Text outside the block is ignored. The authoritative field definitions are the generated JSON Schema [`tools/pow/pow-record-v1.schema.json`](../../tools/pow/pow-record-v1.schema.json); this page explains them.
+The ledger is one public GitHub issue in `mekusimeku/meku-si`. Each step of the [protocol](protocol.md) is one comment that holds exactly one fenced `json` block whose object has `"pow": "meku.pow/1"`. Text outside the block is not part of the record, but the verifier lists everything the human writes for a person to read (H05, M05). The authoritative field definitions are the generated JSON Schema [`tools/pow/pow-record-v1.schema.json`](../../tools/pow/pow-record-v1.schema.json); this page explains them.
 
 Rules for every record comment:
 
 - One record per comment. A comment with two records fails check L02.
-- Only what GitHub shows counts. Text inside HTML comments (`<!-- -->`) and quoted lines (starting with `>`, as in a Quote reply) are ignored.
-- A record may also be pasted bare, without the backtick lines, if the comment starts with `{`. An image may follow it.
+- The verifier reads a comment as GitHub shows it. Outside code blocks, HTML comments (`<!-- -->`) and quoted lines (starting with `>`, as in a Quote reply) are hidden on GitHub and ignored. Inside a code block GitHub shows every character, and the verifier reads them all. A roster comment that hides text in an HTML comment gets a warning (L02), so that a person reads it in full.
+- A record may also be pasted bare, without the backtick lines, if the comment then starts with `{`. An image, and the header line the tools print, may come before or after it. A bare record must not contain `<`: GitHub shows a bare record as Markdown, where HTML can hide text. Inside the backtick lines, `<` is fine.
+- No string may contain `<!--`, `-->`, three backticks or three tildes, so that a record cannot open or close a hidden comment or a code block (L02).
+- If a roster comment mentions `meku.pow/1` but holds no record the verifier can read, the verifier warns (L02). Post the block again, alone, in a new comment.
 - Numbers must be whole numbers: `1.0` or `1e3` makes the record invalid. JavaScript and Python would otherwise hash them differently.
 - An exact repeat of your previous record (a double post) is ignored with a warning.
-- Never edit a record comment. GitHub records edits, and check L05 fails on any edited record.
+- Never edit a comment. GitHub records edits. Check L05 fails on any edited record, and H05 fails on any edited comment by the human, because its first version might have said STOP.
 - Only accounts on the roster count. `pilot_opened` names the operator and developer; `task_offered` names the human. Record-shaped comments from anyone else are ignored and reported as a warning (L07).
 - No timestamps are typed by hand. GitHub's server time on each comment is the clock (L06).
 - No string may contain control characters or text-direction overrides (L02). The verifier also escapes everything it prints.
@@ -38,13 +40,13 @@ Every record starts with:
 | 4 | `request_status_observed` | developer | `request_id_sha256`, `stored_request` (the request exactly as `meku_get_request_status` returned it, without its id), `stored_request_sha256`, `response_text_sha256`, `observed_at` |
 | 5 | `task_offered` | operator | `code`, `human` (GitHub login), `human_is_registered_meku_human`, `task_shown` = `ledger-seq-4` (the human reads the exact stored text in seq 4), `channel`, `payment` = `none` |
 | 6 | `human_consent` | human | `consents` {`voluntary_participation`, `may_reject_or_stop`, `responsible_for_safety`, `safety_checklist`}, `adult_18_plus`, `unpaid_understood`, `publication` {`photo_public`, `github_login_public`}, `independence` {`not_meku_staff_or_contractor`, `not_the_developer`}; every value `true` |
-| 7 | `object_revealed` | developer | `object` (one of SPOON, CUP, PLATE, BOWL, SOCK, TOWEL, PEN, SHOE), `salt` (the secret committed in seq 2), `consent_comment_id` (GitHub's numeric id of the seq 6 comment) |
+| 7 | `object_revealed` | developer | `object` (one of SPOON, CUP, PLATE, BOWL, SOCK, TOWEL, PEN, SHOE), `suffix` (2 characters from the code alphabet, written right after the code), `salt` (the secret committed in seq 2), `consent_comment_id` (GitHub's numeric id of the seq 6 comment) |
 | 8 | `evidence_submitted` | human | `statements` {`code_physically_written`, `object_placed_after_reveal`, `no_people_or_personal_data`, `metadata_removed`}, all `true`; `evidence` = `attached-in-this-comment`. The screenshot is attached to the same comment. |
 | 9 | `result_returned` | operator | `code`, `evidence` = `ledger-seq-8` (the one attachment in seq 8), `meku_check` {`code_visible`, `object_visible`, `no_personal_data_visible`}, optional `note` |
 | 10 | `requester_decision` | developer | `decision` (`ACCEPTED` or `REJECTED`), `checks` {`code_visible`, `code_matches`, `object_visible`, `object_matches`, `no_personal_data_visible`}, `evidence_sha256`, `ledger_digest` (records 0–9), `reason` |
 | 11 | `pilot_closed` | operator | `key_revoked` = `true`, `outcome` (`completed`, `stopped` or `rejected_by_review`), optional `note` |
 | any | `stop` | developer, operator or human | `reason`. Only `pilot_closed` may follow. |
-| none | `independent_verification` | verifier | `verdict`, `ledger_digest`, `tool`, `manual_checks` {`code_legible_and_matching`, `object_matching`, `no_personal_data_visible`, `physical_arrangement`}, optional `notes`. Posted by an account outside the roster; outside the seq chain. |
+| none | `independent_verification` | verifier | `verdict`, `ledger_digest`, `tool`, `manual_checks` {`code_legible_and_matching`, `object_matching`, `no_personal_data_visible`, `physical_arrangement`, `human_did_not_withdraw`}, optional `notes`. Posted by an account outside the roster; outside the seq chain. |
 
 After a rejected review, `pilot_closed` follows directly as seq 4. After a stop at seq *n*, `pilot_closed` is seq *n*+1.
 
@@ -59,14 +61,16 @@ All hashes are lowercase hex SHA-256 over UTF-8 bytes.
 - **Request id commitment:** `sha256("meku.pow/1|request-id|" + lowercase(request_id))`. It links the developer's records (seq 2 and 4) to one MEKU request without publishing the id. The operator's records name the same request by its fresh code, which appears in the stored request text.
 - **`arguments_sha256`** and **`stored_request_sha256`:** `sha256(JCS(value))`.
 - **`response_text_sha256`:** `sha256` of the exact tool-result text MEKU returned. The developer keeps that text in a private receipt. MEKU's answers are not signed, so these records report what the developer received.
-- **Object commit-reveal.** At `prepare`, the developer's client draws a secret `salt` (32 lowercase hex characters) and seq 2 publishes `object_commitment = sha256("meku.pow/1|object-salt|" + salt)`. Seq 7 reveals the salt, and the object is fixed by:
+- **Object and suffix commit-reveal.** At `prepare`, the developer's client draws a secret `salt` (32 lowercase hex characters) and seq 2 publishes `object_commitment = sha256("meku.pow/1|object-salt|" + salt)`. Seq 7 reveals the salt, and the object and the 2-character suffix are fixed by:
 
   ```text
   n = first 8 hex characters of sha256("meku.pow/1|object|" + salt + "|" + consent_comment_id), read as a number
   object = ["SPOON","CUP","PLATE","BOWL","SOCK","TOWEL","PEN","SHOE"][n mod 8]
+  h = sha256("meku.pow/1|suffix|" + salt + "|" + consent_comment_id)
+  suffix = ALPHABET[first byte of h mod 32] + ALPHABET[second byte of h mod 32]   (ALPHABET = the code alphabet)
   ```
 
-  The developer cannot choose the object, because the salt is fixed before the consent comment exists. Nobody can predict it before that comment gets its id, and the human cannot compute it before seq 7 reveals the salt.
+  Neither the developer nor the human, acting alone, can know the object or the suffix before the consent comment exists. The developer fixed the salt before that comment existed and cannot predict its id. The human cannot compute them before seq 7 reveals the salt. Acting together, they could post and delete consent comments until one gives a combination they photographed earlier. Each attempt has 1 chance in 8,192 (8 objects times 1,024 suffixes), and the verifier cannot see deleted comments.
 - **Ledger digest** over records in seq order:
 
   ```text
@@ -99,8 +103,8 @@ The verifier recomputes every file hash itself. It opens only regular files insi
 
 | ID | Check | What it compares |
 | --- | --- | --- |
-| L01 | Bundle format and source issue are valid | `format` and the issue URL |
-| L02 | Every MEKU record from a roster account parses and matches its schema | each record against the schema, including the constant `true` statements and `payment` = `none` |
+| L01 | Bundle format and source issue are valid | `format` and the issue URL; a real pilot's ledger must be an issue in `mekusimeku/meku-si` |
+| L02 | Every MEKU record from a roster account parses and matches its schema | each record against the schema, including the constant `true` statements and `payment` = `none`; WARN for a roster comment that hides text or mentions `meku.pow/1` without a readable record |
 | L03 | All records carry one pilot id; synthetic data is never accepted as a real pilot | `pilot_id` across records; `POW-SYNTHETIC-…` fails without `--allow-synthetic` |
 | L04 | Records follow the protocol order with contiguous seq numbers | seq 0, 1, 2 … and the allowed next type at each step |
 | L05 | Record comments were never edited | GitHub `updated_at` equals `created_at` |
@@ -119,13 +123,13 @@ The verifier recomputes every file hash itself. It opens only regular files insi
 | Q07 | stored_request_sha256 matches the stored request | recomputed hash |
 | H01 | The offer points the human to the stored request text, which holds the code | the code in the stored description of seq 4 |
 | H02 | The human consented from their own account after the offer | consent author is the offered human |
-| H03 | The object follows from the committed salt and the consent comment, named after consent | salt against `object_commitment`; `consent_comment_id` against the seq 6 comment; the derived object; comment times |
+| H03 | The object follows from the committed salt and the consent comment, named after consent | salt against `object_commitment`; `consent_comment_id` against the seq 6 comment; the derived object and suffix; comment times |
 | H04 | Evidence was posted by the human after the object was named and within 48 hours | comment times |
-| H05 | No plain-text STOP or withdrawal by the human was left unrecorded | any comment by the human, without a record, containing stop or withdraw requires a stop record in the ledger |
-| E01 | The evidence comment shows exactly one image, and it is a GitHub attachment | every visible URL in the comment: exactly one, and it is a GitHub attachment (host case-insensitive) |
+| H05 | The human's own words: a STOP is recorded, nothing was edited, other words go to manual review | every comment by the human. Words that are only STOP, in any of the languages listed in `tools/pow/lib.mjs` (stop, halt, alto, para, pare, basta, arrête, stopp, berhenti, стоп, 停止, やめて, 중지, توقف, रुको and others), or only 🛑 or ⛔, need a stop record. An edited comment without a record fails. Any other words, also beside a record, give a WARN and are listed for M05 |
+| E01 | The evidence comment shows exactly one image, and it is a GitHub attachment | the raw comment: exactly one image (Markdown or `<img>`), a GitHub attachment (host case-insensitive), and no other link, HTML comment, HTML entity or quoted line |
 | E02 | The attachment is in the bundle and its SHA-256 matches the developer's decision | file hash against `evidence_sha256` in seq 10 |
 | E03 | The file is a PNG or JPEG of usable size | file signature, dimensions (shorter side at least 240 px), size (at most 10 MiB) |
-| E04 | The file carries only pixel and colour data: no EXIF, GPS, XMP location or other metadata | allow-list. PNG: only pixel, palette, transparency and colour chunks, plus XMP without location fields (WARN). JPEG: only JFIF, ICC profile, Adobe, tables, frame and scan segments. Anything else fails, including bytes after the end of the image |
+| E04 | The file carries only pixel and colour data, plus at most a screenshot's size note: no EXIF, GPS or other metadata | allow-list. PNG: only pixel, palette, transparency and colour chunks. A phone screenshot's XMP note is a WARN if it holds only the pixel size, orientation, resolution and the comment `Screenshot`; any other XMP property fails. A last-modified time chunk is a WARN. JPEG: only JFIF (no JFXX thumbnail), ICC profile, Adobe, tables, frame and scan segments. Anything else fails, including bytes after the end of the image and XMP that expands past 1 MiB |
 | D01 | MEKU returned the result after the evidence it refers to | seq 9 follows seq 8 |
 | D02 | The developer's decision commits to the exact ledger through seq 9 | recomputed ledger digest |
 | D03 | An ACCEPTED decision has every developer check true and lands within 168 hours | `checks` and comment times |
@@ -135,4 +139,4 @@ The verifier recomputes every file hash itself. It opens only regular files insi
 
 **Verdicts and exit codes.** `PASS` (exit 0) needs every check to pass, a developer `ACCEPTED` decision and a closed pilot. Any `FAIL` gives verdict `FAIL` (exit 1). `STOPPED`, `REJECTED_BY_REVIEW`, `COMPLETED_REJECTED` and `INCOMPLETE` exit with 2. With `INCOMPLETE`, the verifier names the next expected record. Usage errors exit with 3. `--json result.json` writes the full result, including every record in order, for the [report](report-template.md).
 
-The verifier cannot judge the picture itself. It prints manual checks M01–M04 for a person, as described in the [protocol](protocol.md#pass-and-fail).
+The verifier cannot judge the picture or read intent. It prints manual checks M01–M05 for a person, as described in the [protocol](protocol.md#pass-and-fail), and lists everything the human wrote besides records for M05. To check any image the same way before posting it, run `node tools/pow/record.mjs check-image <file or GitHub attachment link>`.

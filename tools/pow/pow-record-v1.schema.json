@@ -166,13 +166,13 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 80,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "version": {
               "type": "string",
               "minLength": 1,
               "maxLength": 40,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             }
           }
         },
@@ -180,7 +180,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 160,
-          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
         },
         "server": {
           "type": "object",
@@ -198,13 +198,13 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "protocol_version": {
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             }
           }
         },
@@ -215,7 +215,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 80,
-            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
           }
         },
         "independence": {
@@ -319,19 +319,19 @@
               "type": "string",
               "minLength": 4,
               "maxLength": 120,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "action": {
               "type": "string",
               "minLength": 4,
               "maxLength": 200,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "description": {
               "type": "string",
               "minLength": 20,
               "maxLength": 2000,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "skills": {
               "type": "array",
@@ -340,26 +340,26 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 40,
-                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+                "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
               }
             },
             "deliverable": {
               "type": "string",
               "minLength": 1,
               "maxLength": 300,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "timeframe": {
               "type": "string",
               "minLength": 1,
               "maxLength": 120,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "budget_text": {
               "type": "string",
               "minLength": 1,
               "maxLength": 80,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "travel_required": {
               "type": "boolean"
@@ -400,7 +400,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "created_at": {
               "type": "string",
@@ -490,7 +490,7 @@
           "type": "string",
           "minLength": 0,
           "maxLength": 300,
-          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
         }
       }
     },
@@ -560,19 +560,19 @@
               "type": "string",
               "minLength": 0,
               "maxLength": 120,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "action": {
               "type": "string",
               "minLength": 0,
               "maxLength": 200,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "description": {
               "type": "string",
               "minLength": 0,
               "maxLength": 2000,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "country": {
               "type": [
@@ -580,7 +580,7 @@
                 "null"
               ],
               "maxLength": 80,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "region": {
               "type": [
@@ -588,7 +588,7 @@
                 "null"
               ],
               "maxLength": 80,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "skills": {
               "type": "array",
@@ -597,7 +597,7 @@
                 "type": "string",
                 "minLength": 0,
                 "maxLength": 40,
-                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+                "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
               }
             },
             "deliverable": {
@@ -606,7 +606,7 @@
                 "null"
               ],
               "maxLength": 300,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "timeframe": {
               "type": [
@@ -614,7 +614,7 @@
                 "null"
               ],
               "maxLength": 120,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "budget_text": {
               "type": [
@@ -622,7 +622,7 @@
                 "null"
               ],
               "maxLength": 80,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "travel_required": {
               "type": "boolean"
@@ -634,13 +634,13 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "status": {
               "type": "string",
               "minLength": 1,
               "maxLength": 20,
-              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
             },
             "created_at": {
               "type": "string",
@@ -848,6 +848,7 @@
         "role",
         "seq",
         "object",
+        "suffix",
         "salt",
         "consent_comment_id"
       ],
@@ -883,6 +884,12 @@
             "PEN",
             "SHOE"
           ]
+        },
+        "suffix": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{2}$"
         },
         "salt": {
           "type": "string",
@@ -1026,7 +1033,7 @@
           "type": "string",
           "minLength": 0,
           "maxLength": 300,
-          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
         }
       }
     },
@@ -1116,7 +1123,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 300,
-          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
         }
       }
     },
@@ -1167,7 +1174,7 @@
           "type": "string",
           "minLength": 0,
           "maxLength": 300,
-          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
         }
       }
     },
@@ -1209,7 +1216,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 300,
-          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
         }
       }
     },
@@ -1262,7 +1269,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 200,
-          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
         },
         "manual_checks": {
           "type": "object",
@@ -1271,7 +1278,8 @@
             "code_legible_and_matching",
             "object_matching",
             "no_personal_data_visible",
-            "physical_arrangement"
+            "physical_arrangement",
+            "human_did_not_withdraw"
           ],
           "properties": {
             "code_legible_and_matching": {
@@ -1285,6 +1293,9 @@
             },
             "physical_arrangement": {
               "type": "boolean"
+            },
+            "human_did_not_withdraw": {
+              "type": "boolean"
             }
           }
         },
@@ -1292,7 +1303,7 @@
           "type": "string",
           "minLength": 0,
           "maxLength": 500,
-          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
         }
       }
     }

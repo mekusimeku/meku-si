@@ -40,6 +40,17 @@ async function readCapped(response, cap) {
 
 const allowedAssetHost = (host) => host === "github.com" || host.endsWith(".githubusercontent.com");
 
+/** Downloads one GitHub attachment without any token, refusing other hosts and large files. */
+export async function downloadAttachment(url, { fetchImpl = fetch } = {}) {
+  if (extractAttachmentUrls(url).length !== 1 || extractAttachmentUrls(url)[0] !== url) throw new Error("not a GitHub attachment URL");
+  const response = await fetchImpl(url, { headers: { "User-Agent": EXPORTER_VERSION }, redirect: "follow", signal: AbortSignal.timeout(60_000) });
+  const finalHost = new URL(response.url || url).hostname;
+  if (!allowedAssetHost(finalHost)) throw new Error(`attachment redirected to an unexpected host: ${finalHost}`);
+  if (!response.ok) throw new Error(`attachment download answered HTTP ${response.status}`);
+  const bytes = await readCapped(response, MAX_EVIDENCE_BYTES);
+  return { bytes, contentType: response.headers.get("content-type") };
+}
+
 export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token, now = () => new Date(), expectOperator = "mekusimeku" }) {
   const { owner, repo, number } = parseIssueUrl(issueUrl);
   if (existsSync(outDir) && readdirSync(outDir).length) throw new Error(`${outDir} is not empty`);
@@ -83,16 +94,12 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
       // Attachment downloads never carry the API token. A failed download is recorded, not
       // fatal: the verifier then reports the evidence as missing (E02).
       try {
-        const response = await fetchImpl(url, { headers: { "User-Agent": EXPORTER_VERSION }, redirect: "follow", signal: AbortSignal.timeout(60_000) });
-        const finalHost = new URL(response.url || url).hostname;
-        if (!allowedAssetHost(finalHost)) throw new Error(`attachment redirected to an unexpected host: ${finalHost}`);
-        if (!response.ok) throw new Error(`attachment download answered HTTP ${response.status}`);
-        const bytes = await readCapped(response, MAX_EVIDENCE_BYTES);
+        const { bytes, contentType } = await downloadAttachment(url, { fetchImpl });
         const sha256 = sha256Hex(bytes);
         const ext = bytes[0] === 0x89 ? "png" : bytes[0] === 0xff ? "jpg" : "bin";
         const file = `evidence/${sha256}.${ext}`;
         writeFileSync(join(outDir, file), bytes);
-        evidenceFiles.push({ comment_id: comment.id, url, file, sha256, bytes: bytes.length, content_type: response.headers.get("content-type") });
+        evidenceFiles.push({ comment_id: comment.id, url, file, sha256, bytes: bytes.length, content_type: contentType });
       } catch (error) {
         evidenceFiles.push({ comment_id: comment.id, url, file: null, error: error.message });
       }

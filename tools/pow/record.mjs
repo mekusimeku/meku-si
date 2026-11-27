@@ -191,13 +191,14 @@ const USAGE = `Usage: node tools/pow/record.mjs <command> [options]
   decision   --bundle <bundle.json> --accept|--reject --reason "..." [--code-visible] [--code-matches] [--object-visible] [--object-matches] [--no-personal-data]
   closed     --pilot POW-001 --seq <n> --outcome completed|stopped|rejected_by_review --key-revoked [--note "..."]
   stop       --pilot POW-001 --seq <n> --role developer|operator|human --reason "..."
-  verification --bundle <bundle.json> --tool "<tool and version>" [--code-legible] [--object-matching] [--no-personal-data] [--physical] [--notes "..."]
+  verification --bundle <bundle.json> --tool "<tool and version>" [--code-legible] [--object-matching] [--no-personal-data] [--physical] [--human-did-not-withdraw] [--notes "..."]
+  check-image <file | GitHub attachment URL>       (the evidence checks E03 and E04, e.g. on a test screenshot before a pilot)
   digest     --bundle <bundle.json>                (ledger digest over every record in the bundle)
   request-id-sha256 <uuid>
   hash-file  <path>
   schema                                           (JSON Schema for every record type)`;
 
-function main(argv) {
+async function main(argv) {
   const [command, ...rest] = argv;
   const opt = (name) => {
     const i = rest.indexOf(`--${name}`);
@@ -274,6 +275,7 @@ function main(argv) {
           object_matching: flag("object-matching"),
           no_personal_data_visible: flag("no-personal-data"),
           physical_arrangement: flag("physical"),
+          human_did_not_withdraw: flag("human-did-not-withdraw"),
         };
         print(verificationRecord({ bundlePath: need("bundle"), tool: need("tool"), manualChecks, notes: opt("notes"), allowSynthetic: flag("allow-synthetic") }));
         return 0;
@@ -290,6 +292,22 @@ function main(argv) {
       case "hash-file":
         console.log(sha256Hex(readFileSync(rest[0])));
         return 0;
+      case "check-image": {
+        // A file, or a GitHub attachment URL (a test screenshot posted the way the human will
+        // post theirs), checked exactly as the verifier checks evidence (E03 and E04).
+        if (!rest[0]) throw new Error("check-image needs a file or a GitHub attachment URL");
+        let bytes;
+        if (/^https?:\/\//i.test(rest[0])) {
+          const { downloadAttachment } = await import("./export.mjs");
+          bytes = (await downloadAttachment(rest[0])).bytes;
+          console.log(`Downloaded ${bytes.length} bytes, SHA-256 ${sha256Hex(bytes)}`);
+        } else bytes = readFileSync(rest[0]);
+        const result = scanImage(bytes);
+        for (const f of result.findings) console.log(`${f.level.padEnd(5)} ${f.code}: ${f.detail}`);
+        const failed = result.findings.some((f) => f.level === "FAIL");
+        console.log(`${failed ? "FAIL" : "PASS"}: ${result.mediaType ?? "unknown type"} ${result.width ?? "?"}x${result.height ?? "?"}${failed ? " (do not post this image)" : ""}`);
+        return failed ? 1 : 0;
+      }
       case "schema":
         console.log(JSON.stringify(recordJsonSchema(), null, 2));
         return 0;
@@ -303,4 +321,4 @@ function main(argv) {
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exitCode = main(process.argv.slice(2));
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exitCode = await main(process.argv.slice(2));

@@ -23,13 +23,18 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        # The guides ask outside developers for Node.js 20 or newer.
+        node: ['20', '22']
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
       - name: Offline tests, including planted faults and docs-to-tools checks
         run: node --test tools/pow/pow.test.mjs tools/pow/pow-docs.test.mjs
       - name: Synthetic ledger end to end, JavaScript and independent Python digests agree

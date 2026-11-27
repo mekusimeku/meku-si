@@ -25,10 +25,10 @@ import {
   displaySafe,
   extractAttachmentUrls,
   extractRecords,
-  freeTextOf,
-  hidesText,
-  imageReferences,
+  externalImages,
+  extractAllUrls,
   isStopWord,
+  wordsBesideRecord,
   isLedgerUrl,
   isObjectSalt,
   isSyntheticPilot,
@@ -50,8 +50,10 @@ const HOUR_MS = 3_600_000;
 
 // Which record may follow which. A stop may follow any record from pilot_opened onward
 // except a decision or a close; after a stop or a rejection only a close may follow.
-function allowedNext(previous) {
+function allowedNext(previous, { closed = false, stopped = false } = {}) {
   if (!previous) return ["pilot_opened"];
+  // After the close, the human's consent can still be withdrawn: one stop may follow.
+  if (closed) return previous.type === "pilot_closed" && !stopped ? ["stop"] : [];
   switch (previous.type) {
     case "pilot_opened":
       return ["developer_ready", "stop"];
@@ -74,6 +76,7 @@ function allowedNext(previous) {
     case "result_returned":
       return ["requester_decision", "stop"];
     case "requester_decision":
+      return ["pilot_closed", "stop"];
     case "stop":
       return ["pilot_closed"];
     default:
@@ -83,15 +86,15 @@ function allowedNext(previous) {
 
 export const CHECKS = [
   ["L01", "Bundle format and source issue are valid"],
-  ["L02", "Every MEKU record from a roster account parses and matches its schema"],
+  ["L02", "Records count only when a roster comment is exactly one valid record; every other roster comment is listed"],
   ["L03", "All records carry one pilot id; synthetic data is never accepted as a real pilot"],
   ["L04", "Records follow the protocol order with contiguous seq numbers"],
-  ["L05", "Record comments were never edited"],
+  ["L05", "Record comments were never edited, and no comment seen in an earlier export has disappeared"],
   ["L06", "GitHub server timestamps strictly increase with seq"],
   ["L07", "Record-like comments from accounts outside the roster are ignored"],
   ["R01", "pilot_opened is posted by the expected MEKU operator account"],
-  ["R02", "Every record is posted by the account that holds its role"],
-  ["R03", "Developer, operator and human are three different accounts"],
+  ["R02", "Every counted record is posted by the account that holds its role"],
+  ["R03", "Developer, operator and human are three different accounts, each login used by one account"],
   ["R04", "The reviewer is attested, not proven, not to be the key issuer"],
   ["Q01", "The developer's key could submit requests (meku_request_human listed by meku-human-cloud)"],
   ["Q02", "The request is exactly the protocol template for this code and ledger"],
@@ -108,7 +111,7 @@ export const CHECKS = [
   ["E01", "The evidence comment shows exactly one image, and it is a GitHub attachment"],
   ["E02", "The attachment is in the bundle and its SHA-256 matches the developer's decision"],
   ["E03", "The file is a PNG or JPEG of usable size"],
-  ["E04", "The file carries only pixel and colour data, plus at most a screenshot's size note: no EXIF, GPS or other metadata"],
+  ["E04", "The evidence and every other image a participant posted carry only pixel and colour data, plus at most a screenshot's size note"],
   ["D01", "MEKU returned the result after the evidence it refers to"],
   ["D02", "The developer's decision commits to the exact ledger through seq 9"],
   ["D03", "An ACCEPTED decision has every developer check true and lands within 168 hours"],
@@ -117,7 +120,10 @@ export const CHECKS = [
   ["C02", "No record involves payment"],
 ];
 
-export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator = "mekusimeku", expectRepo = "mekusimeku/meku-si", allowSynthetic = false, provenance = null } = {}) {
+export function verifyBundle(
+  bundle,
+  { loadEvidence = () => null, expectOperator = "mekusimeku", expectRepo = "mekusimeku/meku-si", allowSynthetic = false, provenance = null, earlierExports = [] } = {},
+) {
   const results = new Map(CHECKS.map(([id, title]) => [id, { id, title, status: "NOT_REACHED", details: [] }]));
   const fail = (id, detail) => {
     const r = results.get(id);
@@ -138,7 +144,8 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
   const manual = [];
   const verifications = [];
   const chain = []; // accepted records in seq order: { record, comment }
-  const humanWords = []; // everything the human wrote besides records, for manual check M05
+  const uncounted = []; // every roster comment that is not a counted record, in full (M05, M06)
+  const images = []; // every image a participant posted besides the evidence (E04, M03)
   let pilotId = null;
   let protocolUrl = null;
   let issueUrl = null;
@@ -205,25 +212,27 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       return null;
     };
 
-    // ---- Classify every record-bearing comment.
+    // ---- Classify every record-bearing comment. Only a comment that is exactly one valid record,
+    // by the account that holds its role, can count. Every other comment by a roster account is
+    // listed in full afterwards, for a person to read (M05 for the human, M06 for the others).
     const sequenced = [];
-    const perComment = new Map();
-    for (const f of found) perComment.set(f.comment, (perComment.get(f.comment) ?? 0) + 1);
+    const reasons = new Map(); // comment -> why its record was not counted
     for (const f of found) {
       const role = roleOf(f.comment.author);
-      if (f.error || perComment.get(f.comment) > 1) {
-        if (role) fail("L02", `${f.comment.html_url ?? f.comment.id}: ${f.error ?? "more than one record in one comment"}`);
-        else warn("L07", `ignored malformed record-like comment by ${f.comment.author}`);
+      if (f.error) {
+        if (role) reasons.set(f.comment, f.error);
+        else warn("L07", `ignored a record-like comment by ${f.comment.author}: ${f.error}`);
         continue;
       }
       if (f !== opening && f.record?.type === "pilot_opened") {
-        warn("L07", `ignored another pilot_opened posted by ${f.comment.author}`);
+        if (role) reasons.set(f.comment, "a second pilot_opened");
+        else warn("L07", `ignored another pilot_opened posted by ${f.comment.author}`);
         continue;
       }
       const record = f.record;
       if (record.type === "independent_verification") {
         const problems = recordProblems(record);
-        if (role) warn("L07", `independent_verification by roster account ${f.comment.author} ignored (not independent)`);
+        if (role) reasons.set(f.comment, "an independent_verification by a participant, which is not independent");
         else if (problems.length) warn("L07", `independent_verification by ${f.comment.author} ignored: ${problems[0]}`);
         else verifications.push({ author: f.comment.author, created_at: f.comment.created_at, pilot_id: record.pilot_id, verdict: record.verdict, ledger_digest: record.ledger_digest, tool: record.tool, manual_checks: record.manual_checks });
         continue;
@@ -232,19 +241,22 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
         warn("L07", `ignored ${typeof record.type === "string" ? record.type : "record"} posted by non-roster account ${f.comment.author}`);
         continue;
       }
-      if (record.role !== role) fail("R02", `seq ${record.seq} ${record.type} claims role ${record.role} but ${f.comment.author} is the ${role}`);
-      sequenced.push({ record, comment: f.comment, problems: recordProblems(record) });
+      if (record.role !== role) {
+        reasons.set(f.comment, `claims role ${record.role}, but ${f.comment.author} is the ${role}`);
+        warn("R02", `${f.comment.html_url ?? f.comment.id}: a ${record.type} record claiming role ${record.role} posted by the ${role} is not counted`);
+        continue;
+      }
+      const problems = recordProblems(record);
+      if (problems.length) {
+        reasons.set(f.comment, problems.join("; "));
+        continue;
+      }
+      sequenced.push({ record, comment: f.comment, image: f.image ?? null });
     }
-    for (const { record, problems } of sequenced) if (problems.length) fail("L02", `seq ${record.seq} ${record.type}: ${problems.join("; ")}`);
-    const withRecords = new Set(found.map((f) => f.comment));
-    for (const comment of ordered)
-      if (roleOf(comment.author) && hidesText(comment.body))
-        warn("L02", `a comment by the ${roleOf(comment.author)} at ${comment.created_at} hides text in an HTML comment; read the raw comment (GitHub's "..." menu, Edit, without saving)`);
-    for (const comment of ordered)
-      if (roleOf(comment.author) && !withRecords.has(comment) && comment.body.includes(PROTOCOL))
-        warn("L02", `a comment by the ${roleOf(comment.author)} at ${comment.created_at} mentions ${PROTOCOL} but holds no record the verifier can read (paste the block as the whole comment, or between \`\`\`json fences)`);
-    if (results.get("L02").status !== "FAIL") pass("L02", `${sequenced.length} records`);
-    if (results.get("R02").status !== "FAIL") pass("R02");
+    for (const [comment, reason] of reasons)
+      warn("L02", `a record by the ${roleOf(comment.author)} at ${comment.created_at} is not counted: ${reason}`);
+    if (results.get("L02").status === "NOT_REACHED") pass("L02", `${sequenced.length} records`);
+    if (results.get("R02").status === "NOT_REACHED") pass("R02");
     if (results.get("L07").status === "NOT_REACHED") pass("L07", "none found");
 
     // ---- L03 / L04 / L05 / L06: identity, order, edits, timestamps.
@@ -254,23 +266,23 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
     let previous = null;
     for (const entry of sequenced) {
       const { record, comment } = entry;
-      const last = chain.at(-1);
-      // An exact repeat of the previous record by the same account (a double post) adds nothing.
-      if (last && sameLogin(last.comment.author, comment.author) && canon(last.record) !== null && canon(last.record) === canon(record)) {
-        warn("L04", `seq ${record.seq} ${record.type} was posted twice; the repeat is ignored`);
+      // An exact repeat of an earlier record by the same account adds nothing. A different
+      // record under a seq already used is a contradiction, and fails below.
+      const repeat = chain.find((e) => sameLogin(e.comment.author, comment.author) && canon(e.record) !== null && canon(e.record) === canon(record));
+      if (repeat) {
+        warn("L04", `seq ${record.seq} ${record.type} was posted again at ${comment.created_at}; the repeat is ignored`);
+        reasons.set(comment, `an exact repeat of seq ${record.seq}`);
         continue;
       }
-      if (previous?.type === "pilot_closed") {
-        fail("L04", `seq ${record.seq} ${record.type} appears after pilot_closed`);
-        break;
-      }
-      const allowed = allowedNext(previous);
+      const closed = chain.some((e) => e.record.type === "pilot_closed");
+      const stopped = chain.some((e) => e.record.type === "stop");
+      const allowed = allowedNext(previous, { closed, stopped });
       if (record.seq !== chain.length) {
         fail("L04", `expected seq ${chain.length}, found seq ${record.seq} (${record.type})`);
         break;
       }
       if (!allowed.includes(record.type)) {
-        fail("L04", `seq ${record.seq}: ${record.type} cannot follow ${previous?.type ?? "the start"} (allowed: ${allowed.join(", ")})`);
+        fail("L04", `seq ${record.seq}: ${record.type} cannot follow ${previous?.type ?? "the start"} (allowed: ${allowed.join(", ") || "nothing"})`);
         break;
       }
       chain.push(entry);
@@ -280,7 +292,19 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
 
     for (const { record, comment } of chain)
       if (comment.updated_at !== comment.created_at) fail("L05", `seq ${record.seq} comment was edited (${comment.created_at} -> ${comment.updated_at}); post a stop or correction instead`);
-    if (results.get("L05").status !== "FAIL" && chain.length) pass("L05");
+    // GitHub's API does not return deleted comments. An earlier export, made by anyone during
+    // the pilot, shows whether a participant's comment has since disappeared or changed.
+    const now = new Map(ordered.map((c) => [String(c.id), c]));
+    for (const earlier of earlierExports) {
+      for (const old of Array.isArray(earlier?.comments) ? earlier.comments : []) {
+        if (!roleOf(old?.author)) continue;
+        const current = now.get(String(old.id));
+        if (!current) fail("L05", `a comment by the ${roleOf(old.author)} from ${old.created_at}, present in an export of ${earlier.source?.exported_at ?? "unknown time"}, is gone now`);
+        else if (current.body !== old.body || current.updated_at !== old.updated_at)
+          fail("L05", `a comment by the ${roleOf(old.author)} from ${old.created_at} changed after an export of ${earlier.source?.exported_at ?? "unknown time"}`);
+      }
+    }
+    if (results.get("L05").status !== "FAIL" && chain.length) pass("L05", earlierExports.length ? `compared with ${earlierExports.length} earlier export(s)` : undefined);
 
     for (let i = 1; i < chain.length; i += 1)
       if (Date.parse(chain[i].comment.created_at) <= Date.parse(chain[i - 1].comment.created_at)) fail("L06", `seq ${i} is not later than seq ${i - 1}`);
@@ -296,7 +320,17 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
     // ---- R03 / R04
     const logins = [roster.operator, roster.developer, humanLogin].filter((l) => typeof l === "string").map((l) => l.toLowerCase());
     if (new Set(logins).size !== logins.length) fail("R03", `accounts are not distinct: ${logins.join(", ")}`);
-    else if (logins.length === 3) pass("R03", logins.join(", "));
+    // Roles are matched by login. A login that belongs to two numeric accounts was given up and
+    // taken by someone else; an account that changed login was renamed.
+    for (const login of logins) {
+      const ids = new Set(ordered.filter((c) => sameLogin(c.author, login) && c.user_id != null).map((c) => String(c.user_id)));
+      if (ids.size > 1) fail("R03", `the login ${login} was used by ${ids.size} different GitHub accounts in this ledger`);
+      for (const id of ids) {
+        const other = ordered.find((c) => String(c.user_id) === id && c.author && !sameLogin(c.author, login));
+        if (other) warn("R03", `the account behind ${login} also posted as ${other.author}: it was renamed during the pilot`);
+      }
+    }
+    if (results.get("R03").status === "NOT_REACHED" && logins.length === 3) pass("R03", logins.join(", "));
     if (R.request_reviewed) pass("R04", `attested by the operator; reviewer role ${str(R.request_reviewed.record.reviewer_role)}; MEKU's database does not enforce it yet`);
 
     // ---- Request checks
@@ -401,41 +435,49 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       else if (hours > EVIDENCE_HOURS_AFTER_REVEAL) fail("H04", `evidence came ${hours.toFixed(1)} h after the reveal (limit ${EVIDENCE_HOURS_AFTER_REVEAL} h)`);
       else pass("H04", `${hours.toFixed(2)} h after the reveal`);
     }
-    // The human's own words decide over everything else, in any language. A comment that says
-    // only STOP (or a stop sign) needs a stop record. An edited comment by the human could have
-    // said STOP before, so it fails. Anything else they wrote goes to a person (manual check M05).
+    // ---- Everything a participant wrote that is not a counted record is listed in full. The
+    // human's words decide over everything else: a STOP needs a stop record, and an edited
+    // comment by the human might have said STOP, so it needs one too. Anything else they wrote
+    // goes to a person (M05), as do the other participants' extra comments (M06).
+    const counted = new Set(chain.map((e) => e.comment));
+    for (const comment of ordered) {
+      const role = roleOf(comment.author);
+      if (!role || counted.has(comment)) continue;
+      uncounted.push({
+        role,
+        comment_id: comment.id ?? null,
+        html_url: comment.html_url ?? null,
+        created_at: comment.created_at,
+        edited: comment.updated_at !== comment.created_at,
+        reason: reasons.get(comment) ?? "not a record",
+        body: String(comment.body ?? ""),
+      });
+    }
+    const stopCovers = R.stop ? ` is covered by the stop record at seq ${R.stop.record.seq}` : null;
     if (humanLogin) {
       for (const comment of ordered) {
         if (!sameLogin(comment.author, humanLogin)) continue;
-        if (comment.updated_at !== comment.created_at)
-          fail("H05", `a comment by the human at ${comment.created_at} was edited; its earlier text may have withdrawn consent, so the cycle cannot pass`);
-        const words = freeTextOf(comment.body);
-        if (!words) continue;
-        if (isStopWord(words)) {
-          if (R.stop) pass("H05", `the human's STOP at ${comment.created_at} is matched by the stop record at seq ${R.stop.record.seq}`);
-          else fail("H05", `the human wrote "${words.slice(0, 40)}" at ${comment.created_at}, but the ledger has no stop record`);
-        } else {
-          humanWords.push({ comment_id: comment.id ?? null, created_at: comment.created_at, text: words.slice(0, 500) });
-          warn("H05", `the human wrote at ${comment.created_at}: "${words.slice(0, 120)}" (read it: manual check M05)`);
+        if (comment.updated_at !== comment.created_at) {
+          if (stopCovers) pass("H05", `an edited comment by the human at ${comment.created_at}${stopCovers}`);
+          else fail("H05", `a comment by the human at ${comment.created_at} was edited; its first version may have withdrawn consent, so the cycle cannot pass unless a stop is recorded`);
         }
+        if (counted.has(comment)) continue;
+        if (isStopWord(comment.body) || isStopWord(wordsBesideRecord(comment.body))) {
+          if (stopCovers) pass("H05", `the human's STOP at ${comment.created_at}${stopCovers}`);
+          else fail("H05", `the human wrote STOP at ${comment.created_at}, but the ledger has no stop record`);
+        } else warn("H05", `the human posted a comment at ${comment.created_at} that is not a counted record; read all of it (manual check M05)`);
       }
-      if (results.get("H05").status === "NOT_REACHED" && R.task_offered) pass("H05", "the human posted only protocol records");
+      if (results.get("H05").status === "NOT_REACHED" && R.task_offered) pass("H05", "the human posted only counted records");
     }
 
     // ---- Evidence
     if (R.evidence_submitted) {
-      // Judged on the raw comment, so nothing hidden or encoded can add a second image.
-      const raw = R.evidence_submitted.comment.body;
-      const urls = [...new Set(raw.match(/https?:\/\/[^\s<>"'()[\]]+/gi) ?? [])];
-      const attachments = extractAttachmentUrls(raw);
-      const images = imageReferences(raw);
-      if (raw.includes("<!--")) fail("E01", "the evidence comment contains an HTML comment; it must hold only the record and one image");
-      else if (/&(?:#|[A-Za-z]+;)/.test(raw)) fail("E01", "the evidence comment contains HTML entities; it must hold only the record and one image");
-      else if (/^[ \t]*>/m.test(raw)) fail("E01", "the evidence comment contains quoted lines; it must hold only the record and one image");
-      else if (images.length !== 1 || urls.length !== 1 || attachments.length !== 1)
-        fail("E01", `the comment holds ${images.length} image(s) and ${urls.length} link(s), ${attachments.length} of them GitHub attachments; exactly one attachment image and nothing else is required`);
+      // The grammar already allows only the record and one image in GitHub's own markup.
+      const urls = extractAllUrls(R.evidence_submitted.comment.body);
+      if (!R.evidence_submitted.image) fail("E01", "the evidence comment holds no GitHub image attachment");
+      else if (urls.length !== 1) fail("E01", `the evidence comment holds ${urls.length} links; only the one image is allowed`);
       else {
-        evidenceUrl = attachments[0];
+        evidenceUrl = R.evidence_submitted.image;
         pass("E01", evidenceUrl);
       }
     }
@@ -455,9 +497,35 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
           else (f.level === "FAIL" ? fail : warn)("E04", f.detail);
         }
         if (results.get("E03").status !== "FAIL") pass("E03", `${scan.mediaType} ${scan.width}x${scan.height}, ${bytes.length} bytes`);
-        if (results.get("E04").status === "NOT_REACHED") pass("E04", "pixel and colour data only");
       }
     }
+    // Every other image a participant posted is checked the same way, and listed for M03: a
+    // photo with a location in a side comment would leak as surely as one in the evidence.
+    const files = Array.isArray(bundle.evidence_files) ? bundle.evidence_files : [];
+    for (const comment of ordered) {
+      const role = roleOf(comment.author);
+      if (!role) continue;
+      for (const url of extractAttachmentUrls(comment.body)) {
+        if (comment === R.evidence_submitted?.comment && url === evidenceUrl) continue;
+        const entry = files.find((e) => String(e?.comment_id) === String(comment.id) && typeof e?.url === "string" && e.url.toLowerCase() === url.toLowerCase());
+        const bytes = entry?.file ? loadEvidence(entry.file) : null;
+        const where = `an image posted by the ${role} at ${comment.created_at}`;
+        if (!bytes) {
+          warn("E04", `${where} is not in the bundle, so it was not checked; look at it yourself (M03)`);
+          images.push({ role, url, created_at: comment.created_at, checked: false });
+          continue;
+        }
+        const found = scanImage(bytes).findings.filter((f) => f.level !== "PASS");
+        for (const f of found) (f.level === "FAIL" && !SHAPE_FINDINGS.has(f.code) ? fail : warn)("E04", `${where}: ${f.detail}`);
+        images.push({ role, url, created_at: comment.created_at, checked: true, sha256: sha256Hex(bytes), findings: found.map((f) => `${f.level} ${f.code}`) });
+      }
+      for (const ref of externalImages(comment.body)) {
+        warn("E04", `an image from outside GitHub posted by the ${role} at ${comment.created_at} cannot be checked; look at it yourself (M03)`);
+        images.push({ role, url: ref, created_at: comment.created_at, checked: false });
+      }
+    }
+    if (evidenceUrl && results.get("E04").status === "NOT_REACHED" && results.get("E02").status !== "FAIL" && scan)
+      pass("E04", images.length ? `evidence and ${images.length} other image(s): pixel and colour data only` : "pixel and colour data only");
 
     // ---- Result, decision, closure
     if (R.result_returned) {
@@ -491,7 +559,8 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
         else pass("D04");
       }
     }
-    const outcomeWanted = R.requester_decision ? "completed" : R.stop ? "stopped" : R.request_reviewed?.record.decision === "rejected" ? "rejected_by_review" : null;
+    const stopBeforeClose = R.stop && (!R.pilot_closed || R.stop.record.seq < R.pilot_closed.record.seq);
+    const outcomeWanted = stopBeforeClose ? "stopped" : R.requester_decision ? "completed" : R.request_reviewed?.record.decision === "rejected" ? "rejected_by_review" : null;
     if (R.pilot_closed) {
       if (R.pilot_closed.record.outcome !== outcomeWanted) fail("C01", `outcome ${R.pilot_closed.record.outcome} should be ${outcomeWanted}`);
       else pass("C01", `outcome ${outcomeWanted}; key revoked (attested)`);
@@ -507,15 +576,21 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       manual.push(
         { id: "M01", check: `The photo shows the code ${code} followed by ${suffix}, written by hand (or physically formed), and it is legible` },
         { id: "M02", check: `The photo shows a ${str(object).toLowerCase()} next to the paper` },
-        { id: "M03", check: "No person, face, screen, document, address, window view or other personal data is visible" },
+        { id: "M03", check: `No person, face, screen, document, address, window view or other personal data is visible in the evidence${images.length ? ` or in the ${images.length} other image(s) listed above` : ""}` },
         { id: "M04", check: "It looks like a real paper-and-object arrangement, not a picture of a screen or a composite" },
       );
     }
+    const humanExtra = uncounted.filter((u) => u.role === "human").length;
+    const otherExtra = uncounted.length - humanExtra;
     if (humanLogin)
       manual.push({
         id: "M05",
-        check: `Read everything the human wrote in the ledger (${humanWords.length} comment(s) besides records, listed above): none asks to stop or withdraws consent, in any language`,
+        check: `Read every comment by the human that is not a counted record (${humanExtra}, printed in full above): none asks to stop or withdraws consent, in any language`,
       });
+    manual.push({
+      id: "M06",
+      check: `Read every other participant comment that is not a counted record (${otherExtra}, printed in full above): none contradicts the counted records`,
+    });
   }
 
   function finish() {
@@ -557,7 +632,8 @@ export function verifyBundle(bundle, { loadEvidence = () => null, expectOperator
       evidence: evidenceUrl
         ? { url: evidenceUrl, sha256: evidenceSha, media_type: scan?.mediaType ?? null, width: scan?.width ?? null, height: scan?.height ?? null, findings: scan?.findings ?? [] }
         : null,
-      human_words: humanWords,
+      uncounted_comments: uncounted,
+      other_images: images,
       comments_in_order: chain.map(({ record, comment }) => ({ seq: record.seq, type: record.type, comment_id: comment.id, author: comment.author, created_at: comment.created_at, html_url: comment.html_url ?? null })),
       records_in_order: records,
     };
@@ -580,10 +656,19 @@ export function formatReport(result) {
     lines.push(`${c.status.padEnd(11)} ${c.id}  ${c.title}`);
     for (const d of c.details) lines.push(`             - ${d}`);
   }
-  if (result.human_words?.length) {
+  if (result.uncounted_comments?.length) {
     lines.push("");
-    lines.push("Everything the human wrote besides records (read it for M05):");
-    for (const w of result.human_words) lines.push(`  ${w.created_at}: ${w.text}`);
+    lines.push("Participant comments that are not counted records, in full (read every one for M05 and M06):");
+    for (const u of result.uncounted_comments) {
+      lines.push(`  --- the ${u.role} at ${u.created_at}${u.edited ? " (EDITED)" : ""}: ${u.html_url ?? `comment ${u.comment_id}`} (${u.reason})`);
+      for (const line of u.body.replace(/\r\n?/g, "\n").split("\n")) lines.push(`  | ${line}`);
+    }
+  }
+  if (result.other_images?.length) {
+    lines.push("");
+    lines.push("Other images participants posted (look at every one for M03):");
+    for (const i of result.other_images)
+      lines.push(`  the ${i.role} at ${i.created_at}: ${i.url} ${i.checked ? `(checked: ${i.findings.length ? i.findings.join(", ") : "no metadata"})` : "(NOT CHECKED)"}`);
   }
   if (result.manual.length) {
     lines.push("");
@@ -603,8 +688,10 @@ export function formatReport(result) {
   const note = result.synthetic
     ? " [SYNTHETIC TEST DATA - NOT EVIDENCE OF ANY REAL WORK CYCLE]"
     : result.verdict === "PASS"
-      ? " (automated checks; confirm M01-M05 yourself before calling the cycle verified)"
+      ? " (automated checks; confirm M01-M06 yourself before calling the cycle verified)"
       : "";
+  if (result.uncounted_comments?.length)
+    lines.push(`READ FIRST: ${result.uncounted_comments.length} participant comment(s) printed above must be read (M05, M06) before anyone relies on this verdict.`);
   lines.push(`VERDICT: ${result.verdict}${note}`);
   // Everything printed passes through displaySafe, so record text cannot rewrite the terminal.
   return lines.map((line) => displaySafe(line)).join("\n");
@@ -651,6 +738,9 @@ async function main(argv) {
     return value;
   };
   const jsonOut = take("--json");
+  // Earlier exports (for example the developer's, made after each step) show deletions.
+  const previousPaths = [];
+  while (args.includes("--previous")) previousPaths.push(take("--previous"));
   const expectOperator = take("--expect-operator") ?? "mekusimeku";
   const fromIssue = take("--from-issue");
   const outDir = take("--out");
@@ -660,8 +750,9 @@ async function main(argv) {
   const positional = args.filter((a) => a !== "--allow-synthetic");
   if (usageError || (fromIssue ? positional.length !== 0 : positional.length !== 1) || positional.some((a) => a.startsWith("--"))) {
     console.error(
-      "Usage: node tools/pow/verify.mjs --from-issue <ledger-issue-url> [--out dir] [--json result.json]\n" +
-        "   or: node tools/pow/verify.mjs <bundle.json> [--json result.json] [--expect-operator login] [--expect-repo owner/repo] [--allow-synthetic]",
+      "Usage: node tools/pow/verify.mjs --from-issue <ledger-issue-url> [--out dir] [--json result.json] [--previous earlier/bundle.json ...]\n" +
+        "   or: node tools/pow/verify.mjs <bundle.json> [--json result.json] [--previous earlier/bundle.json ...] [--expect-operator login] [--expect-repo owner/repo] [--allow-synthetic]\n" +
+        "Exit codes: 0 PASS from a live export, 5 PASS on a supplied file only, 1 FAIL, 2 other verdicts, 3 usage error, 4 could not complete",
     );
     return 3;
   }
@@ -675,21 +766,32 @@ async function main(argv) {
       provenance = { exported_by_this_run: true, exported_at: exported.source.exported_at, exporter: exported.source.exporter, folder: dir };
     } catch (error) {
       console.error(`Cannot export the ledger: ${error.message}`);
-      return 1;
+      return 4;
     }
     bundlePath = join(dir, "bundle.json");
   }
   let loaded;
+  const earlierExports = [];
   try {
     loaded = loadBundleFile(bundlePath);
+    for (const path of previousPaths) earlierExports.push(loadBundleFile(path).bundle);
   } catch (error) {
     console.error(`Cannot read bundle: ${error.message}`);
-    return 3;
+    return 4;
   }
-  const result = verifyBundle(loaded.bundle, { loadEvidence: loaded.loadEvidence, expectOperator, expectRepo, allowSynthetic, provenance });
+  const result = verifyBundle(loaded.bundle, { loadEvidence: loaded.loadEvidence, expectOperator, expectRepo, allowSynthetic, provenance, earlierExports });
+  if (jsonOut) {
+    try {
+      writeFileSync(jsonOut, `${JSON.stringify(result, null, 2)}\n`);
+    } catch (error) {
+      console.error(`Cannot write ${jsonOut}: ${error.message}. No verdict is given.`);
+      return 4;
+    }
+  }
   console.log(formatReport(result));
-  if (jsonOut) writeFileSync(jsonOut, `${JSON.stringify(result, null, 2)}\n`);
-  return result.verdict === "PASS" ? 0 : result.verdict === "FAIL" ? 1 : 2;
+  // A PASS counts only from a live export; on a supplied file it says only that the file passes.
+  if (result.verdict === "PASS") return provenance?.exported_by_this_run ? 0 : 5;
+  return result.verdict === "FAIL" ? 1 : 2;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exitCode = await main(process.argv.slice(2));

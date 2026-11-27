@@ -9,10 +9,13 @@
 import { mkdirSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BUNDLE_FORMAT, MAX_EVIDENCE_BYTES, extractAttachmentUrls, extractRecords, isLedgerUrl, rosterFromComments, sameLogin, sha256Hex } from "./lib.mjs";
+import { BUNDLE_FORMAT, MAX_EVIDENCE_BYTES, extractAttachmentUrls, isLedgerUrl, rosterFromComments, sameLogin, sha256Hex } from "./lib.mjs";
 
-export const EXPORTER_VERSION = "meku.pow-export/1";
-const MAX_PAGES = 10;
+export const EXPORTER_VERSION = "meku.pow-export/2";
+// Up to 10,000 comments, so that a crowd of outside comments cannot make a ledger unexportable
+// (beyond 60 pages GitHub's anonymous rate limit needs a GITHUB_TOKEN).
+const MAX_PAGES = 100;
+const MAX_ATTACHMENTS = 20;
 
 const apiHeaders = (token) => ({
   Accept: "application/vnd.github+json",
@@ -78,6 +81,13 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
   const { owner, repo, number } = parseIssueUrl(issueUrl);
   if (existsSync(outDir) && readdirSync(outDir).length) throw new Error(`${outDir} is not empty`);
   const headers = apiHeaders(token);
+  // The issue itself: never a pull request, and GitHub's own spelling of its address, so that a
+  // verifier who types different capitals still checks the request text against the same URL.
+  const issueResponse = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`, { headers, signal: AbortSignal.timeout(30_000) });
+  if (!issueResponse.ok) throw new Error(`GitHub API answered HTTP ${issueResponse.status} for the issue`);
+  const issue = await issueResponse.json();
+  if (issue?.pull_request) throw new Error("that number is a pull request, not an issue; a ledger is an issue");
+  const canonicalUrl = typeof issue?.html_url === "string" && isLedgerUrl(issue.html_url) ? issue.html_url : issueUrl;
   const comments = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}/comments?per_page=100&page=${page}`;
@@ -97,20 +107,24 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
         body: c.body ?? "",
       });
     if (batch.length < 100) break;
-    if (page === MAX_PAGES) throw new Error("more than 1000 comments; refusing a partial export");
+    if (page === MAX_PAGES) throw new Error(`more than ${MAX_PAGES * 100} comments; refusing a partial export`);
   }
 
   mkdirSync(join(outDir, "evidence"), { recursive: true });
   const evidenceFiles = [];
-  // Only the roster human's evidence comment is downloaded, so strangers cannot make the
-  // exporter fetch their files.
-  const { human } = rosterFromComments(comments, { expectOperator });
+  // Every attachment in a participant's comment is downloaded, so that the verifier can check
+  // each image for metadata, not only the evidence. A stranger's files are never fetched.
+  const roster = rosterFromComments(comments, { expectOperator });
+  const participants = [roster.operator, roster.developer, roster.human].filter((login) => typeof login === "string");
   for (const comment of comments) {
-    const isEvidence = extractRecords(comment.body).some((f) => f.record?.type === "evidence_submitted");
-    if (!isEvidence || !human || !sameLogin(comment.author, human)) continue;
+    if (!participants.some((login) => sameLogin(comment.author, login))) continue;
     for (const url of extractAttachmentUrls(comment.body)) {
+      if (evidenceFiles.filter((e) => e.file).length >= MAX_ATTACHMENTS) {
+        evidenceFiles.push({ comment_id: comment.id, url, file: null, error: `more than ${MAX_ATTACHMENTS} attachments; not downloaded` });
+        continue;
+      }
       // Attachment downloads never carry the API token. A failed download is recorded, not
-      // fatal: the verifier then reports the evidence as missing (E02).
+      // fatal: the verifier then reports the file as not checked.
       try {
         const { bytes, contentType } = await downloadAttachment(url, { fetchImpl });
         const sha256 = sha256Hex(bytes);
@@ -125,7 +139,7 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
   }
   const bundle = {
     format: BUNDLE_FORMAT,
-    source: { repo: `${owner}/${repo}`, issue_number: number, issue_url: issueUrl, exported_at: now().toISOString(), exporter: EXPORTER_VERSION },
+    source: { repo: `${owner}/${repo}`, issue_number: number, issue_url: canonicalUrl, exported_at: now().toISOString(), exporter: EXPORTER_VERSION },
     comments,
     evidence_files: evidenceFiles,
   };
@@ -141,7 +155,7 @@ async function main(argv) {
   }
   try {
     const bundle = await exportLedger({ issueUrl, outDir, token: process.env.GITHUB_TOKEN || undefined });
-    console.log(`Exported ${bundle.comments.length} comments and ${bundle.evidence_files.length} evidence file(s) to ${outDir}/`);
+    console.log(`Exported ${bundle.comments.length} comments and ${bundle.evidence_files.length} attachment(s) to ${outDir}/`);
     console.log(`Next: node tools/pow/verify.mjs ${outDir}/bundle.json`);
     return 0;
   } catch (error) {

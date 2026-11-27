@@ -19,19 +19,17 @@ import {
   displaySafe,
   extractAttachmentUrls,
   extractRecords,
-  freeTextOf,
-  hidesText,
-  imageReferences,
   isGithubLogin,
   isSyntheticPilot,
   ledgerDigest,
+  readRecordComment,
   recordJsonSchema,
   recordProblems,
   requestIdCommitment,
   scanImage,
   sha256Hex,
 } from "./lib.mjs";
-import { recordComment } from "./request.mjs";
+import { postableComment } from "./request.mjs";
 import { loadBundleFile, verifyBundle } from "./verify.mjs";
 
 const envelope = (pilotId, seq, type, role) => ({ pow: PROTOCOL, pilot_id: pilotId, ...(seq === null ? {} : { seq }), type, role });
@@ -193,25 +191,18 @@ export function commentReport(comment) {
   const edited = comment.updated_at !== comment.created_at;
   lines.push(`Comment by ${comment.author} at ${comment.created_at}${edited ? " (edited)" : ""}`);
   if (edited) problems.push("the comment was edited; in a ledger an edited record fails (L05)");
-  const found = extractRecords(body);
-  if (found.length === 0) problems.push("the verifier finds no meku.pow/1 record in this comment");
-  if (found.length > 1) problems.push("the comment holds more than one record");
-  for (const f of found) {
-    if (f.error) {
-      problems.push(f.error);
-      if (/[\u201C\u201D\u201E\u201F\u2033]/.test(body))
-        problems.push("it contains curly quotes, which an iPhone types when Smart Punctuation is on: turn it off and post the block again");
-      continue;
-    }
-    const p = recordProblems(f.record);
-    lines.push(`Record: seq ${f.record.seq ?? "-"} ${f.record.type} (${f.record.pilot_id}): ${p.length ? "INVALID" : "valid"}`);
+  const read = readRecordComment(body);
+  if (!read) problems.push("the verifier finds no meku.pow/1 record in this comment");
+  else if (read.problem) {
+    problems.push(`the verifier would not count it: ${read.problem}`);
+    if (/[\u201C\u201D\u201E\u201F\u2033]/.test(body))
+      problems.push("it contains curly quotes, which an iPhone types when Smart Punctuation is on: turn it off and post the block again");
+  } else {
+    const p = recordProblems(read.record);
+    lines.push(`Record: seq ${read.record.seq ?? "-"} ${read.record.type} (${read.record.pilot_id}): ${p.length ? "INVALID" : "valid"}`);
+    if (read.image) lines.push(`Image: ${read.image}`);
     problems.push(...p);
   }
-  if (hidesText(body)) problems.push("the comment hides text in an HTML comment");
-  const words = freeTextOf(body);
-  if (words) lines.push(`Other text: ${words.replace(/\s+/g, " ").slice(0, 200)}`);
-  const images = imageReferences(body).length;
-  if (images) lines.push(`Images: ${images}, of them GitHub attachments: ${extractAttachmentUrls(body).length}`);
   return { ok: problems.length === 0, lines, problems };
 }
 
@@ -225,7 +216,7 @@ const USAGE = `Usage: node tools/pow/record.mjs <command> [options]
   decision   --bundle <bundle.json> --accept|--reject --reason "..." [--code-visible] [--code-matches] [--object-visible] [--object-matches] [--no-personal-data]
   closed     --pilot POW-001 --seq <n> --outcome completed|stopped|rejected_by_review --key-revoked [--note "..."]
   stop       --pilot POW-001 --seq <n> --role developer|operator|human --reason "..."
-  verification --bundle <bundle.json> --tool "<tool and version>" [--code-legible] [--object-matching] [--no-personal-data] [--physical] [--human-did-not-withdraw] [--notes "..."]
+  verification --bundle <bundle.json> --tool "<tool and version>" [--code-legible] [--object-matching] [--no-personal-data] [--physical] [--human-did-not-withdraw] [--other-comments-consistent] [--notes "..."]
   check-image <file | attachment URL | comment link> (the evidence checks E03 and E04, e.g. on a test screenshot before a pilot)
   check-comment <GitHub comment link>              (how the verifier reads one posted record, e.g. one posted from a phone)
   digest     --bundle <bundle.json>                (ledger digest over every record in the bundle)
@@ -256,7 +247,7 @@ async function main(argv) {
     if (value !== "yes" && value !== "no") throw new Error(`--${name} must be yes or no`);
     return value === "yes";
   };
-  const print = (record) => console.log(recordComment(record));
+  const print = (record) => console.log(postableComment(record));
   try {
     switch (command) {
       case "opened":
@@ -311,6 +302,7 @@ async function main(argv) {
           no_personal_data_visible: flag("no-personal-data"),
           physical_arrangement: flag("physical"),
           human_did_not_withdraw: flag("human-did-not-withdraw"),
+          other_comments_consistent: flag("other-comments-consistent"),
         };
         print(verificationRecord({ bundlePath: need("bundle"), tool: need("tool"), manualChecks, notes: opt("notes"), allowSynthetic: flag("allow-synthetic") }));
         return 0;

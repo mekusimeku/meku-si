@@ -1,21 +1,21 @@
 # Operator runbook: MEKU pilot POW-001
 
-For the MEKU operator account `mekusimeku`. Every step works from a phone browser. First do the [founder setup](founder-setup.md): phone test, second reviewer account, developer invitation and pilot key. Each record is a block to copy, with a few values in CAPITALS to replace, and no hashing. Post each block as a **new comment** in the ledger and **never edit it afterwards**. Read the [protocol](protocol.md) first.
+For the MEKU operator account `mekusimeku`. Every step works from a phone browser, except three checks that an agent runs for you: the screenshot dry run, the check before seq 9 and the final verification. First do the [founder setup](founder-setup.md): phone test, second reviewer account, developer invitation and pilot key. Each record is a block to copy, with a few values in CAPITALS to replace, and no hashing. Post each block as a **new comment** in the ledger and **never edit it afterwards**. Read the [protocol](protocol.md) first.
 
 ## Before opening (all non-financial)
 
 1. **Developer.** Choose an independent developer who confirms the four statements in the [developer guide](developer-guide.md#0-check-that-you-are-eligible). MEKU staff, contractors and MEKU's own AI workers cannot take this role.
 2. **Second reviewer.** Pick a MEKU account other than the one that will issue the key: a SEEK reviewer or a second admin. MEKU refuses a review by the account that issued the key, because requests made with a key belong to that account. To add one, see the [founder setup](founder-setup.md#2-second-reviewer-account).
 3. **Human.** Find a consenting adult who is not MEKU staff, not one of MEKU's AI workers and not the developer, and who has a GitHub account (a new pseudonymous one is fine). Send them the [human guide](human-guide.md). Never offer payment.
-4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 5 per minute and 30 per day (the form suggests 20 per day: change it). MEKU counts every call that carries the key, and an MCP host spends 3 calls just to connect. Leave **SEARCH ONLY** and **ENABLE CONCIERGE PROPOSALS** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it. Watching and revoking it: [founder setup](founder-setup.md#3-pilot-key-issue-limit-watch-revoke).
+4. **Pilot key.** Open `meku.farm/admin/agent-keys`. Under **CREATE AGENT KEY**, enter the agent name `POW-001 DEVELOPER_LOGIN`, 5 per minute and 30 per day (the form suggests 20 per day: change it). MEKU counts every call that carries the key, and an MCP host spends 3 calls just to connect. Leave **SEARCH ONLY · EXPIRES IN 30 DAYS · NO REQUEST SUBMISSIONS** and **ENABLE CONCIERGE PROPOSALS FOR THIS KEY** unticked, then press **GENERATE KEY**. The key is shown once: send it to the developer privately, never through GitHub. Request-capable keys never expire, so set yourself a reminder to revoke it. Watching and revoking it: [founder setup](founder-setup.md#3-pilot-key-issue-limit-watch-revoke).
 
-5. **Dry run of the human's screenshot.** Phones and apps differ in what they add to an image, so test the human's exact way of posting before the pilot. Create an issue in `mekusimeku/meku-si` titled **POW-001 dry run: test screenshot** and send the human its link. They post one screenshot of a photo of a blank sheet of paper, as the [human guide](human-guide.md#before-you-start-a-dry-run-of-your-screenshot) describes. Then ask any agent working for you to run this command, which needs no key, on the image's link (press and hold the image, then copy its address):
+5. **Dry run of the human's screenshot.** Phones and apps differ in what they add to an image, so test the human's exact way of posting before the pilot. Create an issue in `mekusimeku/meku-si` titled **POW-001 dry run: test screenshot** and send the human its link. They post one screenshot of a photo of a blank sheet of paper, as the [human guide](human-guide.md#before-you-start-a-dry-run-of-your-screenshot) describes. Anything posted there is public at once, which is why the human posts only a screenshot of a blank page, after checking it for a location. Then copy the link of their comment (press and hold its time), and ask any agent working for you to run this command, which needs no key:
 
    ```sh
-   node tools/pow/record.mjs check-image https://github.com/user-attachments/assets/...
+   node tools/pow/record.mjs check-image https://github.com/mekusimeku/meku-si/issues/N#issuecomment-...
    ```
 
-   It must end with `PASS`. A `WARN` about a screenshot note or a time chunk is fine. If it ends with `FAIL`, do not open the ledger: ask the human to try again without cropping, or from a browser instead of the app, and run the check again. If no way passes, post the findings in the dry-run issue and do not run the pilot with that phone. Close the dry-run issue when done. It is not part of the ledger.
+   It must end with `PASS`. A `WARN` about a screenshot note or a time chunk is fine. If it ends with `FAIL`, do not open the ledger: ask the human to try again without cropping, or from a browser instead of the app, and run the check again. If no way passes, post the findings in the dry-run issue and do not run the pilot with that phone. Also open the dry-run issue in a private browser tab, signed out: the human's comment must be visible there, because GitHub sometimes hides comments from brand-new accounts. Close the dry-run issue when done. It is not part of the ledger.
 
 Nothing in this pilot creates a mission, starts a payment, uses a wallet, or touches MEKU POCKET.
 
@@ -101,7 +101,7 @@ The human posts consent (seq 6). The developer then names the object (seq 7), an
 
 ## seq 9: return the result
 
-First make sure the evidence file carries no metadata. Ask the developer, or any agent working for you, to run `node tools/pow/verify.mjs --from-issue <ledger-url>` and report check **E04**, check **H05** and the list of everything the human wrote besides records. The command needs no key. If H05 failed, or anything the human wrote might mean they want to stop, treat it as a stop: post a stop and close.
+First make sure the evidence file carries no metadata. Ask the developer, or any agent working for you, to run `node tools/pow/verify.mjs --from-issue <ledger-url>` and report check **E04**, check **H05**, and every comment printed under "not counted records, in full" and `READ FIRST`. The command needs no key. If H05 failed, or anything the human wrote might mean they want to stop, treat it as a stop: post a stop and close.
 
 Then open the human's screenshot in seq 8 and look at it.
 
@@ -145,7 +145,7 @@ This is MEKU returning the result to the developer. The developer checks it and 
 
 ## Stopping and timeouts
 
-Anyone may stop. If the human writes STOP (in any language, or 🛑), writes anything else that might mean they want to stop, or tells you so, if a participant has not acted for 48 hours at their step, or if something is wrong, post this with `NEXT` replaced by the next seq number and a short reason. Then close. When in doubt, stop: a stop is a valid outcome, while consent that may have been withdrawn can never be verified.
+Anyone may stop. If the human writes STOP (or 🛑, or the same word in another language), writes anything else that might mean they want to stop, or tells you so, if a participant has not acted for 48 hours at their step, or if something is wrong, post this with `NEXT` replaced by the next seq number and a short reason. Then close. A stop may also follow the developer's decision. After the close, if the human withdraws consent later, post one more stop; nothing follows it. When in doubt, stop: a stop is a valid outcome, while consent that may have been withdrawn can never be verified.
 
 ```json
 {
@@ -163,8 +163,11 @@ Anyone may stop. If the human writes STOP (in any language, or 🛑), writes any
 Anyone, including an agent working for you, can export and check the ledger. Never share the pilot key with them; the command needs none:
 
 ```sh
-node tools/pow/verify.mjs --from-issue https://github.com/mekusimeku/meku-si/issues/N --out pow-ledger --json pow-ledger/verification.json
+node tools/pow/verify.mjs --from-issue https://github.com/mekusimeku/meku-si/issues/N --out pow-ledger --json pow-ledger/verification.json \
+  --previous pow-ledger-6/bundle.json --previous pow-ledger-8/bundle.json
 ```
+
+The `--previous` exports are the developer's, made during the pilot. They show whether any participant comment disappeared or changed afterwards.
 
 Publish the [report](report-template.md) as a pull request that adds `pilots/POW-001/` with the bundle, the evidence file, `verification.json` and the report. The committed bundle is a snapshot for convenience, not the evidence: verifiers start from the live issue. Ask someone outside MEKU, the developer and the human to verify it independently.
 

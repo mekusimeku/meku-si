@@ -65,7 +65,7 @@ $env:MEKU_API_KEY = Read-Host -MaskInput "MEKU key"   # Windows PowerShell 7
 - **Path A, the built-in client.** `tools/pow/request.mjs` is itself a minimal MCP client. It writes exact receipts and prints each record for you.
 - **Path B, your own MCP host.** Claude Code, Cursor, an Agents SDK or MCP Inspector can make the calls. Configure the server URL `https://meku.farm/api/public/mcp` with the header `Authorization: Bearer ${MEKU_API_KEY}`; see the [Claude Code](../../examples/claude-code/README.md) and [Cursor](../../examples/cursor/README.md) examples. After each tool call, save the tool result text **exactly** as MEKU returned it (the JSON in `content[0].text`) and import it with `request.mjs`. Your records then name your host as the client.
 
-Either path produces identical records. The verifier does not care which one you use.
+Both paths produce records of the same form, and the verifier checks them the same way. With Path B, three things differ. The `arguments` in your seq 2 record are the ones the tool gave your host to send; only your host's own log shows what it actually sent. `observed_at` is the time you import the result, unless you pass `--observed-at`. And the saved result text is hashed without its leading and trailing whitespace, so a trailing newline from saving the file does not matter.
 
 ## 5. Connect and post `developer_ready` (seq 1)
 
@@ -76,6 +76,8 @@ node tools/pow/request.mjs check --pilot POW-001 \
   --client-name meku-pow-request --client-version 1.0.0 \
   --agent "Describe your agent, model and runtime" --affirm-independence
 ```
+
+Keep `--agent` to at most 160 characters, without `<!--`, `-->` or three backticks. The tools never print a record the verifier would refuse; they say what to fix instead.
 
 Path A spends one keyed call: initialization goes without the key, and only `tools/list` carries it.
 
@@ -168,7 +170,14 @@ The decision commits to the exact ledger digest over records 0–9, so it can on
 
 ## 11. After the close
 
-When the operator posts `pilot_closed` (seq 11), run `verify.mjs --from-issue` again. The verdict should be `PASS`. You may publish your own account using the [report template](report-template.md). Ask a third person to verify independently, starting from the live issue rather than from a file you send them. They look at the photo and read everything the human wrote (manual checks M01 to M05).
+When the operator posts `pilot_closed` (seq 11), run the verifier again, together with the exports you made during the pilot. They show whether any comment disappeared or changed after you saw it, because MEKU, as the owner of the repository, could delete one:
+
+```sh
+node tools/pow/verify.mjs --from-issue https://github.com/mekusimeku/meku-si/issues/<N> --out pow-ledger-final \
+  --previous pow-ledger-6/bundle.json --previous pow-ledger-8/bundle.json --previous pow-ledger/bundle.json
+```
+
+The verdict should be `PASS`, and the run should exit with 0. Exit 5 means that only a supplied file passed, and 4 that the run could not complete. Keep your exports. You may publish your own account using the [report template](report-template.md). Ask a third person to verify independently, starting from the live issue rather than from a file you send them. They look at the photo and read every comment printed under `READ FIRST` (manual checks M01 to M06).
 
 ## Stopping
 

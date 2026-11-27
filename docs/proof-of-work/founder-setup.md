@@ -13,6 +13,8 @@ Do it in this order:
 
 Wherever a step says "ask an agent", any agent working for you can run the command, for example a Claude session. These commands need no key and change nothing; they only read public GitHub data.
 
+Screen labels below are copied from the MEKU web app's code (`main` at commit `f36d318`, 2026-11-28). If the site shows a different label, it was deployed from an older or newer version: stop and check before going on.
+
 ## 1. Phone test (about 15 minutes)
 
 This checks, before anyone else is involved, that records and screenshots posted from your iPhone are read exactly as posted.
@@ -47,6 +49,12 @@ This checks, before anyone else is involved, that records and screenshots posted
 
    It must end with `PASS`. A `WARN` about a screenshot note or a time chunk is fine. If it says `FAIL`, try the other ways the [human guide](human-guide.md#step-3-do-the-task) mentions: crop the screenshot, then post from the GitHub app instead of Safari. Check each new comment the same way. Post the results in PR #43 either way. They show which way of posting works on an iPhone, and the human's phone is tested the same way later.
 
+**Test C: three things nobody has checked yet (5 minutes).** Each answer decides whether a rule of the pilot works in practice, so post what you see in PR #43:
+
+1. Add a reaction (for example 👍) to your test A comment, then ask an agent to run `check-comment` on it again. It must still say `PASS`. If it now says "edited", reactions change GitHub's edit time, and any outsider could make a record look edited.
+2. On the same test A comment, tap **···**, then **Hide**, and choose a reason. Ask an agent to run `check-comment` on it once more. If it now says "edited", hiding a comment for privacy also counts as an edit. Then unhide it.
+3. Open PR #43 in a private Safari tab, signed out. Both test comments must be visible there. GitHub sometimes hides comments from new accounts; the human's account is tested the same way in their dry run.
+
 Both test comments stay in PR #43. They are not in any ledger, so they never count as pilot records.
 
 ## 2. Second reviewer account
@@ -69,17 +77,17 @@ Replace `REVIEWER_EMAIL` in all three statements. Run them one at a time:
 -- 1. Read only. Expect one row with email_confirmed_at filled in and has_profile = true.
 select u.id, u.email, u.email_confirmed_at, (p.id is not null) as has_profile
   from auth.users u left join public.profiles p on p.id = u.id
- where u.email = 'REVIEWER_EMAIL';
+ where lower(u.email) = lower('REVIEWER_EMAIL');
 
 -- 2. The only write: adds this one account as a SEEK reviewer. Expect exactly 1 row inserted.
 insert into public.seek_reviewers (user_id)
 select u.id from auth.users u join public.profiles p on p.id = u.id
- where u.email = 'REVIEWER_EMAIL' and u.email_confirmed_at is not null;
+ where lower(u.email) = lower('REVIEWER_EMAIL') and u.email_confirmed_at is not null;
 
 -- 3. Read only. Expect one row with is_admin = false.
 select r.user_id, r.created_at, public.has_role(r.user_id, 'admin') as is_admin
   from public.seek_reviewers r join auth.users u on u.id = r.user_id
- where u.email = 'REVIEWER_EMAIL';
+ where lower(u.email) = lower('REVIEWER_EMAIL');
 ```
 
 **Check it on the site.** Sign in as the reviewer at `meku.farm/seek`. The page must show **SEEK REVIEW QUEUE**, probably with "No requests to review."
@@ -94,7 +102,7 @@ select r.user_id, r.created_at, public.has_role(r.user_id, 'admin') as is_admin
 
 ```sql
 delete from public.seek_reviewers r using auth.users u
- where u.id = r.user_id and u.email = 'REVIEWER_EMAIL';
+ where u.id = r.user_id and lower(u.email) = lower('REVIEWER_EMAIL');
 ```
 
 ## 3. Pilot key: issue, limit, watch, revoke

@@ -61,7 +61,7 @@ The developer, operator and human must be three different GitHub accounts. The v
 - **Code.** When the developer prepares the request, their client generates an 8-character code: 40 random bits from the alphabet `0123456789ABCDEFGHJKMNPQRSTVWXYZ`. The alphabet has no I, L, O or U, so handwriting is hard to misread. The code is in the request MEKU stores, so the photo cannot be older than the code.
 - **Object and suffix.** After the human's consent is in the ledger, the developer reveals one object from: spoon, cup, plate, bowl, sock, towel, pen, shoe, and 2 more characters from the same alphabet, to write right after the code. Nobody chooses them. They follow from a secret the developer committed to in the request record and from GitHub's id for the consent comment ([details](records.md#hashes-and-commitments)), and anyone can recompute them. Neither the developer nor the human, acting alone, can know them before the consent comment exists.
 - **What the human does.** Writes the code and the 2 characters by hand on paper, places the named object beside it, and takes one photo showing only the paper and the object on a plain surface. Then they take a screenshot of that photo and post it in the ledger. A screenshot normally carries no location data; the verifier checks the file anyway, and a dry run checks the human's phone first.
-- **Why this task.** It takes under five minutes where the person already is. Nothing needs to be bought or carried, and nobody travels. It reveals no personal data. Neither the developer nor the human can prepare it alone before consent, and anyone can check the result by looking.
+- **Why this task.** It takes under five minutes where the person already is. Nothing needs to be bought or carried, and nobody travels. It is designed to reveal no personal data. Neither the developer nor the human can prepare it alone before consent, and anyone can check the result by looking.
 - **Never asked.** No people, faces, hands with identifying marks, screens, documents, addresses, licence plates or views out of a window. No travel, purchase, private property, money, accounts, or anything unsafe or illegal. The request text is fixed by the protocol; any change makes the verifier fail.
 
 If handwriting is hard for the person, they may form the code from physical items such as cut paper. It must be physical, not shown on a screen.
@@ -85,11 +85,11 @@ Each step is one GitHub comment in the ledger holding one JSON record. The full 
 | 10 | `requester_decision` | Developer | ACCEPTED or REJECTED, with the evidence file's SHA-256 and a digest that commits to records 0 to 9 exactly as they were. |
 | 11 | `pilot_closed` | Operator | Pilot key revoked; outcome recorded. |
 
-**Stopping.** The human may stop at any time with a comment that says only `STOP`, in any language, or only 🛑. That alone blocks a PASS until the operator records a `stop` (check H05), even after the close. The verifier also lists everything else the human writes, and a person must read it (M05): words that withdraw consent in any other way also mean the cycle is not verified. The developer and the operator stop with a `stop` record. After a stop only `pilot_closed` may follow. A stop is a legitimate outcome, never a penalty. If a participant stays silent for 48 hours at their step, the operator posts a stop with the reason "timeout".
+**Stopping.** The human may stop at any time with a comment that says only `STOP`, or only 🛑. The same word in some 30 other languages counts too ([the list](records.md#automated-checks), check H05). That alone blocks a PASS until a `stop` record is posted. The verifier also prints every other comment the human writes, in full, and a person must read it (M05): words that withdraw consent in any other way, in any language, also mean the cycle is not verified. The developer, the operator or the human posts the `stop` record, at any step, also after the developer's decision. Then only `pilot_closed` may follow. After the close, one more `stop` may follow when the human withdraws consent later, and the cycle then ends as `STOPPED`, never `PASS`. A stop is a legitimate outcome, never a penalty. If a participant stays silent for 48 hours at their step, the operator posts a stop with the reason "timeout".
 
 **Time limits.** The evidence must arrive within 48 hours of the object being revealed, and the developer's decision within 168 hours (7 days) of the request record.
 
-**No edits, no deletions, no renames.** No comment is ever edited or deleted. An edited record fails L05, and an edited comment by the human fails H05, because its first version might have said STOP. Participants do not rename their GitHub accounts until the report is published. A mistake is handled with a stop record and, if wanted, a new pilot with a new code.
+**No edits, no deletions, no renames.** No comment is ever edited or deleted. An edited record fails L05. An edited comment by the human might have said STOP first, so it needs a stop record (H05). Participants do not rename their GitHub accounts until the report is published. A posting mistake, such as text around a record, is not counted: post the record again, alone. Anything else is handled with a stop record and, if wanted, a new pilot with a new code.
 
 ## Pass and fail
 
@@ -97,15 +97,16 @@ The cycle is **verified** only when all three are true:
 
 1. The verifier exported the ledger from the live issue themselves: `node tools/pow/verify.mjs --from-issue <ledger-url>`. A bundle file from someone else proves nothing; anyone can write one.
 2. That run prints `VERDICT: PASS`, which requires every one of its 33 automated checks to pass. A `WARN` is reported for review but does not fail the cycle.
-3. At least one verifier who is not the developer, the operator or the human has looked at the photo, read what the human wrote and confirmed the five manual checks below. They post an `independent_verification` comment with the same ledger digest.
+3. At least one verifier who is not the developer, the operator or the human has looked at the photo, read every participant comment the verifier did not count, and confirmed the six manual checks below. They post an `independent_verification` comment with the same ledger digest.
 
 The manual checks:
 
 - **M01** The code, followed by the 2 revealed characters, is written by hand and legible.
 - **M02** The named object is next to the paper.
-- **M03** No person, face, screen, document, address, window view or other personal data is visible.
+- **M03** No person, face, screen, document, address, window view or other personal data is visible, in the photo or in any other image a participant posted.
 - **M04** It is a real paper-and-object arrangement, not a photo of a screen or a composite.
-- **M05** Nothing the human wrote in the ledger asks to stop or withdraws consent, in any language. The verifier lists all of it.
+- **M05** Nothing the human wrote in the ledger asks to stop or withdraws consent, in any language. The verifier prints every comment of theirs that is not a counted record, in full.
+- **M06** No other participant comment that the verifier did not count contradicts the counted records. The verifier prints those in full too.
 
 Any automated `FAIL` means the cycle failed. The other verdicts are `STOPPED`, `REJECTED_BY_REVIEW`, `COMPLETED_REJECTED` (the developer rejected the work) and `INCOMPLETE`. None of them is a failure of safety, and none is a verified cycle. The complete check list is in [records.md](records.md#automated-checks).
 
@@ -116,7 +117,7 @@ It shows that:
 - the developer's records, made with their own tools, show a request in exactly the protocol text submitted with a request-capable MEKU key, stored by MEKU unaltered and later reported as `approved`;
 - an account different from the developer's and MEKU's consented after it was offered the task, and only then posted a photo. The photo shows the request's code with 2 characters and an object that neither the developer nor the human, acting alone, could know before that consent comment existed;
 - MEKU's operator returned that evidence for the same code, the developer accepted it, and MEKU's own check agreed;
-- GitHub's server clocks fix the order of the steps, no record comment was edited, and nothing the human wrote withdrew consent.
+- GitHub's server clocks fix the order of the steps, no record comment was edited, and a person read everything else the human wrote and found no withdrawal of consent.
 
 It does not show:
 
@@ -124,13 +125,14 @@ It does not show:
 - that the calls went through MCP rather than MEKU's REST agent API, which accepts the same key;
 - who the human is, or that the human, the developer and the reviewer are independent of MEKU and of each other, beyond separate accounts and signed statements;
 - that the developer and the human did not coordinate. Acting together, they could delete and repost consent comments until one gives a combination photographed earlier, at 1 chance in 8,192 per attempt;
-- that the photo was not edited, or that nothing happened in comments that were deleted, since GitHub's API does not return them;
+- that the photo was not edited;
+- that nothing happened in comments that were deleted. GitHub's API does not return them, and MEKU, as the owner of the repository, could delete a comment, lock the issue or block an account. Exports made during the pilot by others (`--previous`) and GitHub's notification emails to subscribers show such a deletion, but only if someone kept them;
 - that MEKU can deliver work to people inside its product (this pilot uses a manual relay);
 - anything about payments, tokens, safety at scale, or an AI acting on its own. The developer's tools require a person to type the code back before sending, but cannot prove that a person approved.
 
 ## Privacy and safety
 
-- Public data is limited to GitHub logins (pseudonyms are fine), the request text and the photo. No names, emails, phone numbers or locations. The operator names the human's login in seq 5 only after the human agrees to that.
+- Public data is limited to GitHub logins (pseudonyms are fine), the request text, the photo, and the facts the records state: for the human, that they are an adult, whether they have a MEKU human profile and how the operator contacted them. No names, emails, phone numbers or locations. The operator names the human's login in seq 5 only after the human agrees to that.
 - The MEKU request id is published only as a SHA-256 commitment.
 - The evidence must contain only pixel and colour data, plus at most a phone screenshot's note of its own size (check E04, an allow-list). Before the pilot, a dry run checks a test screenshot of a blank page, taken and posted the same way on the human's phone. The operator posts the returned result (seq 9) only after someone has run the verifier on the evidence and E04 has passed.
 - **If an image reveals something personal:** deleting the comment does not delete the uploaded file, which stays reachable at its URL. The human or the operator asks GitHub Support to remove it, the operator hides the comment, and the operator posts a stop. Treat the image as already public.

@@ -45,7 +45,14 @@
           "type": "string",
           "minLength": 20,
           "maxLength": 300,
-          "pattern": "^https://"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^https://"
+            }
+          ]
         },
         "mcp_endpoint": {
           "const": "https://meku.farm/api/public/mcp"
@@ -291,13 +298,27 @@
           "type": "string",
           "minLength": 8,
           "maxLength": 8,
-          "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+            }
+          ]
         },
         "object_commitment": {
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "arguments": {
           "type": "object",
@@ -371,7 +392,14 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 80,
-              "pattern": "^[A-Za-z0-9._:-]+$"
+              "allOf": [
+                {
+                  "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+                },
+                {
+                  "pattern": "^[A-Za-z0-9._:-]+$"
+                }
+              ]
             }
           }
         },
@@ -379,13 +407,27 @@
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "request_id_sha256": {
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "response": {
           "type": "object",
@@ -406,7 +448,14 @@
               "type": "string",
               "minLength": 20,
               "maxLength": 35,
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+              "allOf": [
+                {
+                  "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+                },
+                {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
             },
             "deduplicated": {
               "type": "boolean"
@@ -417,13 +466,27 @@
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "observed_at": {
           "type": "string",
           "minLength": 20,
           "maxLength": 35,
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+            }
+          ]
         },
         "payment": {
           "const": "none"
@@ -469,7 +532,14 @@
           "type": "string",
           "minLength": 8,
           "maxLength": 8,
-          "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+            }
+          ]
         },
         "decision": {
           "enum": [
@@ -534,7 +604,14 @@
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "stored_request": {
           "type": "object",
@@ -646,7 +723,14 @@
               "type": "string",
               "minLength": 20,
               "maxLength": 35,
-              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+              "allOf": [
+                {
+                  "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+                },
+                {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+                }
+              ]
             }
           }
         },
@@ -654,19 +738,40 @@
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "response_text_sha256": {
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "observed_at": {
           "type": "string",
           "minLength": 20,
           "maxLength": 35,
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+            }
+          ]
         }
       }
     },
@@ -711,7 +816,14 @@
           "type": "string",
           "minLength": 8,
           "maxLength": 8,
-          "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+            }
+          ]
         },
         "human": {
           "type": "string",
@@ -889,13 +1001,27 @@
           "type": "string",
           "minLength": 2,
           "maxLength": 2,
-          "pattern": "^[0-9A-HJKMNP-TV-Z]{2}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{2}$"
+            }
+          ]
         },
         "salt": {
           "type": "string",
           "minLength": 32,
           "maxLength": 32,
-          "pattern": "^[0-9a-f]{32}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          ]
         },
         "consent_comment_id": {
           "type": "integer",
@@ -1004,7 +1130,14 @@
           "type": "string",
           "minLength": 8,
           "maxLength": 8,
-          "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9A-HJKMNP-TV-Z]{8}$"
+            }
+          ]
         },
         "evidence": {
           "const": "ledger-seq-8"
@@ -1111,13 +1244,27 @@
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "ledger_digest": {
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "reason": {
           "type": "string",
@@ -1263,7 +1410,14 @@
           "type": "string",
           "minLength": 64,
           "maxLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
+          "allOf": [
+            {
+              "pattern": "^(?!.*(?:<!--|-->|```|~~~))[^\\u0000-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          ]
         },
         "tool": {
           "type": "string",
@@ -1279,7 +1433,8 @@
             "object_matching",
             "no_personal_data_visible",
             "physical_arrangement",
-            "human_did_not_withdraw"
+            "human_did_not_withdraw",
+            "other_comments_consistent"
           ],
           "properties": {
             "code_legible_and_matching": {
@@ -1295,6 +1450,9 @@
               "type": "boolean"
             },
             "human_did_not_withdraw": {
+              "type": "boolean"
+            },
+            "other_comments_consistent": {
               "type": "boolean"
             }
           }

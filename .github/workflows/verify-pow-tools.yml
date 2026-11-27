@@ -40,7 +40,9 @@ jobs:
       - name: Synthetic ledger end to end, JavaScript and independent Python digests agree
         run: |
           node tools/pow/synthetic.mjs "$RUNNER_TEMP/pow"
-          node tools/pow/verify.mjs "$RUNNER_TEMP/pow/bundle.json" --allow-synthetic
+          # A PASS on a supplied file exits with 5, never 0: only a live export can give 0.
+          code=0; node tools/pow/verify.mjs "$RUNNER_TEMP/pow/bundle.json" --allow-synthetic || code=$?
+          test "$code" -eq 5
           js=$(node tools/pow/record.mjs digest --bundle "$RUNNER_TEMP/pow/bundle.json" | cut -d' ' -f1)
           py=$(python3 -I tools/pow/digest_reference.py "$RUNNER_TEMP/pow/bundle.json" | cut -d' ' -f1)
           echo "javascript $js"
@@ -48,8 +50,9 @@ jobs:
           test -n "$js" && test "$js" = "$py"
       - name: Synthetic data is refused without the explicit flag
         run: |
-          if node tools/pow/verify.mjs "$RUNNER_TEMP/pow/bundle.json" > /dev/null; then
-            echo "synthetic ledger was accepted as a real pilot"; exit 1
+          code=0; node tools/pow/verify.mjs "$RUNNER_TEMP/pow/bundle.json" > /dev/null || code=$?
+          if [ "$code" -ne 1 ]; then
+            echo "synthetic ledger was not refused as a real pilot (exit $code)"; exit 1
           fi
       - name: Published JSON Schema matches the code
         run: node tools/pow/record.mjs schema | diff - tools/pow/pow-record-v1.schema.json

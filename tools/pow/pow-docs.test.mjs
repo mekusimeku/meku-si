@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { recordProblems } from "./lib.mjs";
+import { buildRequestArguments, recordProblems } from "./lib.mjs";
 import { CHECKS } from "./verify.mjs";
 import { consentRecord, evidenceRecord, openedRecord } from "./record.mjs";
 
@@ -17,6 +17,20 @@ const jsonBlocks = (text) => [...text.matchAll(/```json\n([\s\S]*?)```/g)].map((
 test("the human guide's two blocks are exactly the human records", () => {
   const blocks = jsonBlocks(read("human-guide.md")).map((b) => JSON.parse(b));
   assert.deepEqual(blocks, [consentRecord({ pilotId: "POW-001" }), evidenceRecord({ pilotId: "POW-001" })]);
+});
+
+test("the human guide shows the request text word for word", () => {
+  const quoted = read("human-guide.md")
+    .split("## What the request says")[1]
+    .split("\n## ")[0]
+    .split("\n")
+    .filter((line) => line.startsWith("> "))
+    .map((line) => line.slice(2))
+    .join(" ");
+  const code = "K7QX29MD";
+  const ledgerUrl = "https://github.com/mekusimeku/meku-si/issues/50";
+  const expected = buildRequestArguments({ pilotId: "POW-001", code, ledgerUrl }).description;
+  assert.equal(quoted.replaceAll("CODE", code).replace("LEDGER", ledgerUrl), expected);
 });
 
 test("every operator template becomes a valid record once its CAPITAL placeholders are filled", () => {

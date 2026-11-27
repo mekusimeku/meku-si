@@ -121,6 +121,39 @@ export function makeJpeg({ width = 320, height = 240, app = [] } = {}) {
 
 // ---- The synthetic pilot --------------------------------------------------------
 
+/** A minimal ICC colour profile: a header, a tag table and the given tags (signature, data). */
+export function makeIcc(
+  tags = [
+    ["desc", Buffer.from("desc\0\0\0\0\0\0\0\x0bDisplay P3\0", "latin1")],
+    ["wtpt", Buffer.concat([Buffer.from("XYZ \0\0\0\0", "latin1"), Buffer.alloc(12)])],
+  ],
+) {
+  const tableSize = 4 + tags.length * 12;
+  let offset = 128 + tableSize;
+  const entries = [];
+  const datas = [];
+  for (const [sig, data] of tags) {
+    entries.push([sig, offset, data.length]);
+    const padded = Buffer.concat([data, Buffer.alloc((4 - (data.length % 4)) % 4)]);
+    datas.push(padded);
+    offset += padded.length;
+  }
+  const header = Buffer.alloc(128);
+  header.writeUInt32BE(offset, 0);
+  header.write("mntr", 12, "latin1");
+  header.write("RGB ", 16, "latin1");
+  header.write("XYZ ", 20, "latin1");
+  header.write("acsp", 36, "latin1");
+  const table = Buffer.alloc(tableSize);
+  table.writeUInt32BE(tags.length, 0);
+  entries.forEach(([sig, off, size], i) => {
+    table.write(sig, 4 + i * 12, "latin1");
+    table.writeUInt32BE(off, 8 + i * 12);
+    table.writeUInt32BE(size, 12 + i * 12);
+  });
+  return Buffer.concat([header, table, ...datas]);
+}
+
 export async function buildSyntheticPilot() {
   const S = SYNTHETIC;
   const minute = (m) => new Date(S.start + m * 60_000);

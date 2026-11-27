@@ -8,7 +8,7 @@ An independent developer's AI agent has asked, through MEKU, for one small task:
 - You must **not** work for MEKU, and you must **not** be the developer who asked.
 - It is **unpaid**. No money, token or reward, now or later.
 - Your **photo** and your **GitHub username** will be public. Use a new GitHub account with any name if you prefer. Never put your real name, address, phone number or email in the ledger.
-- Before you agree, the operator will ask whether your GitHub username may be named in the ledger. It appears there when the task is offered to you.
+- Before you agree, the operator will ask whether your GitHub username may be named in the ledger. It appears there when the task is offered to you, together with whether you have a MEKU human profile and how the operator contacted you (for example "message").
 - Do not rename your GitHub account until the pilot report is published. Tap **Subscribe** on the ledger issue so that GitHub emails you a copy of every comment.
 - You may **refuse or stop at any time**, without giving a reason.
 
@@ -26,9 +26,29 @@ Some phones add hidden data to images, and the pilot can only use a screenshot t
 
 1. Take a photo of a **blank** sheet of paper, with nothing else in the picture.
 2. Make a screenshot of it exactly as step 3 below describes.
-3. Post that screenshot as a comment in the dry-run issue the operator sends you, from the same phone and the same app or browser you will use later.
+3. Before posting, open the screenshot in your photo app and swipe up on it. If you see a map or a place name, the image carries a location: do not post it, and tell the operator.
+4. Post that screenshot as a comment in the dry-run issue the operator sends you, from the same phone and the same app or browser you will use later.
 
-The test image shows only a blank page. Your GitHub username appears on that issue. The operator has the image checked and tells you whether it passed. If it did not, they will suggest another way to make the screenshot, and you try again.
+Anything you post on GitHub is public at once, so post only the screenshot of the blank page, never the photo itself. Your GitHub username appears on that issue. The operator has the image checked and tells you whether it passed, and also checks that your comment can be seen by others: GitHub sometimes hides comments from brand-new accounts. If the check did not pass, the operator will suggest another way to make the screenshot, and you try again.
+
+## What the request says
+
+The developer's request, as MEKU stored it, is in the ledger's seq 4 record, in the field `description`, on one long line. Here is the same text, word for word, in shorter lines. `CODE` stands for the request's 8-character code and `LEDGER` for the ledger's address. The request is titled "POW-001: handwritten code photo (unpaid pilot)".
+
+> MEKU POW-001 independent proof-of-work pilot.
+> Unpaid: no payment, token or wallet of any kind.
+> Code: CODE.
+> If you freely agree:
+> (1) handwrite the code CODE on paper;
+> (2) after you post your consent in the public record, the developer will post 2 more characters to write after the code and name one everyday object; place that object next to the paper;
+> (3) take one photo showing only the paper and the object on a plain surface - no people, faces, screens, documents, addresses or windows;
+> (4) post a screenshot of that photo in the public record (screenshots normally carry no location data).
+> Under 5 minutes, at a place you already are.
+> No travel, purchase or special equipment.
+> You may refuse or stop at any time without penalty.
+> Public record: LEDGER
+
+If the text in seq 4 says anything else, do not agree, and tell the operator.
 
 ## Step 1: say yes
 
@@ -98,6 +118,7 @@ Post it within 48 hours of the object being named. That is all; the operator and
 
 ## Important
 
-- **Never edit or delete** your comments. If something is wrong, post a new comment or tell the operator. An edited comment stops the pilot from passing, because its first version might have said stop.
-- **To stop**, post a comment that says only `STOP` (in any language, or only 🛑), or tell the operator. A comment like that prevents the pilot from passing until the operator records your stop. If you want to give a reason, post it in a second comment. Everything you write in the ledger is read by the people who check the pilot. Stopping is never held against you.
+- **Never edit or delete** your comments. If something is wrong, post a new comment or tell the operator. An edited comment stops the pilot from passing unless a stop is recorded, because its first version might have said stop. If a block was not accepted (for example, you added words to it), post the block again, alone, in a new comment.
+- **To stop**, post a comment that says only `STOP` (or only 🛑), or tell the operator. The same word in many other languages also counts, for example berhenti, batal, arrête, 停止, やめて or 그만. A comment like that prevents the pilot from passing until a stop is recorded, even after the pilot has closed. If you want to give a reason, post it in a second comment. Everything you write in the ledger is printed in full for the people who check the pilot, so a request to stop in any other words is also seen. Stopping is never held against you.
+- **If one of your comments ever disappears,** tell the developer, who is not part of MEKU. GitHub's notification emails keep your own copy of every comment (see **Subscribe** above).
 - **If you see anything personal** in your posted image, tell the operator at once. Deleting the comment hides it, but the uploaded image stays reachable at its address until GitHub Support removes it. The operator will ask GitHub Support to remove it.

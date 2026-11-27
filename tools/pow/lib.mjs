@@ -395,6 +395,7 @@ export const RECORD_TYPES = Object.freeze({
         no_personal_data_visible: bool(),
         physical_arrangement: bool(),
         human_did_not_withdraw: bool(),
+        other_comments_consistent: bool(),
       }),
       notes: optional(str(0, 500)),
     },
@@ -522,11 +523,12 @@ export function recordJsonSchema() {
       case "nullable-string":
         return { type: ["string", "null"], maxLength: spec.max, pattern: SAFE_TEXT_PATTERN };
       case "string":
+        // A field with its own pattern must still be safe text, as the verifier requires.
         return {
           type: "string",
           minLength: spec.min,
           maxLength: spec.max,
-          pattern: spec.patternSource ?? SAFE_TEXT_PATTERN,
+          ...(spec.patternSource ? { allOf: [{ pattern: SAFE_TEXT_PATTERN }, { pattern: spec.patternSource }] } : { pattern: SAFE_TEXT_PATTERN }),
         };
       case "array":
         return { type: "array", maxItems: spec.max, items: toSchema(spec.item) };
@@ -567,76 +569,83 @@ export function recordJsonSchema() {
 }
 
 // ---------------------------------------------------------------------------
-// Comment parsing. Only what GitHub shows a reader counts: HTML comments are dropped
-// (GitHub hides them), and quoted lines (a "Quote reply") are not the poster's own record.
+// Reading comments. A record counts only when its comment is exactly one record and
+// nothing else, in a form the tools print or a person pastes:
+//   an optional tool header line, then one ```json block, or one bare JSON record,
+// plus, in the evidence comment only, one GitHub image attachment before or after it.
+// Anything else in a comment could look different on GitHub from how it is read, so such a
+// comment is not counted; the verifier lists it for a person to read instead.
 
-const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
-const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
-
-/** The part of a comment body a reader sees as the poster's own words. Outside code fences,
- *  HTML comments (which GitHub hides) and quoted lines (a "Quote reply") are dropped. Inside a
- *  code fence GitHub shows everything literally, so nothing there is dropped. */
-export function visibleText(body) {
-  return readBody(body).text;
-}
-
-/** True when a comment hides text in an HTML comment (outside code blocks). Records never
- *  need one, so the verifier asks a person to read such a comment in full. */
-export function hidesText(body) {
-  return readBody(body).hidden;
-}
-
-function readBody(body) {
-  const out = [];
-  let fence = null;
-  let inComment = false;
-  let hidden = false;
-  for (const line of String(body ?? "").replace(/\r\n?/g, "\n").split("\n")) {
-    if (fence) {
-      out.push(line);
-      const close = line.match(FENCE_CLOSE);
-      if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null;
-      continue;
-    }
-    let rest = line;
-    let kept = "";
-    while (rest.length) {
-      if (inComment) {
-        const end = rest.indexOf("-->");
-        if (end === -1) {
-          rest = "";
-          break;
-        }
-        rest = rest.slice(end + 3);
-        inComment = false;
-        continue;
-      }
-      const start = rest.indexOf("<!--");
-      if (start === -1) {
-        kept += rest;
-        break;
-      }
-      kept += rest.slice(0, start);
-      rest = rest.slice(start + 4);
-      inComment = true;
-      hidden = true;
-    }
-    if (/^[ \t]*>/.test(kept)) continue;
-    const open = kept.match(FENCE_OPEN);
-    if (open && !inComment) fence = open[1];
-    out.push(kept);
-  }
-  return { text: out.join("\n"), hidden };
-}
-
-/** Trim only JSON whitespace (space, tab, newline, carriage return), identically in every
+/** Trims only JSON whitespace (space, tab, newline, carriage return), identically in every
  *  implementation; String.prototype.trim and Python's strip disagree on other characters. */
 export const jsonTrim = (text) => String(text).replace(/^[ \t\n\r]+|[ \t\n\r]+$/g, "");
 
-const IMAGE_MARKUP = /<img\b[^>]*>|!\[[^\]]*\]\([^)]*\)/gi;
-const TOOL_HEADER = /^MEKU proof-of-work record: seq \d+ [a-z_]+ \(POW-[A-Z0-9-]+\)(?: - [^\n]*)?$/gm;
-// The fenced record block itself; the same pattern finds records and removes them for free text.
-const FENCED_JSON = /```json[^\n]*\n([\s\S]*?)```/g;
+const HEADER_LINE = /^MEKU proof-of-work record: (?:seq [0-9]{1,4} )?[a-z_]{1,40} \(POW-[A-Z0-9-]{1,40}\)(?: - [^\n<>`]{0,200})?$/;
+const IMAGE_AT_START = /^(?:!\[[^\]\n]{0,200}\]\([^)\s]{1,300}\)|<img\b[^<>\n]{0,1000}>)/i;
+const IMAGE_AT_END = /(?:!\[[^\]\n]{0,200}\]\([^)\s]{1,300}\)|<img\b[^<>\n]{0,1000}>)$/i;
+
+/** The attachment URL of one image in GitHub's own upload markup, or null. */
+function attachmentImage(markup) {
+  let url = null;
+  const md = markup.match(/^!\[([^\]\n<>`]{0,200})\]\(([^)\s]{1,300})\)$/);
+  if (md) url = md[2];
+  else {
+    const tag = markup.match(/^<img((?:[ ]+[a-z]{1,10}="[^"<>`\n]{0,300}")+)[ ]*\/?>$/i);
+    if (!tag) return null;
+    const attrs = new Map();
+    for (const [, name, value] of tag[1].matchAll(/[ ]+([a-z]{1,10})="([^"]*)"/gi)) {
+      const key = name.toLowerCase();
+      if (attrs.has(key) || !["width", "height", "alt", "src"].includes(key)) return null;
+      if ((key === "width" || key === "height") && !/^[0-9]{1,5}$/.test(value)) return null;
+      attrs.set(key, value);
+    }
+    url = attrs.get("src") ?? null;
+  }
+  return url && ATTACHMENT_ONLY.test(url) ? normalizeAttachmentUrl(url) : null;
+}
+
+/** Reads one comment by the strict grammar above. Returns null when the comment makes no
+ *  attempt at a record, { problem } when it does but is not in an accepted form, and
+ *  { record, image } when it is exactly one record (image: the attachment URL, or null). */
+export function readRecordComment(body) {
+  const raw = String(body ?? "");
+  if (!raw.includes(PROTOCOL) && !/```json/i.test(raw)) return null;
+  let text = jsonTrim(raw.replace(/\r\n?/g, "\n"));
+  let image = null;
+  // GitHub puts an uploaded image where the cursor was, so it may share a line with the record.
+  for (const [pattern, cut] of [
+    [IMAGE_AT_START, (m) => text.slice(m[0].length)],
+    [IMAGE_AT_END, (m) => text.slice(0, text.length - m[0].length)],
+  ]) {
+    const m = image === null ? text.match(pattern) : null;
+    if (!m) continue;
+    image = attachmentImage(m[0]);
+    if (!image) return { problem: "an image that is not a single GitHub attachment in GitHub's own markup" };
+    text = jsonTrim(cut(m));
+  }
+  const lines = text.split("\n");
+  if (HEADER_LINE.test(lines[0])) text = jsonTrim(lines.slice(1).join("\n"));
+  let json;
+  if (text.startsWith("```")) {
+    const block = text.split("\n");
+    if (block.length < 3 || !/^```json[ \t]*$/.test(block[0]) || !/^```[ \t]*$/.test(block.at(-1)))
+      return { problem: "not exactly one ```json block and nothing else" };
+    json = block.slice(1, -1).join("\n");
+  } else if (text.startsWith("{") && text.endsWith("}")) {
+    // A bare record is shown as Markdown, where HTML could hide text; inside a block it could not.
+    if (text.includes("<")) return { problem: 'a bare record containing "<"; put it inside ```json lines' };
+    json = text;
+  } else return { problem: "text besides the record; post the record alone, as printed" };
+  let record;
+  try {
+    record = parseRecordJson(json);
+  } catch (error) {
+    return { problem: `the record is not valid JSON: ${error.message}` };
+  }
+  if (!isRecordObject(record)) return { problem: 'JSON without "pow": "meku.pow/1"' };
+  if (image && record.type !== "evidence_submitted") return { problem: "an image beside a record other than the evidence" };
+  return { record, image };
+}
 
 /** JSON for records: refuses fractional and exponent numbers, which JavaScript and Python
  *  would hash differently ("1.0" is 1 in one and 1.0 in the other). */
@@ -664,67 +673,64 @@ export function parseRecordJson(text) {
 
 const isRecordObject = (v) => v && typeof v === "object" && !Array.isArray(v) && v.pow === PROTOCOL;
 
-/** Records in a comment body: every visible ```json block that declares "pow": "meku.pow/1".
- *  A comment with no fenced block may instead be one bare JSON record (what a phone copies
- *  from a rendered code block): it must start with "{", and an image may follow it. */
+/** The words in a comment besides anything record-shaped: fenced JSON blocks, a bare JSON
+ *  object that mentions the protocol, images and tool header lines. Used to find a STOP that
+ *  the human wrote next to a record. */
+export function wordsBesideRecord(body) {
+  let text = String(body ?? "").replace(/\r\n?/g, "\n");
+  text = text.replace(/```json[^\n]*\n[\s\S]*?(?:```|$)/g, "\n");
+  text = text.replace(/<img\b[^>]*>|!\[[^\]]*\]\([^)]*\)/gi, "\n");
+  text = text.replace(/^MEKU proof-of-work record:[^\n]*$/gm, "\n");
+  const open = text.indexOf("{");
+  const close = text.lastIndexOf("}");
+  if (open !== -1 && close > open && text.slice(open, close + 1).includes(PROTOCOL)) text = text.slice(0, open) + "\n" + text.slice(close + 1);
+  return jsonTrim(text);
+}
+
+/** Records in a comment, for callers that want a list: [], [{ error }] or [{ record, image }]. */
 export function extractRecords(body) {
-  const found = [];
-  const text = visibleText(body);
-  for (const match of text.matchAll(FENCED_JSON)) {
-    let parsed;
-    try {
-      parsed = parseRecordJson(match[1]);
-    } catch (error) {
-      if (match[1].includes(PROTOCOL)) found.push({ error: `a meku.pow block is not valid: ${error.message}` });
-      continue;
-    }
-    if (isRecordObject(parsed)) found.push({ record: parsed });
-  }
-  // A bare record may sit before or after its image, and under a tool-printed header line.
-  // GitHub renders a bare record as Markdown, where HTML tags can hide text, so a bare record
-  // with any "<" left in it is not read (inside a code block it would be shown as written).
-  const trimmed = jsonTrim(text.replace(IMAGE_MARKUP, "").replace(TOOL_HEADER, ""));
-  if (found.length || text.includes("```") || !trimmed.startsWith("{") || !trimmed.includes(PROTOCOL) || trimmed.includes("<")) return found;
-  try {
-    const parsed = parseRecordJson(trimmed.slice(0, trimmed.lastIndexOf("}") + 1));
-    if (isRecordObject(parsed)) found.push({ record: parsed });
-  } catch (error) {
-    found.push({ error: `a meku.pow record is not valid: ${error.message}` });
-  }
-  return found;
+  const read = readRecordComment(body);
+  if (!read) return [];
+  return read.problem ? [{ error: read.problem }] : [{ record: read.record, image: read.image }];
 }
 
-/** What a person wrote in a comment besides a record, its image and a tool header line. */
-export function freeTextOf(body) {
-  const text = visibleText(body);
-  let rest = text.replace(FENCED_JSON, "").replace(IMAGE_MARKUP, "").replace(TOOL_HEADER, "");
-  const bare = jsonTrim(rest);
-  if (!text.includes("```") && bare.startsWith("{") && bare.includes(PROTOCOL)) rest = bare.slice(bare.lastIndexOf("}") + 1);
-  return jsonTrim(rest);
-}
+// The documented STOP: a comment that says only one of these words (any case or width, with
+// or without accents on Latin letters, spaces or punctuation, quoted or in a code block), or
+// only a stop sign. The list holds only words that mean stop when they stand alone, because a
+// match can only be cleared by a stop record. Anything else the human writes goes to a person
+// (manual check M05), so a withdrawal in any other words still prevents a verified cycle.
+export const STOP_WORDS = [
+  "stop", "halt", "stopp", "stoppen", "aufhören", "arrête", "arrêtez", "arrêter", "arrêt", "fermati", "fermatevi",
+  "parar", "detener", "basta", "berhenti", "batal", "dur", "durdur", "tigil", "dừng", "стоп", "хватит",
+  "停止", "停", "やめて", "止めて", "やめる", "ストップ", "중지", "멈춰", "그만", "توقف", "रुको", "หยุด",
+];
+const normalizeWord = (text) =>
+  String(text)
+    .normalize("NFKD")
+    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .normalize("NFKC")
+    .toLowerCase();
+// Letters, numbers and the marks that belong to them (Thai and Hindi vowel signs, for example).
+const NOT_WORD = /[^\p{L}\p{M}\p{N}]+/gu;
+const STOP_SET = new Set(STOP_WORDS.map((w) => normalizeWord(w).replace(NOT_WORD, "")));
+const STOP_SIGNS = /^[\s!.]*(?:\u{1F6D1}|\u26D4)[\s!.\uFE0F\u{1F6D1}\u26D4]*$/u;
 
-// The documented STOP: a comment that says only "stop" (in any of these languages, any case,
-// any width, with or without accents, spaces or punctuation) or only a stop sign. The list
-// holds only words that mean stop when they stand alone, because a match can only be cleared
-// by a stop record. Anything else the human writes goes to a person (manual check M05).
-const STOP_WORDS = new Set([
-  "stop", "halt", "berhenti", "stopp", "stoppen", "aufhoren", "alto", "para", "parar", "pare", "detener", "basta",
-  "arreter", "arrete", "arret", "fermati", "dur", "durdur", "стоп", "停止", "停", "やめて", "やめる", "ストップ",
-  "중지", "멈춰", "توقف", "रुको", "หยุด", "dung", "tigil", "acha",
-]);
 export function isStopWord(text) {
-  const t = String(text);
-  if (/^[\s!.]*(?:\u{1F6D1}|\u26D4)[\s!.\uFE0F\u{1F6D1}\u26D4]*$/u.test(t)) return true;
-  const plain = t.normalize("NFKD").replace(/\p{M}/gu, "").normalize("NFKC").toLowerCase();
+  // Quote markers and code-block lines do not change what the words say.
+  const t = String(text)
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/^(?:[ \t]*>)+/, ""))
+    .filter((line) => !/^[ \t]*(?:```|~~~)/.test(line))
+    .join("\n")
+    .replace(/:(?:stop_sign|octagonal_sign):/g, "\u{1F6D1}")
+    .replace(/:no_entry:/g, "\u26D4");
+  if (STOP_SIGNS.test(t)) return true;
+  const plain = normalizeWord(t);
   // "STOP", "s t o p" and "Stop, stop!" all count; "please stop" goes to a person instead.
-  if (STOP_WORDS.has(plain.replace(/[^\p{L}\p{N}]/gu, ""))) return true;
-  const words = plain.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  return words.length > 0 && words.every((w) => STOP_WORDS.has(w));
-}
-
-/** Image references a reader would see: <img> tags and markdown images, any source. */
-export function imageReferences(body) {
-  return String(body ?? "").match(IMAGE_MARKUP) ?? [];
+  if (STOP_SET.has(plain.replace(NOT_WORD, ""))) return true;
+  const words = plain.split(NOT_WORD).filter(Boolean);
+  return words.length > 0 && words.every((w) => STOP_SET.has(w));
 }
 
 /** Display-safe text: control and text-direction characters become visible \u escapes. */
@@ -736,8 +742,10 @@ export function displaySafe(value) {
  *  synthetic test ledgers, the first synthetic seq 0), and the human named in that operator's
  *  task_offered. Roster values that are not strings are treated as absent. */
 export function rosterFromComments(comments, { expectOperator = "mekusimeku" } = {}) {
+  // Only records the verifier could count name roles, so an invalid draft never names anyone.
   const records = [];
-  for (const comment of comments) for (const f of extractRecords(comment.body)) if (f.record) records.push({ comment, record: f.record });
+  for (const comment of comments)
+    for (const f of extractRecords(comment.body)) if (f.record && recordProblems(f.record).length === 0) records.push({ comment, record: f.record });
   const openings = records.filter((e) => e.record.type === "pilot_opened" && e.record.seq === 0);
   const opening =
     openings.find((e) => sameLogin(e.comment.author, expectOperator) && sameLogin(e.record.roster?.operator, expectOperator)) ??
@@ -747,22 +755,32 @@ export function rosterFromComments(comments, { expectOperator = "mekusimeku" } =
   const text = (v) => (typeof v === "string" ? v : null);
   if (!opening) return { opening: null, operator: null, developer: null, human: null };
   const operator = text(opening.record.roster?.operator);
-  const offered = records.find((e) => e.record.type === "task_offered" && sameLogin(e.comment.author, operator));
+  const offered = records.find(
+    (e) => e.record.type === "task_offered" && e.record.pilot_id === opening.record.pilot_id && sameLogin(e.comment.author, operator),
+  );
   return { opening, operator, developer: text(opening.record.roster?.developer), human: text(offered?.record.human) };
 }
 
 const ATTACHMENT_ONLY = new RegExp(`^${ATTACHMENT_URL.source}$`, "i");
+const ATTACHMENT_URL_ANY = new RegExp(ATTACHMENT_URL.source, "i");
 
-/** GitHub attachment URLs in the visible text (host matched case-insensitively). */
+/** Every GitHub attachment URL anywhere in the raw comment, shown or hidden (host matched
+ *  case-insensitively). */
 export function extractAttachmentUrls(body) {
-  const urls = (visibleText(body).match(new RegExp(ATTACHMENT_URL.source, "gi")) ?? []).map(normalizeAttachmentUrl);
+  const urls = (String(body ?? "").match(new RegExp(ATTACHMENT_URL.source, "gi")) ?? []).map(normalizeAttachmentUrl);
   return [...new Set(urls)];
 }
 
-/** Every distinct http(s) URL a reader could see or load from the comment. */
+/** Every distinct http(s) URL anywhere in the raw comment. */
 export function extractAllUrls(body) {
-  const urls = visibleText(body).match(/https?:\/\/[^\s<>"'()[\]]+/gi) ?? [];
+  const urls = String(body ?? "").match(/https?:\/\/[^\s<>"'()[\]]+/gi) ?? [];
   return [...new Set(urls.map((u) => (ATTACHMENT_ONLY.test(u) ? normalizeAttachmentUrl(u) : u)))];
+}
+
+/** Images in the raw comment that are not GitHub attachments (they cannot be checked). */
+export function externalImages(body) {
+  const refs = String(body ?? "").match(/<img\b[^>]*>|!\[[^\]]*\]\([^)]*\)|<source\b[^>]*>/gi) ?? [];
+  return refs.filter((ref) => !ATTACHMENT_URL_ANY.test(ref));
 }
 
 function normalizeAttachmentUrl(url) {
@@ -799,7 +817,7 @@ export function suffixFor(salt, consentCommentId) {
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 // Pixel, palette, transparency and colour chunks only.
-const PNG_ALLOWED = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "iCCP", "sBIT", "sRGB", "cICP", "mDCv", "cLLi", "pHYs", "bKGD", "iDOT"]);
+const PNG_ALLOWED = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "sBIT", "sRGB", "cICP", "mDCv", "cLLi", "pHYs", "bKGD", "iDOT"]);
 const LOCATION_TEXT =
   /GPS|exif:GPS|photoshop:(?:City|State|Country)|Iptc4xmpCore:(?:Location|City|CountryCode)|Iptc4xmpExt:Location|LocationShown|LocationCreated|latitude|longitude/i;
 
@@ -830,26 +848,87 @@ function exifFindings(tiff) {
 }
 
 // The only XMP a phone screenshot needs: its pixel size, orientation, resolution and the
-// comment "Screenshot". Any other property (a name, device, serial, software, place) fails.
-const XMP_ALLOWED = new Set([
-  "x:xmpmeta", "x:xmptk", "rdf:RDF", "rdf:Description", "rdf:about", "rdf:Alt", "rdf:Seq", "rdf:Bag", "rdf:li",
-  "rdf:parseType", "xml:lang", "exif:PixelXDimension", "exif:PixelYDimension", "exif:UserComment",
-  "tiff:Orientation", "tiff:XResolution", "tiff:YResolution", "tiff:ResolutionUnit",
+// comment "Screenshot". Every element, attribute and text value in the packet is checked, so a
+// name, device, place or any other text anywhere in it fails.
+const XMP_ELEMENTS = new Set([
+  "x:xmpmeta", "rdf:RDF", "rdf:Description", "rdf:Alt", "rdf:Seq", "rdf:Bag", "rdf:li", "exif:PixelXDimension",
+  "exif:PixelYDimension", "exif:UserComment", "tiff:Orientation", "tiff:XResolution", "tiff:YResolution", "tiff:ResolutionUnit",
 ]);
+const XMP_VALUE_NAMES = new Set([...XMP_ELEMENTS].filter((n) => n.startsWith("exif:") || n.startsWith("tiff:")));
+const XMP_VALUE = /^(?:[0-9]{1,6}(?:[./][0-9]{1,6})?|screenshot)$/i;
 
 function xmpFindings(text) {
   if (LOCATION_TEXT.test(text)) return [fail("XMP_LOCATION", "XMP metadata contains location fields")];
-  const names = new Set();
-  for (const m of text.matchAll(/<\/?([A-Za-z_][\w.-]*:[A-Za-z_][\w.-]*)/g)) names.add(m[1]);
-  for (const m of text.matchAll(/[\s"']([A-Za-z_][\w.-]*:[A-Za-z_][\w.-]*)\s*=/g)) if (!m[1].startsWith("xmlns:")) names.add(m[1]);
-  const extra = [...names].filter((n) => !XMP_ALLOWED.has(n));
-  if (extra.length) return [fail("XMP_FIELD", `XMP properties not allowed in evidence: ${extra.slice(0, 6).join(", ")}`)];
-  const comments = [
-    ...[...text.matchAll(/<exif:UserComment>([\s\S]*?)<\/exif:UserComment>/g)].map((m) => m[1].replace(/<[^>]*>/g, "")),
-    ...[...text.matchAll(/exif:UserComment\s*=\s*["']([^"']*)["']/g)].map((m) => m[1]),
-  ];
-  if (comments.some((c) => !/^\s*(?:screenshot)?\s*$/i.test(c))) return [fail("XMP_FIELD", "XMP UserComment says something other than Screenshot")];
-  return [warnF("XMP_PRESENT", "screenshot XMP: pixel size and the word Screenshot only")];
+  const bad = (what) => [fail("XMP_FIELD", `XMP that a screenshot does not need: ${what}`)];
+  const packet = String(text).replace(/^\uFEFF/, "").replace(/<\?xpacket\b[^?<>]*\?>/g, "");
+  for (const token of packet.split(/(<[^>]*>)/)) {
+    if (!token) continue;
+    if (!token.startsWith("<")) {
+      const value = token.trim();
+      if (value && !XMP_VALUE.test(value)) return bad(`the text ${JSON.stringify(value.slice(0, 40))}`);
+      continue;
+    }
+    if (/^<[!?]/.test(token)) return bad("a comment, declaration or processing instruction");
+    const tag = token.match(/^<\/?([A-Za-z_][\w.-]*(?::[A-Za-z_][\w.-]*)?)((?:\s+[^\s=<>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*\/?>$/);
+    if (!tag) return bad("a malformed tag");
+    if (!XMP_ELEMENTS.has(tag[1])) return bad(`the element ${tag[1]}`);
+    for (const attr of tag[2].matchAll(/([^\s=<>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+      const [name, value] = [attr[1], attr[2] ?? attr[3]];
+      const ok =
+        name === "xmlns" || name.startsWith("xmlns:")
+          ? /^[\x21-\x7e]{1,200}$/.test(value)
+          : name === "x:xmptk"
+            ? /^[A-Za-z0-9 ._-]{0,60}$/.test(value)
+            : name === "rdf:about"
+              ? value === ""
+              : name === "rdf:parseType"
+                ? value === "Resource"
+                : name === "xml:lang"
+                  ? /^[A-Za-z-]{1,20}$/.test(value)
+                  : XMP_VALUE_NAMES.has(name) && XMP_VALUE.test(value.trim());
+      if (!ok) return bad(`the attribute ${name}`);
+    }
+  }
+  return [warnF("XMP_PRESENT", "screenshot XMP with only its pixel size, orientation, resolution and the word Screenshot")];
+}
+
+// A colour profile may carry only colour tags, each inside the profile, and short texts (its
+// name and copyright). Anything else, or another file hidden inside, fails.
+const ICC_TAGS = new Set([
+  "desc", "cprt", "wtpt", "bkpt", "rXYZ", "gXYZ", "bXYZ", "rTRC", "gTRC", "bTRC", "kTRC", "chad", "chrm", "lumi", "meas",
+  "tech", "view", "vued", "dmnd", "dmdd", "A2B0", "A2B1", "A2B2", "B2A0", "B2A1", "B2A2", "gamt", "pre0", "pre1", "pre2", "cicp",
+]);
+const ICC_TEXT_TAGS = new Set(["desc", "cprt", "dmnd", "dmdd", "vued"]);
+const MAX_ICC_BYTES = 128 * 1024;
+
+function iccFindings(profile) {
+  const bad = (what) => [fail("ICC_PROFILE", `colour profile ${what}`)];
+  if (profile.length < 132 || profile.length > MAX_ICC_BYTES) return bad(`of ${profile.length} bytes is outside the expected size`);
+  if (profile.readUInt32BE(0) !== profile.length || profile.toString("latin1", 36, 40) !== "acsp") return bad("has a malformed header");
+  const count = profile.readUInt32BE(128);
+  if (count > 64 || 132 + count * 12 > profile.length) return bad("has a malformed tag table");
+  for (let i = 0; i < count; i += 1) {
+    const entry = 132 + i * 12;
+    const sig = profile.toString("latin1", entry, entry + 4);
+    const offset = profile.readUInt32BE(entry + 4);
+    const size = profile.readUInt32BE(entry + 8);
+    if (!ICC_TAGS.has(sig)) return bad(`holds the tag ${JSON.stringify(sig)}, which is not colour data`);
+    if (offset + size > profile.length || offset < 132) return bad(`tag ${sig} lies outside the profile`);
+    if (ICC_TEXT_TAGS.has(sig) && size > 8192) return bad(`text tag ${sig} is ${size} bytes long`);
+  }
+  if (profile.includes(Buffer.from("Exif\0\0", "latin1"))) return bad("holds EXIF data");
+  return [];
+}
+
+function pngIccFindings(data) {
+  // iCCP: profile name (1-79 bytes)\0 method compressed-profile
+  const zero = data.indexOf(0);
+  if (zero < 1 || zero > 79 || data[zero + 1] !== 0) return [fail("ICC_PROFILE", "malformed colour profile chunk")];
+  try {
+    return iccFindings(inflateSync(data.subarray(zero + 2), { maxOutputLength: MAX_ICC_BYTES + 1 }));
+  } catch {
+    return [fail("ICC_PROFILE", "unreadable colour profile chunk")];
+  }
 }
 
 function scanPng(bytes) {
@@ -871,6 +950,8 @@ function scanPng(bytes) {
       out.height = data.readUInt32BE(4);
     } else if (type === "eXIf" || type === "zxIf") {
       out.findings.push(...exifFindings(data));
+    } else if (type === "iCCP") {
+      out.findings.push(...pngIccFindings(data));
     } else if (type === "iTXt" && data.toString("latin1", 0, 18) === "XML:com.adobe.xmp\0") {
       out.findings.push(...pngXmpFindings(data));
     } else if (type === "tIME") {
@@ -911,6 +992,7 @@ const JPEG_TABLES = new Set([0xc4, 0xcc, 0xdb, 0xdd]);
 
 function scanJpeg(bytes) {
   const out = { mediaType: "image/jpeg", width: null, height: null, findings: [] };
+  const iccChunks = [];
   let offset = 2;
   let sawEnd = false;
   while (offset + 2 <= bytes.length) {
@@ -943,10 +1025,12 @@ function scanJpeg(bytes) {
     if (marker === 0xe0 && seg.toString("latin1", 0, 5) === "JFIF\0") {
       // JFIF header: resolution and at most a raw RGB thumbnail. (JFXX thumbnails, which can
       // hold a whole JPEG with EXIF, are refused below.)
-    } else if (marker === 0xe2 && seg.toString("latin1", 0, 12) === "ICC_PROFILE\0") {
-      // Colour profile.
+    } else if (marker === 0xe2 && seg.toString("latin1", 0, 12) === "ICC_PROFILE\0" && seg.length > 14) {
+      // A colour profile, possibly split over several segments: checked once reassembled.
+      iccChunks.push({ seq: seg[12], data: seg.subarray(14) });
     } else if (marker === 0xee && seg.toString("latin1", 0, 5) === "Adobe") {
-      // Adobe colour transform flag.
+      // Adobe colour transform flag: always exactly 12 bytes.
+      if (seg.length !== 12) out.findings.push(fail("JPEG_METADATA_SEGMENT", `an Adobe segment of ${seg.length} bytes instead of 12`));
     } else if (marker === 0xe1 && seg.subarray(0, 6).equals(Buffer.from("Exif\0\0", "latin1"))) {
       out.findings.push(...exifFindings(seg.subarray(6)));
     } else if (marker === 0xe1 && seg.toString("latin1", 0, 29) === "http://ns.adobe.com/xap/1.0/\0") {
@@ -971,6 +1055,7 @@ function scanJpeg(bytes) {
   }
   if (!sawEnd) out.findings.push(fail("JPEG_TRUNCATED", "no end-of-image marker"));
   else if (offset < bytes.length) out.findings.push(fail("DATA_AFTER_END", `${bytes.length - offset} bytes follow the end of the image`));
+  if (iccChunks.length) out.findings.push(...iccFindings(Buffer.concat(iccChunks.sort((a, b) => a.seq - b.seq).map((c) => c.data))));
   return out;
 }
 

@@ -99,8 +99,17 @@ export function makeClient({ endpoint = MCP_ENDPOINT, apiKey, fetchImpl = fetch,
   return { post, callTool };
 }
 
+/** The comment to post, only for a record the verifier would count. A record that would be
+ *  refused once posted is never printed, because a posted comment cannot be taken back. */
+export function postableComment(record, label) {
+  const problems = recordProblems(record);
+  if (problems.length) throw new Error(`Refusing to print a record the verifier would not count: ${problems.join("; ")}`);
+  return recordComment(record, label);
+}
+
 export function recordComment(record, label) {
-  return `MEKU proof-of-work record: seq ${record.seq} ${record.type} (${record.pilot_id})${label ? ` - ${label}` : ""}\n\n\`\`\`json\n${JSON.stringify(record, null, 2)}\n\`\`\`\n`;
+  const seq = Number.isSafeInteger(record.seq) ? `seq ${record.seq} ` : "";
+  return `MEKU proof-of-work record: ${seq}${record.type} (${record.pilot_id})${label ? ` - ${label}` : ""}\n\n\`\`\`json\n${JSON.stringify(record, null, 2)}\n\`\`\`\n`;
 }
 
 const writePrivate = (path, data) => writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600, flag: "wx" });
@@ -363,7 +372,7 @@ async function main(argv) {
       const consentCommentId = consentCommentIdFrom(verifyBundle(bundle, { loadEvidence, allowSynthetic: true }));
       const record = revealObject({ prepared, consentCommentId });
       console.log("Post this ONLY after the human's consent comment (seq 6) is in the ledger:\n");
-      console.log(recordComment(record, `write ${prepared.code}${record.suffix} and put a ${record.object} next to it`));
+      console.log(postableComment(record, `write ${prepared.code}${record.suffix} and put a ${record.object} next to it`));
       return 0;
     }
     const observedAt = opt("observed-at") ?? new Date().toISOString();
@@ -380,7 +389,7 @@ async function main(argv) {
       const problems = recordProblems(record);
       if (problems.length) throw new Error(problems.join("; "));
       if (!tools.includes("meku_request_human")) throw new Error("Your host did not list meku_request_human: the key cannot submit. Stop and ask the operator.");
-      console.log(`Post this as a new comment in the ledger:\n\n${recordComment(record)}`);
+      console.log(`Post this as a new comment in the ledger:\n\n${postableComment(record)}`);
       return 0;
     }
     if (command === "import-submit") {
@@ -389,7 +398,7 @@ async function main(argv) {
       const responseText = readFileSync(opt("response-text-file"), "utf8").trim();
       const { receipt, record } = importSubmission({ prepared, responseText, observedAt });
       writePrivate(receiptPath, receipt);
-      console.log(`Imported. MEKU status: ${record.response.status}. Private receipt saved to ${receiptPath}.\n\nPost this as a new comment in the ledger:\n\n${recordComment(record)}`);
+      console.log(`Imported. MEKU status: ${record.response.status}. Private receipt saved to ${receiptPath}.\n\nPost this as a new comment in the ledger:\n\n${postableComment(record)}`);
       return 0;
     }
     if (command === "import-status") {
@@ -398,7 +407,7 @@ async function main(argv) {
       const { status, codeIntact, record } = importStatus({ receipt, responseText, observedAt });
       console.log(`MEKU request status: ${status}. Code intact in stored text: ${codeIntact}.`);
       if (!codeIntact) console.log("STOP: the stored description does not contain your code. Post a stop record and report it.");
-      if (record) console.log(`\nPost this as a new comment in the ledger:\n\n${recordComment(record)}`);
+      if (record) console.log(`\nPost this as a new comment in the ledger:\n\n${postableComment(record)}`);
       return 0;
     }
     const apiKey = process.env.MEKU_API_KEY;
@@ -415,7 +424,7 @@ async function main(argv) {
         return 2;
       }
       if (!record) console.log("\nRead the four independence statements in docs/proof-of-work/developer-guide.md. If every one is true, rerun with --affirm-independence to print your developer_ready record.");
-      else console.log(`\nPost this as a new comment in the ledger:\n\n${recordComment(record)}`);
+      else console.log(`\nPost this as a new comment in the ledger:\n\n${postableComment(record)}`);
       return 0;
     }
     if (command === "submit") {
@@ -428,7 +437,7 @@ async function main(argv) {
       if (flag("retry") && existsSync(receiptPath)) writeFileSync(`${receiptPath}.retry-${Date.now()}.json`, `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
       else writePrivate(receiptPath, receipt);
       console.log(`Submitted. MEKU status: ${record.response.status}. Private receipt saved to ${receiptPath} (it holds the request id; do not publish it).\n`);
-      console.log(`Post this as a new comment in the ledger:\n\n${recordComment(record)}`);
+      console.log(`Post this as a new comment in the ledger:\n\n${postableComment(record)}`);
       return 0;
     }
     if (command === "status") {
@@ -439,7 +448,7 @@ async function main(argv) {
       writePrivate(out, statusReceipt);
       console.log(`MEKU request status: ${status}. Code intact in stored text: ${codeIntact}. Receipt: ${out}`);
       if (!codeIntact) console.log("STOP: the stored description does not contain your code. Post a stop record and report it.");
-      if (record) console.log(`\nPost this as a new comment in the ledger:\n\n${recordComment(record)}`);
+      if (record) console.log(`\nPost this as a new comment in the ledger:\n\n${postableComment(record)}`);
       else console.log("Not approved yet. Check again later by hand; this tool never polls.");
       return 0;
     }

@@ -1823,6 +1823,11 @@ test("review 8 P3: a second pilot_opened that says something else fails; the sam
     assert.equal(r.verdict, verdict, JSON.stringify(r.checks.filter((x) => x.status === "FAIL")));
     if (verdict === "FAIL") assert.match(check(r, "L04").details.join(" "), /a second pilot_opened .* says something different/);
   }
+  // The warning about an unpinned link says not to post the opening again.
+  const q = await hostile();
+  asRealPilot(q.bundle);
+  rewrite(q.bundle, 0, (r) => (r.protocol = "https://github.com/mekusimeku/meku-si/blob/main/docs/proof-of-work/protocol.md"));
+  assert.match(check(verify(q, { allowSynthetic: false }), "L02").details.join(" "), /not pinned to a commit.*Do not post the opening again.*open a new ledger issue/);
 });
 
 test("review 4 N1: a header line can carry only the reveal's instruction, and it must match", async () => {

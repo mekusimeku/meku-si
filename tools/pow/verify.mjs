@@ -200,7 +200,7 @@ export function verifyBundle(
       fail("L01", `a real pilot ledger must be an issue in ${expectRepo}`);
     // The opening names the exact version of the protocol and tools the pilot runs under.
     if (!synthetic && !PINNED_PROTOCOL.test(String(opening.record.protocol)))
-      warn("L02", "pilot_opened.protocol is not pinned to a commit, so a verifier cannot tell which version of the protocol and tools applies");
+      warn("L02", "pilot_opened.protocol is not pinned to a commit, so a verifier cannot tell which version of the protocol and tools applies. Do not post the opening again, because a second, different opening fails; before anyone else posts, open a new ledger issue instead");
     if (!sameLogin(opening.comment.author, roster.operator)) fail("R01", `pilot_opened was posted by ${opening.comment.author}, not roster.operator`);
     else if (!synthetic && !sameLogin(roster.operator, expectOperator)) fail("R01", `roster.operator is ${roster.operator}, expected ${expectOperator}`);
     else pass("R01", `operator ${roster.operator}`);

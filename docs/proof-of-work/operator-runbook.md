@@ -21,7 +21,7 @@ Nothing in this pilot creates a mission, starts a payment, uses a wallet, or tou
 
 ## seq 0: open the ledger
 
-Create a new issue in `mekusimeku/meku-si` titled **POW-001 ledger: independent proof-of-work pilot**. Put a short plain explanation and a link to the protocol in the issue text; the issue text is not a record. Then post this as the **first comment**, replacing `DEVELOPER_LOGIN` with the developer's GitHub login (no @) and `COMMIT` with the 40-character id of the commit you approved. PR #43's description gives the exact link to paste. The pinned link tells every verifier which version of the protocol and tools the pilot runs under; without it the verifier warns.
+Create a new issue in `mekusimeku/meku-si` titled **POW-001 ledger: independent proof-of-work pilot**. Put a short plain explanation and a link to the protocol in the issue text; the issue text is not a record. Then post this as the **first comment**, replacing `DEVELOPER_LOGIN` with the developer's GitHub login (no @) and `COMMIT` with the 40-character id of the commit you approved. PR #43's description gives the exact link to paste. The pinned link tells every verifier which version of the protocol and tools the pilot runs under; without it the verifier warns. If the first comment went out with a mistake, do not post it again, because a second, different opening fails the pilot: before anyone else posts, open a new ledger issue instead.
 
 ```json
 {

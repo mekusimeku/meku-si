@@ -7,8 +7,14 @@ name: MEKU SI Mint Integrity (daily report)
 # and only to that branch. Pull requests that change this file run the check as a dry run (no publish).
 on:
   schedule:
+    # GitHub starts scheduled runs late (about 8 h on 2026-11-26), so slots also run from 00:37 WIB.
+    # Every slot below counts as the same WIB day as the 09:00 WIB watch; a later run never hides a same-day FAIL.
+    - cron: "37 17 * * *" # 00:37 WIB
+    - cron: "37 19 * * *" # 02:37 WIB
+    - cron: "37 21 * * *" # 04:37 WIB
+    - cron: "37 23 * * *" # 06:37 WIB
     - cron: "23 0 * * *" # 07:23 WIB
-    - cron: "7 1 * * *"  # 08:07 WIB, second chance if the first scheduled run is delayed or dropped
+    - cron: "7 1 * * *"  # 08:07 WIB
   workflow_dispatch:
   pull_request:
     paths:

@@ -1,0 +1,50 @@
+name: Verify proof-of-work pilot tools
+
+# Offline only: synthetic ledgers, an in-memory mock of MEKU's MCP contract, no secrets,
+# no network calls to MEKU, no writes anywhere.
+on:
+  pull_request:
+    paths:
+      - tools/pow/**
+      - docs/proof-of-work/**
+      - .github/workflows/verify-pow-tools.yml
+  push:
+    branches: [main]
+    paths:
+      - tools/pow/**
+      - docs/proof-of-work/**
+      - .github/workflows/verify-pow-tools.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline tests, including planted faults and docs-to-tools checks
+        run: node --test tools/pow/*.test.mjs
+      - name: Synthetic ledger end to end, JavaScript and independent Python digests agree
+        run: |
+          node tools/pow/synthetic.mjs "$RUNNER_TEMP/pow"
+          node tools/pow/verify.mjs "$RUNNER_TEMP/pow/bundle.json" --allow-synthetic
+          js=$(node tools/pow/record.mjs digest --bundle "$RUNNER_TEMP/pow/bundle.json" | cut -d' ' -f1)
+          py=$(python3 -I tools/pow/digest_reference.py "$RUNNER_TEMP/pow/bundle.json" | cut -d' ' -f1)
+          echo "javascript $js"
+          echo "python     $py"
+          test -n "$js" && test "$js" = "$py"
+      - name: Synthetic data is refused without the explicit flag
+        run: |
+          if node tools/pow/verify.mjs "$RUNNER_TEMP/pow/bundle.json" > /dev/null; then
+            echo "synthetic ledger was accepted as a real pilot"; exit 1
+          fi
+      - name: Published JSON Schema matches the code
+        run: node tools/pow/record.mjs schema | diff - tools/pow/pow-record-v1.schema.json

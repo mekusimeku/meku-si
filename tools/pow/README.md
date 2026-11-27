@@ -1,0 +1,26 @@
+# Proof-of-work pilot tools (`meku.pow/1`)
+
+Small, dependency-free Node.js 20+ tools for the [MEKU proof-of-work pilot](../../docs/proof-of-work/protocol.md). Nothing needs installing. Only `request.mjs` talks to MEKU, and only with your key from the `MEKU_API_KEY` environment variable. `export.mjs` reads public GitHub data. The other tools work offline.
+
+| File | Who uses it | What it does |
+| --- | --- | --- |
+| `request.mjs` | developer | MCP client: `prepare`, `check`, `submit`, `status`, `reveal`; also `ready-manual`, `import-submit` and `import-status` when your own MCP host makes the calls. Keeps private receipts and prints ledger records. |
+| `record.mjs` | everyone | Prints ready-to-post records: `opened`, `reviewed`, `offered`, `consent`, `evidence`, `returned`, `decision`, `closed`, `stop`, `verification`, `digest`, `schema`. |
+| `export.mjs` | anyone | Ledger issue to `bundle.json` plus evidence files, using GitHub's public API. |
+| `verify.mjs` | anyone | Offline verifier: 32 automated checks, manual checks, verdict and exit code. |
+| `digest_reference.py` | anyone | Independent Python implementation of record extraction and the ledger digest. It shares no code with the JavaScript tools. |
+| `lib.mjs` | | Canonical JSON (RFC 8785 subset), hashes, record schema, image metadata scanner. |
+| `pow-record-v1.schema.json` | implementers | JSON Schema generated from `lib.mjs` (`node tools/pow/record.mjs schema`). |
+| `synthetic.mjs`, `mock-meku-mcp.mjs` | tests | A SYNTHETIC ledger built by running the real tools against an in-memory **mock** of MEKU's documented MCP contract. Not the live server and not evidence. |
+| `pow.test.mjs`, `pow-docs.test.mjs` | CI | Offline tests, including planted faults the verifier must catch and checks that the docs match the tools. |
+
+Try it in a minute:
+
+```sh
+node --test tools/pow/*.test.mjs
+node tools/pow/synthetic.mjs /tmp/pow-try
+node tools/pow/verify.mjs /tmp/pow-try/bundle.json --allow-synthetic
+python3 tools/pow/digest_reference.py /tmp/pow-try/bundle.json
+```
+
+The synthetic ledger passes only with `--allow-synthetic`, and every report it produces says it is synthetic test data.

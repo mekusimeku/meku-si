@@ -10,9 +10,9 @@ This challenge gives agent developers a small, testable way to explore a handoff
 | --- | --- | --- | --- |
 | 1 — Simulation | Run the local mock workflow and inspect its event trace. | None | Client/runtime version, command, test result, and a redacted output excerpt. |
 | 2 — Authenticated MCP test | Connect an independent MCP client and call only **meku_search_humans** with an operator-issued, server-enforced read-only test credential. | Issued privately by an authorized MEKU operator; never committed or shared. | Client/version, timestamp, success or exact redacted error, and confirmation that only the read-only tool was callable. |
-| 3 — Real human-work pilot | With separate authorization, request a bounded task, wait for operator review, and let a person choose whether to accept. | Separately issued credential and explicit pilot approval. | Redacted event timeline, operator decision, human choice, completion evidence, and payment evidence only if payment actually occurs. |
+| 3 — Real human-work pilot | With separate authorization, request a bounded task, wait for operator review, and let a person choose whether to accept. The concrete unpaid procedure is [POW-001](proof-of-work/protocol.md). | Separately issued pilot key and explicit pilot approval. | The public POW-001 ledger, checked with `tools/pow/verify.mjs`: request, review, consent, evidence, returned result and decision. No payment is involved. |
 
-Level 1 can be completed now. Levels 2 and 3 are gated. The public documentation does not establish that MEKU can currently issue a server-enforced read-only key. A client-side tool allowlist is not a credential restriction. Do not use a general production key for this challenge. Ask the MEKU operator to confirm scope and revocation before proceeding to Level 2.
+Level 1 can be completed now. Levels 2 and 3 are gated. MEKU's [live documentation](https://meku.farm/docs) (checked 2026-11-28) describes server-enforced search-only keys that expire 30 days after issuance; no independent test with one has been published yet. A client-side tool allowlist is not a credential restriction. Do not use a general production key for this challenge. Ask the MEKU operator to confirm scope and revocation before proceeding to Level 2.
 
 ## Level 1 — run the simulation
 
@@ -25,7 +25,7 @@ From the repository root, with Node.js 20 or newer:
 
 The simulator has no HTTP client and makes no MEKU call. Its tool traces have **called: false**; its people, decisions, identifiers, statuses, and outputs are mock values. Payment is not simulated. See the [simulator guide](../examples/human-cloud-simulator/README.md).
 
-## Level 2 — authenticated read-only test (currently blocked)
+## Level 2 — authenticated read-only test (operator confirmation required)
 
 Do not attempt this level until an authorized MEKU operator has confirmed all of the following in writing:
 
@@ -41,6 +41,8 @@ Once those conditions are met, use the [independent read-only test guide](first-
 A real request is a write action. It requires all of the following before submission: informed requester approval, an operator-approved scope and budget, clear task boundaries and safety conditions, and a worker's independent choice to accept or decline. Silence is not consent. A submitted or approved request is not proof that a person accepted, completed the task, or was paid.
 
 The currently documented MCP tools are meku_search_humans, meku_request_human, and meku_get_request_status. The status tool reports request status; do not interpret it as worker progress, task completion, or payment status. The MCP tools do not themselves prove a payment. Any pilot involving payment needs separate approval and a privacy-safe, independently verifiable transaction record.
+
+**POW-001** is the first concrete Level 3 procedure. It is unpaid and uses a fixed safe task: a handwritten fresh code next to an everyday object. It has a public ledger and an offline verifier. MEKU cannot yet deliver an unpaid task to a person inside its product, so POW-001 relays the offer, consent, evidence and result through the public ledger and says so in every report. See the [protocol](proof-of-work/protocol.md).
 
 ## Safety and evidence rules
 

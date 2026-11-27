@@ -1,0 +1,131 @@
+# Report template: MEKU proof-of-work pilot
+
+Copy this file to `pilots/POW-001/README.md` and replace every `[bracketed]` part. Put the exported `bundle.json`, the `evidence/` folder and `verification.json` next to it. Publish only after the checklist at the end is complete. This template is not evidence that a pilot happened. If a step did not happen, write **not performed**; never infer it.
+
+---
+
+# MEKU POW-001: independent proof-of-work pilot, technical report
+
+| | |
+| --- | --- |
+| **Verdict** | `[PASS / FAIL / STOPPED / REJECTED_BY_REVIEW / COMPLETED_REJECTED / INCOMPLETE]` |
+| **Variant** | operator-relayed (offer, consent, evidence and result travelled through the public ledger, not inside MEKU's product) |
+| **Payment** | none, in any form |
+| **Ledger** | [https://github.com/mekusimeku/meku-si/issues/N] |
+| **Ledger digest, all records** | `[sha256 printed by verify.mjs]` |
+| **Python reference digest** | `[sha256 printed by digest_reference.py; must be identical]` |
+| **Protocol and tools** | `meku.pow/1`, `tools/pow/` at commit `[commit id]` |
+| **Independent verification** | [links to `independent_verification` comments by accounts outside the roster, or **none yet**] |
+
+## 1. What was tested
+
+An independent developer's AI agent requested one small physical task through MEKU's public MCP server, `https://meku.farm/api/public/mcp`. A second MEKU account reviewed the request. A consenting adult wrote a fresh code by hand, placed an object named only after their consent beside it, and posted a screenshot of the photo. MEKU returned the result through the ledger, and the developer accepted or rejected it. Every step is a public GitHub comment, ordered by GitHub's server clock.
+
+## 2. Participants
+
+| Role | GitHub account | Notes |
+| --- | --- | --- |
+| Developer | [login] | Client: [name version]. Agent: [as recorded in seq 1]. Path: [built-in client / own MCP host] |
+| Operator | mekusimeku | MEKU's official account |
+| Reviewer | [not public] | Role: [seek_reviewer / admin]; attested not to be the key issuer |
+| Human | [login] | Registered MEKU human: [yes / no]. Contacted by: [channel] |
+| Outside verifier(s) | [login(s)] | Not on the roster |
+
+## 3. Timeline (GitHub server time, UTC)
+
+| seq | Record | Account | Time | Link |
+| --- | --- | --- | --- | --- |
+| 0 | pilot_opened | mekusimeku | [time] | [comment link] |
+| 1 | developer_ready | [login] | [time] | [link] |
+| 2 | request_submitted | [login] | [time] | [link] |
+| 3 | request_reviewed | mekusimeku | [time] | [link] |
+| 4 | request_status_observed | [login] | [time] | [link] |
+| 5 | task_offered | mekusimeku | [time] | [link] |
+| 6 | human_consent | [login] | [time] | [link] |
+| 7 | object_revealed | [login] | [time] | [link] |
+| 8 | evidence_submitted | [login] | [time] | [link] |
+| 9 | result_returned | mekusimeku | [time] | [link] |
+| 10 | requester_decision | [login] | [time] | [link] |
+| 11 | pilot_closed | mekusimeku | [time] | [link] |
+
+Elapsed: request to decision [h]; object named to evidence [h].
+
+## 4. The request
+
+- Code: `[CODE]`. Idempotency key: `POW-001.[CODE]`.
+- MEKU `created_at`: [time]. Status answered on submission: `submitted`. Deduplicated: [yes / no].
+- Stored text identical to the submitted text: [yes / no] (check Q06).
+- Request id: published only as commitment `[request_id_sha256]`.
+
+## 5. Consent, task and evidence
+
+- The human consented at [time], after the offer at [time]. The object `[OBJECT]` was named at [time]. Evidence arrived at [time], [h] after the reveal.
+- Evidence file: `[evidence/<sha256>.png]`, SHA-256 `[sha256]`, [media type], [width × height], [bytes]. Metadata findings: [none / list].
+
+## 6. Result and decision
+
+- MEKU's check (seq 9): code visible [true/false], object visible [true/false], no personal data visible [true/false].
+- Developer decision (seq 10): `[ACCEPTED / REJECTED]`, reason "[reason]". Ledger digest through seq 9: `[sha256]`.
+- Pilot key revoked: [yes, at time].
+
+## 7. Automated verification
+
+```text
+$ node tools/pow/export.mjs [ledger URL] pilots/POW-001
+$ node tools/pow/verify.mjs pilots/POW-001/bundle.json --json pilots/POW-001/verification.json
+[paste the complete output, unedited]
+$ python3 tools/pow/digest_reference.py pilots/POW-001/bundle.json
+[paste the output]
+```
+
+Exit code: [0 / 1 / 2]. Checks: [n] PASS, [n] WARN, [n] FAIL, [n] NOT_REACHED. Explain every WARN here: [ ].
+
+## 8. Manual checks
+
+| Check | [verifier 1] | [verifier 2] |
+| --- | --- | --- |
+| M01 The code is written by hand and legible, and equals `[CODE]` | [yes/no] | [yes/no] |
+| M02 A `[object]` is next to the paper | [yes/no] | [yes/no] |
+| M03 No person, face, screen, document, address, window view or other personal data | [yes/no] | [yes/no] |
+| M04 A real paper-and-object arrangement, not a screen photo or composite | [yes/no] | [yes/no] |
+
+## 9. Reproduce it yourself
+
+```sh
+git clone https://github.com/mekusimeku/meku-si && cd meku-si && git checkout [commit id]
+node --test tools/pow/*.test.mjs
+node tools/pow/export.mjs [ledger URL] /tmp/pow-check
+node tools/pow/verify.mjs /tmp/pow-check/bundle.json
+python3 tools/pow/digest_reference.py /tmp/pow-check/bundle.json
+```
+
+Compare the digest with the one at the top of this report and look at the image yourself. If your result differs, open an issue.
+
+## 10. What this shows, and what it does not
+
+It shows that the developer's agent submitted this exact request to MEKU's live MCP server, which stored it unaltered. MEKU's review approved it. An account different from the developer's and MEKU's consented, then posted a photo with a code that did not exist before the request and an object named only after the consent. MEKU returned that file for the same request, and the developer decided on it. No record was edited, and GitHub's server clocks fix the order.
+
+It does not show who the human is or that they are independent of MEKU beyond separate accounts and signed statements, that the photo was not edited, that MEKU can deliver work inside its own product (this pilot used a manual relay), or anything about payments, tokens, scale, or an AI acting on its own.
+
+## 11. Problems found
+
+| Problem | Where | What was done | Still open? |
+| --- | --- | --- | --- |
+| [observed problem] | [seq / check / tool] | [action or none] | [yes/no] |
+
+## 12. Files
+
+- `bundle.json`: the ledger exactly as GitHub served it on [export time].
+- `evidence/[sha256].[ext]`: the evidence file.
+- `verification.json`: the verifier result, including every record in order.
+
+---
+
+## Publication checklist
+
+- [ ] The developer and the human have read this report and agree to its publication, including their GitHub logins and the photo.
+- [ ] The image shows nothing personal, and the verifier's E04 check passed.
+- [ ] No key, request id, email, name, address or private message appears anywhere.
+- [ ] Every claim matches the ledger and the verifier output; anything not performed says so.
+- [ ] The report says **operator-relayed** and **unpaid**.
+- [ ] At least one person outside the roster has verified it independently, or the report says **independent verification: none yet**.

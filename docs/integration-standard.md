@@ -41,7 +41,7 @@ Do not publish a success badge or claim compatibility based on a config snippet,
 - [ ] Call only `meku_search_humans` with empty or non-sensitive filters.
 - [ ] Confirm the complete JSON-RPC envelope and inspect `isError`; do not treat HTTP 200 as sufficient.
 - [ ] Record a redacted outcome and stop if authentication, discovery, or schema behavior differs from the docs.
-- [ ] Do not automatically retry 429s or ambiguous writes. MEKU documents no `Retry-After` header.
+- [ ] For HTTP 429, read `Retry-After` and the JSON-RPC `error.data.retryAfterSeconds` when provided. Do not automatically retry ambiguous writes.
 
 ### Write flow (separate, opt-in test)
 
@@ -68,7 +68,7 @@ If an authorized write test is later run:
 
 ## Error handling
 
-- HTTP 401 and 429 use JSON-RPC error code `-32001`; a 429 has no documented `Retry-After`.
+- HTTP 401 and 429 use JSON-RPC error code `-32001`; a 429 includes a `Retry-After` response header and JSON-RPC `error.data.retryAfterSeconds` retry guidance.
 - Invalid JSON and JSON-RPC may return 400 / `-32700` or `-32600`.
 - Method and tool lookup errors may be returned in HTTP 200 with `-32601` or `-32602`.
 - Tool failures can return HTTP 200 with `isError: true`; inspect the JSON-RPC body.

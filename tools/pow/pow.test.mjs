@@ -1521,7 +1521,7 @@ test("review 3 P3-1: the Python reference reports a hostile bundle instead of cr
 
 // ---- Findings of the fourth independent review (2026-11-28) ------------------------------
 
-test("review 4 P1: the evidence counts only with its screenshot, and a later screenshot replaces it until seq 9", async () => {
+test("review 4 P1 and review 5: the evidence counts only with its screenshot, and can never be swapped", async () => {
   const evidenceBlock = (p) => {
     const i = commentIndexFor(p.bundle, 8);
     return { i, record: extractRecords(p.bundle.comments[i].body)[0].record };
@@ -1537,34 +1537,133 @@ test("review 4 P1: the evidence counts only with its screenshot, and a later scr
   let r = verify(p);
   assert.equal(r.verdict, "PASS", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
   assert.match(check(r, "L02").details.join(" "), /without its screenshot/);
-  // A second screenshot before seq 9 replaces the first; E02 then needs the second one's hash.
-  const q = await hostile();
-  const j = commentIndexFor(q.bundle, 8);
-  const second = { ...clone(q.bundle.comments[j]), id: 4444 };
-  second.created_at = second.updated_at = new Date(Date.parse(q.bundle.comments[j].created_at) + 60_000).toISOString();
+  // A different screenshot, before or after MEKU's result, contradicts the first and fails:
+  // the operator may already have checked the first one.
   const otherUrl = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000044";
-  second.body = `${recordComment(record)}\n![Image](${otherUrl})`;
-  q.bundle.comments.splice(j + 1, 0, second);
-  q.bundle.evidence_files.push({ comment_id: 4444, url: otherUrl, file: "evidence/second.png", sha256: "x" });
-  q.files.set("evidence/second.png", makePng(330, 250));
-  r = verify(q);
-  assert.match(check(r, "L04").details.join(" "), /was replaced by the evidence posted at/);
-  assert.equal(r.evidence.url, otherUrl, "the latest evidence counts");
-  assert.equal(check(r, "E02").status, "FAIL", "the developer's decision hashed the replaced photo");
-  assert.ok(r.uncounted_comments.some((u) => /replaced by the evidence/.test(u.reason)));
-  // After MEKU returned the result, another screenshot contradicts the one that was checked...
-  const z = await hostile();
-  appendRecordless(z.bundle, SYNTHETIC.human, `${recordComment(record)}\n![Image](${otherUrl})`, commentIndexFor(z.bundle, 9));
-  z.bundle.evidence_files.push({ comment_id: z.bundle.comments[commentIndexFor(z.bundle, 9) + 1].id, url: otherUrl, file: "evidence/second.png", sha256: "x" });
-  z.files.set("evidence/second.png", makePng(330, 250));
-  r = verify(z);
+  for (const after of [8, 9]) {
+    const q = await hostile();
+    appendRecordless(q.bundle, SYNTHETIC.human, `${recordComment(record)}\n![Image](${otherUrl})`, commentIndexFor(q.bundle, after));
+    q.bundle.evidence_files.push({ comment_id: q.bundle.comments[commentIndexFor(q.bundle, after) + 1].id, url: otherUrl, file: "evidence/second.png", sha256: "x" });
+    q.files.set("evidence/second.png", makePng(330, 250));
+    r = verify(q);
+    assert.equal(r.verdict, "FAIL", `a second screenshot after seq ${after}`);
+    assert.match(check(r, "L04").details.join(" "), /a second evidence_submitted .* says something different/);
+    assert.equal(r.evidence.url, SYNTHETIC.attachmentUrl, "the first screenshot stays the evidence");
+    // The same screenshot uploaded again is only a repeat.
+    q.files.set("evidence/second.png", q.files.get(q.bundle.evidence_files[0].file));
+    r = verify(q);
+    assert.equal(r.verdict, "PASS");
+    assert.match(check(r, "L04").details.join(" "), /posted again/);
+  }
+});
+
+test("review 5: a negative record can never be outvoted, and a corrected seq is only a repeat", async () => {
+  // MEKU's negative check typed with a wrong seq, then a positive one: a contradiction.
+  const p = await hostile();
+  const i = commentIndexFor(p.bundle, 9);
+  const positive = extractRecords(p.bundle.comments[i].body)[0].record;
+  const negative = { ...clone(p.bundle.comments[i]), id: 4545, created_at: new Date(Date.parse(p.bundle.comments[i].created_at) - 60_000).toISOString() };
+  negative.updated_at = negative.created_at;
+  negative.body = recordComment({ ...positive, seq: 10, meku_check: { ...positive.meku_check, no_personal_data_visible: false } });
+  p.bundle.comments.splice(i, 0, negative);
+  let r = verify(p);
   assert.equal(r.verdict, "FAIL");
-  assert.match(check(r, "L04").details.join(" "), /differs from the counted seq 8/);
-  // ...but the same screenshot uploaded again is only a repeat.
-  z.files.set("evidence/second.png", z.files.get(z.bundle.evidence_files[0].file));
+  assert.match(check(r, "L04").details.join(" "), /a second result_returned .* says something different/);
+  // The developer's REJECTED with a wrong seq, then ACCEPTED: also a contradiction.
+  const q = await hostile();
+  const j = commentIndexFor(q.bundle, 10);
+  const accepted = extractRecords(q.bundle.comments[j].body)[0].record;
+  const rejected = { ...clone(q.bundle.comments[j]), id: 4646, created_at: new Date(Date.parse(q.bundle.comments[j].created_at) - 60_000).toISOString() };
+  rejected.updated_at = rejected.created_at;
+  rejected.body = recordComment({ ...accepted, seq: 11, decision: "REJECTED", reason: "The code is not visible" });
+  q.bundle.comments.splice(j, 0, rejected);
+  assert.equal(verify(q).verdict, "FAIL");
+  // The same record with only its seq corrected is a repeat: the right one counts.
+  const z = await hostile();
+  const k = commentIndexFor(z.bundle, 9);
+  const misnumbered = { ...clone(z.bundle.comments[k]), id: 4747, created_at: new Date(Date.parse(z.bundle.comments[k].created_at) - 60_000).toISOString() };
+  misnumbered.updated_at = misnumbered.created_at;
+  misnumbered.body = recordComment({ ...positive, seq: 10 });
+  z.bundle.comments.splice(k, 0, misnumbered);
   r = verify(z);
-  assert.equal(r.verdict, "PASS");
-  assert.match(check(r, "L04").details.join(" "), /posted again/);
+  assert.equal(r.verdict, "PASS", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+  // A stop posted again to correct its seq is ignored; the first one already counts.
+  const y = await hostile();
+  truncateAfter(y.bundle, 9);
+  appendRecord(y.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 9, role: "operator", reason: "The human asked to stop" }));
+  appendRecord(y.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 10, role: "operator", reason: "The human asked to stop" }));
+  appendRecord(y.bundle, SYNTHETIC.operator, closedRecord({ pilotId: SYNTHETIC.pilotId, seq: 11, outcome: "stopped" }));
+  r = verify(y);
+  assert.equal(r.verdict, "STOPPED", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+  // Any stop is a stop: a second one with another reason is not a contradiction.
+  const x = await hostile();
+  truncateAfter(x.bundle, 9);
+  appendRecord(x.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 10, role: "operator", reason: "The human asked to stop" }));
+  appendRecord(x.bundle, SYNTHETIC.operator, stopRecord({ pilotId: SYNTHETIC.pilotId, seq: 11, role: "operator", reason: "No answer for 48 hours" }));
+  appendRecord(x.bundle, SYNTHETIC.operator, closedRecord({ pilotId: SYNTHETIC.pilotId, seq: 11, outcome: "stopped" }));
+  r = verify(x);
+  assert.equal(r.verdict, "STOPPED", JSON.stringify(r.checks.filter((c) => c.status === "FAIL")));
+});
+
+test("review 5: record.mjs returned names the screenshot its checks are about", async () => {
+  const p = await hostile();
+  const dir = mkdtempSync(join(tmpdir(), "pow-returned-"));
+  truncateAfter(p.bundle, 8);
+  writeFileSync(join(dir, "bundle.json"), JSON.stringify(p.bundle));
+  for (const [name, bytes] of p.files) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), bytes);
+  }
+  const out = spawnSync(process.execPath, [join(here, "record.mjs"), "returned", "--bundle", join(dir, "bundle.json"), "--code-visible", "--object-visible", "--no-personal-data"], { encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  assert.equal(readRecordComment(out.stdout).record?.type, "result_returned", "standard output is exactly one countable comment");
+  assert.ok(out.stderr.includes(SYNTHETIC.attachmentUrl), out.stderr);
+});
+
+test("review 5: JavaScript and Python count the same records when a kind is posted twice", async (t) => {
+  if (spawnSync("python3", ["--version"]).status !== 0) return t.skip("python3 not installed");
+  const both = (p) => {
+    const dir = mkdtempSync(join(tmpdir(), "pow-p5-"));
+    writeFileSync(join(dir, "bundle.json"), JSON.stringify(p.bundle));
+    const py = spawnSync("python3", ["-I", join(here, "digest_reference.py"), join(dir, "bundle.json")], { encoding: "utf8" });
+    const js = verify(p);
+    return { js, py: py.status === 0 ? py.stdout.split(" ")[0] : null, pyErr: py.stderr };
+  };
+  const twice = async (seq, change, typed) => {
+    const p = await hostile();
+    const i = commentIndexFor(p.bundle, seq);
+    const record = extractRecords(p.bundle.comments[i].body)[0].record;
+    const early = { ...clone(p.bundle.comments[i]), id: 5000 + seq, created_at: new Date(Date.parse(p.bundle.comments[i].created_at) - 60_000).toISOString() };
+    early.updated_at = early.created_at;
+    early.body = recordComment({ ...record, ...change, seq: typed });
+    p.bundle.comments.splice(i, 0, early);
+    return p;
+  };
+  const cases = [
+    ["a misnumbered result, then the right one", await twice(9, {}, 10), "PASS"],
+    ["a negative result, misnumbered, then a positive one", await twice(9, { meku_check: { code_visible: true, object_visible: true, no_personal_data_visible: false } }, 10), "FAIL"],
+    ["a rejection, misnumbered, then an acceptance", await twice(10, { decision: "REJECTED", reason: "The code is not visible" }, 11), "FAIL"],
+    ["a misnumbered consent, then the right one", await twice(6, {}, 5), "PASS"],
+  ];
+  for (const [name, p, verdict] of cases) {
+    const o = both(p);
+    assert.equal(o.js.verdict, verdict, name);
+    assert.equal(o.py, o.js.ledger_digest, name);
+    if (verdict === "FAIL") assert.match(o.pyErr, /contradict an earlier record of the same kind/, name);
+  }
+  // A second screenshot: the same bytes are a repeat, other bytes fail; neither changes the digest.
+  const otherUrl = "https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000055";
+  for (const same of [true, false]) {
+    const q = await hostile();
+    const i = commentIndexFor(q.bundle, 8);
+    const record = extractRecords(q.bundle.comments[i].body)[0].record;
+    appendRecordless(q.bundle, SYNTHETIC.human, `${recordComment(record)}\n![Image](${otherUrl})`, i);
+    q.bundle.evidence_files.push({ comment_id: q.bundle.comments[i + 1].id, url: otherUrl, file: "evidence/again.png", sha256: "x" });
+    q.files.set("evidence/again.png", same ? q.files.get(q.bundle.evidence_files[0].file) : makePng(330, 250));
+    const o = both(q);
+    assert.equal(o.js.verdict, same ? "PASS" : "FAIL");
+    assert.equal(o.py, o.js.ledger_digest, same ? "the same screenshot again" : "another screenshot");
+  }
 });
 
 test("review 4 N1: a header line can carry only the reveal's instruction, and it must match", async () => {

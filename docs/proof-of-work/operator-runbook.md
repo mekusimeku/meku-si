@@ -104,7 +104,7 @@ The human posts consent (seq 6). The developer then names the object (seq 7), an
 
 First make sure the evidence file carries no metadata. Ask the developer, or any agent working for you, to run `node tools/pow/verify.mjs --from-issue <ledger-url>` and report check **E04**, check **H05**, and every comment printed under "not counted records, in full" and `READ FIRST`. The command needs no key. If H05 failed, or anything the human wrote might mean they want to stop, treat it as a stop: post a stop and close.
 
-Then open the human's screenshot in seq 8 and look at it.
+Then open the screenshot whose address check **E01** prints, and look at it: that is the one the verifier counts, and the one your checks are about. `record.mjs returned` names it again. If the human posted a second, different screenshot, L04 fails and no record can be built on the ledger: post a stop instead.
 
 - **E04 failed, or anything personal is visible** (a face, a person, a document, an address, a screen, a view out of a window): hide the comment (**···** → **Hide**) and ask GitHub Support to remove the uploaded file. Deleting the comment does not delete the file. Then post a stop. Do not continue.
 - **Otherwise:** post this, replacing `CODE`. Set each check to `true` or `false` as you see it:

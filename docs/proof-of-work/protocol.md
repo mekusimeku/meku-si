@@ -89,7 +89,7 @@ Each step is one GitHub comment in the ledger holding one JSON record. The full 
 
 **Time limits.** The evidence must arrive within 48 hours of the object being revealed, and the developer's decision within 168 hours (7 days) of the request record.
 
-**No edits, no deletions, no renames.** No comment is ever edited or deleted. An edited record fails L05. An edited comment by the human might have said STOP first, so it needs a stop record (H05). Participants do not rename their GitHub accounts until the report is published. A posting mistake, such as text around a record, is not counted: post the record again, alone. Anything else is handled with a stop record and, if wanted, a new pilot with a new code.
+**No edits, no deletions, no renames.** No comment is ever edited or deleted. An edited record fails L05. An edited comment by the human might have said STOP first, so it needs a stop record (H05). Participants do not rename their GitHub accounts until the report is published. A posting mistake, such as text around a record, is not counted: post the record again, alone. Each record is posted once: a second record of the same kind that says anything else, apart from its seq, fails the pilot (L04), so a negative check, a rejection or a checked screenshot can never be replaced. Stops are the exception. Anything else is handled with a stop record and, if wanted, a new pilot with a new code.
 
 ## Pass and fail
 

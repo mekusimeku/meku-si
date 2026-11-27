@@ -263,10 +263,13 @@ export function verifyBundle(
     for (const { record } of sequenced) if (record.pilot_id !== pilotId) fail("L03", `seq ${record.seq} has pilot_id ${record.pilot_id}`);
     if (results.get("L03").status !== "FAIL") pass("L03", pilotId);
 
-    // Records join the chain in time order when their type may come next and their seq is the
-    // next one. A record out of place is not counted (the participant posts it again) unless it
-    // contradicts a counted record. A stop or a close counts whatever seq was typed, because a
-    // typo must never keep a stop from counting.
+    // Each kind of record is posted once. A second record of the same kind by the same role says
+    // the same thing (a repeat, perhaps with its seq corrected) or contradicts the first, which
+    // fails: so a negative record can never be outvoted by a later positive one, and the evidence
+    // the operator checked can never be swapped. Stops are exempt: any stop is a stop.
+    // A record joins the chain when its type may come next and its seq is the next one; a record
+    // out of place is not counted, and the participant posts it again. A stop or a close counts
+    // whatever seq was typed, because a typo must never keep a stop from counting.
     // Two images are the same when their addresses are, or when the bundle holds both files and
     // their bytes are identical (the same screenshot uploaded again gets a new address).
     const files = Array.isArray(bundle.evidence_files) ? bundle.evidence_files : [];
@@ -276,33 +279,29 @@ export function verifyBundle(
       return bytes ? sha256Hex(bytes) : null;
     };
     const sameImage = (a, b) => (a.image ?? null) === (b.image ?? null) || (a.image && b.image && imageHash(a) !== null && imageHash(a) === imageHash(b));
+    const content = (e) => canon({ ...e.record, seq: null });
+    const sameContent = (a, b) => content(a) !== null && content(a) === content(b) && sameImage(a, b);
+    const firstOfKind = new Map(); // type + role -> first valid record of that kind
     for (const entry of sequenced) {
       const { record, comment } = entry;
-      const same = (e) => sameLogin(e.comment.author, comment.author) && canon(e.record) !== null && canon(e.record) === canon(record) && sameImage(e, entry);
-      if (chain.some(same)) {
-        warn("L04", `seq ${record.seq} ${record.type} was posted again at ${comment.created_at}; the repeat is ignored`);
-        reasons.set(comment, `an exact repeat of seq ${record.seq}`);
+      const kind = `${record.type}|${record.role}`;
+      const first = firstOfKind.get(kind);
+      if (record.type !== "stop" && first && !sameContent(first, entry)) {
+        fail("L04", `a second ${record.type} posted at ${comment.created_at} says something different from the one posted at ${first.comment.created_at}`);
+        reasons.set(comment, `contradicts the ${record.type} posted at ${first.comment.created_at}`);
+        continue;
+      }
+      if (!first) firstOfKind.set(kind, entry);
+      if (chain.some((e) => e.record.type === record.type && sameLogin(e.comment.author, comment.author) && (record.type !== "stop" || sameContent(e, entry)))) {
+        warn("L04", `${record.type} was posted again at ${comment.created_at}; the repeat is ignored`);
+        reasons.set(comment, `a repeat of the counted ${record.type}`);
         continue;
       }
       const last = chain.at(-1);
-      // The evidence may be posted again with another screenshot until MEKU returns the result;
-      // the latest one counts, and the one it replaces is listed.
-      if (record.type === "evidence_submitted" && last?.record.type === "evidence_submitted" && sameLogin(last.comment.author, comment.author) && record.seq === last.record.seq) {
-        warn("L04", `the evidence posted at ${last.comment.created_at} was replaced by the evidence posted at ${comment.created_at}`);
-        reasons.set(last.comment, `replaced by the evidence posted at ${comment.created_at}`);
-        chain[chain.length - 1] = entry;
-        continue;
-      }
       const closed = chain.some((e) => e.record.type === "pilot_closed");
       const stopped = chain.some((e) => e.record.type === "stop");
       const allowed = allowedNext(last?.record ?? null, { closed, stopped });
       const lenient = record.type === "stop" || record.type === "pilot_closed";
-      const counted = Number.isSafeInteger(record.seq) ? chain[record.seq] : undefined;
-      if (counted && counted.record.type === record.type && (record.seq !== chain.length || !allowed.includes(record.type))) {
-        fail("L04", `seq ${record.seq} ${record.type} posted at ${comment.created_at} differs from the counted seq ${record.seq}, posted at ${counted.comment.created_at}`);
-        reasons.set(comment, `contradicts the counted seq ${record.seq}`);
-        continue;
-      }
       if (!allowed.includes(record.type) || (record.seq !== chain.length && !lenient)) {
         const expected = allowed.length ? `seq ${chain.length}: ${allowed.join(" or ")}` : "nothing more";
         warn("L04", `seq ${record.seq} ${record.type} posted at ${comment.created_at} is out of place (expected ${expected}); it is not counted`);

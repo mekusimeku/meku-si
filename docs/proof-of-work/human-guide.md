@@ -114,7 +114,7 @@ Post a **new comment** in the ledger with exactly this block and attach the **sc
 }
 ```
 
-Post it within 48 hours of the object being named. If you forgot the screenshot, or attached the wrong one, post the block again with the right screenshot, before the operator returns the result: the last one counts. After the operator's result is posted, do not post another screenshot, because it would contradict the one that was checked. That is all; the operator and the developer do the rest.
+Post it within 48 hours of the object being named. If you forgot the screenshot, post the block again with the screenshot attached. Post only one screenshot: a second, different one would contradict the first, which the operator may already have checked, and the pilot could not pass. If you attached the wrong one, do not post another; tell the operator. That is all; the operator and the developer do the rest.
 
 ## Important
 

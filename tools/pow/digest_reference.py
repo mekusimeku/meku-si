@@ -177,6 +177,10 @@ def when(comment):
     return datetime.fromisoformat(comment["created_at"].replace("Z", "+00:00"))
 
 
+def without_seq(record):
+    return jcs({**record, "seq": None})
+
+
 def same(a, b):
     return isinstance(a, str) and isinstance(b, str) and a.lower() == b.lower()
 
@@ -203,6 +207,8 @@ def main(path, expect_operator, skip):
     )
     roles = {"operator": operator, "developer": developer, "human": human}
     chain = []  # (comment, record, image)
+    first_of_kind = {}  # (type, role) -> the first record of that kind
+    contradictions = []
     for c, read in entries:
         role = next((name for name, login in roles.items() if same(c["author"], login)), None)
         if role is None or read is None:
@@ -214,21 +220,23 @@ def main(path, expect_operator, skip):
             continue
         if record.get("role") != role:
             continue  # a record in another participant's role is not counted
-        if any(same(old["author"], c["author"]) and jcs(earlier) == jcs(record) and old_image == image for old, earlier, old_image in chain):
-            continue  # an exact repeat of an earlier record adds nothing
+        # Each kind of record is posted once: a later one of the same kind must say the same,
+        # apart from its seq. Any stop is a stop. The digest covers records, not images, so a
+        # second screenshot (which verify.mjs fails) cannot change it.
+        kind = (record.get("type"), role)
+        first = first_of_kind.get(kind)
+        if record.get("type") != "stop" and first is not None and without_seq(first) != without_seq(record):
+            contradictions.append(str(c["id"]))
+            continue  # contradicts the first record of its kind (verify.mjs fails the ledger)
+        first_of_kind.setdefault(kind, record)
+        if any(r.get("type") == record.get("type") and same(old["author"], c["author"]) and (record.get("type") != "stop" or without_seq(r) == without_seq(record)) for old, r, _ in chain):
+            continue  # posted again, perhaps with its seq corrected: the counted one stands
         last = chain[-1] if chain else None
-        if record.get("type") == "evidence_submitted" and last and last[1].get("type") == "evidence_submitted" and same(last[0]["author"], c["author"]) and record.get("seq") == last[1].get("seq"):
-            chain[-1] = (c, record, image)  # the evidence posted again with another screenshot replaces it
-            continue
         closed = any(r.get("type") == "pilot_closed" for _, r, _ in chain)
         stopped = any(r.get("type") == "stop" for _, r, _ in chain)
         allowed = allowed_next(last[1] if last else None, closed, stopped)
         lenient = record.get("type") in ("stop", "pilot_closed")
-        seq = record.get("seq")
-        counted = chain[seq] if type(seq) is int and 0 <= seq < len(chain) else None
-        if counted and counted[1].get("type") == record.get("type") and (seq != len(chain) or record.get("type") not in allowed):
-            continue  # contradicts a counted record (verify.mjs fails the ledger)
-        if record.get("type") not in allowed or (not is_seq(seq, len(chain)) and not lenient):
+        if record.get("type") not in allowed or (not is_seq(record.get("seq"), len(chain)) and not lenient):
             continue  # out of place, so not counted
         chain.append((c, record, image))
     digest = sha256_hex(f"{PROTOCOL}|{opening['pilot_id']}")
@@ -236,6 +244,8 @@ def main(path, expect_operator, skip):
         # A lone surrogate cannot be encoded; the wrapper below reports it, as JavaScript refuses it.
         digest = sha256_hex(f"{digest}|{sha256_hex(jcs(record))}")
     print(f"{digest} (through seq {len(chain) - 1}; {len(chain)} records)")
+    if contradictions:
+        print(f"comments {','.join(contradictions)} contradict an earlier record of the same kind; verify.mjs fails this ledger", file=sys.stderr)
 
 
 if __name__ == "__main__":

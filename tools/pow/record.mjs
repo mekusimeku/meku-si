@@ -274,17 +274,20 @@ async function main(argv) {
       case "evidence":
         print(evidenceRecord({ pilotId }));
         return 0;
-      case "returned":
-        print(
-          returnedRecord({
-            bundlePath: need("bundle"),
-            codeVisible: flag("code-visible"),
-            objectVisible: flag("object-visible"),
-            noPersonalData: flag("no-personal-data"),
-            note: opt("note"),
-          }),
-        );
+      case "returned": {
+        const record = returnedRecord({
+          bundlePath: need("bundle"),
+          codeVisible: flag("code-visible"),
+          objectVisible: flag("object-visible"),
+          noPersonalData: flag("no-personal-data"),
+          note: opt("note"),
+        });
+        // The checks are about one screenshot: the one the verifier counts. Name it.
+        const url = ledgerState(need("bundle")).result.evidence?.url;
+        console.error(`These checks are about the screenshot at ${url ?? "(none found)"}. Look at that one, no other. Copy only what follows:\n`);
+        print(record);
         return 0;
+      }
       case "decision": {
         if (flag("accept") === flag("reject")) throw new Error("choose exactly one of --accept or --reject");
         const checks = {

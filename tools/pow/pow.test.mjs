@@ -33,7 +33,7 @@ import { SYNTHETIC, buildSyntheticPilot, makeIcc, makeJpeg, makePng, pngChunk, t
 import { checkConnection, importStatus, importSubmission, keyKind, makeClient, manualReadyRecord, postableComment, prepareRequest, recordComment, submitRequest } from "./request.mjs";
 import { createMockMeku } from "./mock-meku-mcp.mjs";
 import { commentReport, consentRecord, evidenceRecord, stopRecord, closedRecord } from "./record.mjs";
-import { exportLedger, fetchComment } from "./export.mjs";
+import { downloadAttachment, exportLedger, fetchComment } from "./export.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..");
@@ -648,6 +648,53 @@ test("export records an attachment redirected off GitHub as failed, without savi
   assert.match(bundle.evidence_files[0].error, /unexpected host/);
   const r = verifyBundle(bundle, { loadEvidence: () => null, allowSynthetic: true });
   assert.equal(check(r, "E02").status, "FAIL");
+});
+
+test("attachment downloads follow GitHub's redirects one hop at a time, refuse other hosts unasked, and time out plainly", async () => {
+  const png = makePng();
+  const start = "https://github.com/user-attachments/assets/0a9e8cc1-1f5e-48a9-9c88-c9b65e3ac842";
+  const signed = "https://private-user-images.githubusercontent.com/1/2.png?jwt=x";
+  const asked = [];
+  const steps = [];
+  const github = async (url, init) => {
+    asked.push(String(url));
+    assert.equal(init.redirect, "manual");
+    assert.equal(init.headers.Authorization, undefined, "never a token");
+    if (String(url) === start) return new Response(null, { status: 302, headers: { location: signed } });
+    return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+  };
+  const got = await downloadAttachment(start, { fetchImpl: github, onStep: (s) => steps.push(s) });
+  assert.deepEqual(Buffer.from(got.bytes), Buffer.from(png));
+  assert.deepEqual(asked, [start, signed]);
+  assert.deepEqual(steps, ["asking github.com", "redirected to private-user-images.githubusercontent.com"]);
+  // A hop off GitHub is refused before anything is sent to that host.
+  const offsite = [];
+  const evil = async (url) => {
+    offsite.push(String(url));
+    return new Response(null, { status: 302, headers: { location: "https://evil.example/x.png" } });
+  };
+  await assert.rejects(downloadAttachment(start, { fetchImpl: evil }), /unexpected host: evil\.example/);
+  assert.deepEqual(offsite, [start]);
+  // Endless redirects stop.
+  const loop = async () => new Response(null, { status: 302, headers: { location: start } });
+  await assert.rejects(downloadAttachment(start, { fetchImpl: loop }), /redirected more than 5 times/);
+  // A network that never answers ends with the host and the step named, not a bare abort.
+  // (A real socket keeps Node running while it waits; this stand-in holds a timer instead.)
+  const silent = (url, init) =>
+    new Promise((_, reject) => {
+      const alive = setInterval(() => {}, 1000);
+      init.signal.addEventListener("abort", () => {
+        clearInterval(alive);
+        reject(init.signal.reason);
+      });
+    });
+  await assert.rejects(downloadAttachment(start, { fetchImpl: silent, timeoutMs: 50 }), /no complete answer from github\.com within 0 s while downloading the attachment/);
+  await assert.rejects(fetchComment("https://github.com/mekusimeku/meku-si/pull/43#issuecomment-1", { fetchImpl: silent, timeoutMs: 50 }), /no complete answer from api\.github\.com within 0 s while reading the comment/);
+  const refused = async () => {
+    throw new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } });
+  };
+  await assert.rejects(downloadAttachment(start, { fetchImpl: refused }), /could not reach github\.com while downloading the attachment: ECONNREFUSED/);
+  await assert.rejects(downloadAttachment(start, { fetchImpl: async () => new Response("no", { status: 403 }) }), /answered HTTP 403 \(github\.com\)/);
 });
 
 // ---- CLIs --------------------------------------------------------------------------------

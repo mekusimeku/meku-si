@@ -48,7 +48,7 @@ This checks, before anyone else is involved, that records and screenshots posted
    node tools/pow/record.mjs check-image <your comment link>
    ```
 
-   It must end with `PASS`. A download error is no result, not a pass: ask an agent somewhere else. If it says `FAIL`, post the output in PR #43. The human's phone is tested the same way later, in their own participant dry run.
+   It must end with `PASS`. A download error is no result, not a pass: the command now names the host and the step that failed. Then open the comment in a browser and save the picture. Check that its SHA-256 equals the one the cleaner showed, and run `check-image` on the saved file. If it says `FAIL`, post the output in PR #43. The human's phone is tested the same way later, in their own participant dry run.
 
 **Test C: three things nobody has checked yet (5 minutes).** Each answer decides whether a rule of the pilot works in practice, so post what you see in PR #43:
 

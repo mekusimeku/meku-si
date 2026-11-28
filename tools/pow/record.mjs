@@ -337,19 +337,31 @@ async function main(argv) {
         // A comment link checks every attachment in that comment.
         if (!rest[0]) throw new Error("check-image needs a file, a GitHub attachment URL or a comment link");
         const sources = [];
+        // Every network step is announced on standard error, so a slow or blocked network shows
+        // where it stalls instead of looking like a hang.
         if (rest[0].includes("#issuecomment-")) {
           const { fetchComment } = await import("./export.mjs");
+          console.error("Reading the comment from api.github.com (waits up to 30 s)...");
           const comment = await fetchComment(rest[0], { token: process.env.GITHUB_TOKEN || undefined });
           sources.push(...extractAttachmentUrls(comment.body));
           if (!sources.length) throw new Error("that comment holds no GitHub attachment");
+          console.error(`The comment holds ${sources.length} attachment${sources.length === 1 ? "" : "s"}.`);
         } else sources.push(rest[0]);
         let failed = false;
         for (const source of sources) {
           let bytes;
           if (/^https?:\/\//i.test(source)) {
             const { downloadAttachment } = await import("./export.mjs");
-            bytes = (await downloadAttachment(source)).bytes;
-            console.log(`Downloaded ${source}: ${bytes.length} bytes, SHA-256 ${sha256Hex(bytes)}`);
+            console.error(`Downloading ${source} (each step waits up to 60 s)...`);
+            const started = Date.now();
+            try {
+              bytes = (await downloadAttachment(source, { onStep: (step) => console.error(`  ${step}`) })).bytes;
+            } catch (error) {
+              throw new Error(
+                `${error.message}\nThe picture could not be downloaded here. Instead, open the comment in a browser, save the picture, and run: node tools/pow/record.mjs check-image <saved file>. Its SHA-256 must equal the one the image cleaner showed.`,
+              );
+            }
+            console.log(`Downloaded ${source}: ${bytes.length} bytes, SHA-256 ${sha256Hex(bytes)}, in ${((Date.now() - started) / 1000).toFixed(1)} s`);
           } else bytes = readFileSync(source);
           const result = scanImage(bytes);
           for (const f of result.findings) console.log(`${f.level.padEnd(5)} ${f.code}: ${f.detail}`);

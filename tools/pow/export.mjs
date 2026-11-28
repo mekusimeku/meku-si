@@ -27,16 +27,22 @@ const apiHeaders = (token) => ({
 const COMMENT_LINK = /^https:\/\/github\.com\/([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})\/(?:issues|pull)\/\d{1,9}#issuecomment-(\d{1,15})$/;
 
 /** Reads one public comment, for checking how a record posted from a phone will be read. */
-export async function fetchComment(link, { fetchImpl = fetch, token } = {}) {
+export async function fetchComment(link, { fetchImpl = fetch, token, timeoutMs = 30_000 } = {}) {
   const match = String(link).match(COMMENT_LINK);
   if (!match) throw new Error("Give a comment link: https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id> (also /pull/<n>)");
   const [, owner, repo, id] = match;
-  const response = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/issues/comments/${id}`, {
-    headers: apiHeaders(token),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`GitHub API answered HTTP ${response.status} for that comment`);
-  const c = await response.json();
+  let response;
+  let c;
+  try {
+    response = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/issues/comments/${id}`, {
+      headers: apiHeaders(token),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) throw new Error(`GitHub API answered HTTP ${response.status} for that comment`);
+    c = await response.json();
+  } catch (error) {
+    throw networkError(error, "api.github.com", "reading the comment", timeoutMs);
+  }
   return { id: c.id, author: c.user?.login ?? null, created_at: c.created_at, updated_at: c.updated_at, html_url: c.html_url, body: c.body ?? "" };
 }
 
@@ -65,16 +71,59 @@ async function readCapped(response, cap) {
 }
 
 const allowedAssetHost = (host) => host === "github.com" || host.endsWith(".githubusercontent.com");
+const MAX_REDIRECTS = 5;
 
-/** Downloads one GitHub attachment without any token, refusing other hosts and large files. */
-export async function downloadAttachment(url, { fetchImpl = fetch } = {}) {
+/**
+ * A network failure, said plainly: which host, which step, and for a timeout how long it waited.
+ * Errors that already explain themselves (an HTTP status, a refused host) pass through unchanged.
+ */
+function networkError(error, host, step, timeoutMs) {
+  if (error?.name === "TimeoutError" || error?.name === "AbortError")
+    return new Error(`no complete answer from ${host} within ${Math.round(timeoutMs / 1000)} s while ${step}`);
+  if (error instanceof TypeError) {
+    const cause = error.cause?.code ?? error.cause?.message ?? error.message;
+    return new Error(`could not reach ${host} while ${step}: ${cause}`);
+  }
+  return error;
+}
+
+/**
+ * Downloads one GitHub attachment without any token, refusing other hosts and large files.
+ * Redirects are followed one at a time, so a hop to any host other than GitHub's is refused
+ * before it is requested, and onStep can report every hop as it happens.
+ */
+export async function downloadAttachment(url, { fetchImpl = fetch, timeoutMs = 60_000, onStep = () => {} } = {}) {
   if (extractAttachmentUrls(url).length !== 1 || extractAttachmentUrls(url)[0] !== url) throw new Error("not a GitHub attachment URL");
-  const response = await fetchImpl(url, { headers: { "User-Agent": EXPORTER_VERSION }, redirect: "follow", signal: AbortSignal.timeout(60_000) });
-  const finalHost = new URL(response.url || url).hostname;
-  if (!allowedAssetHost(finalHost)) throw new Error(`attachment redirected to an unexpected host: ${finalHost}`);
-  if (!response.ok) throw new Error(`attachment download answered HTTP ${response.status}`);
-  const bytes = await readCapped(response, MAX_EVIDENCE_BYTES);
-  return { bytes, contentType: response.headers.get("content-type") };
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const host = new URL(current).hostname;
+    if (!allowedAssetHost(host)) throw new Error(`attachment redirected to an unexpected host: ${host}`);
+    onStep(hop === 0 ? `asking ${host}` : `redirected to ${host}`);
+    let response;
+    try {
+      response = await fetchImpl(current, { headers: { "User-Agent": EXPORTER_VERSION }, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
+    } catch (error) {
+      throw networkError(error, host, "downloading the attachment", timeoutMs);
+    }
+    // A fetch that followed redirects itself still has to end on GitHub.
+    const answeredBy = new URL(response.url || current).hostname;
+    if (!allowedAssetHost(answeredBy)) throw new Error(`attachment redirected to an unexpected host: ${answeredBy}`);
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      await response.body?.cancel().catch(() => {});
+      if (!location) throw new Error(`${host} answered HTTP ${response.status} without saying where to go`);
+      current = new URL(location, current).toString();
+      continue;
+    }
+    if (!response.ok) throw new Error(`attachment download answered HTTP ${response.status} (${host})`);
+    try {
+      const bytes = await readCapped(response, MAX_EVIDENCE_BYTES);
+      return { bytes, contentType: response.headers.get("content-type"), host };
+    } catch (error) {
+      throw networkError(error, host, "downloading the attachment", timeoutMs);
+    }
+  }
+  throw new Error(`the attachment was redirected more than ${MAX_REDIRECTS} times`);
 }
 
 export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token, now = () => new Date(), expectOperator = "mekusimeku" }) {

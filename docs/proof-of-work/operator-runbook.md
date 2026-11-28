@@ -106,7 +106,7 @@ First make sure the evidence file carries no metadata. Ask the developer, or any
 
 Then open the screenshot whose address check **E01** prints, and look at it: that is the one the verifier counts, and the one your checks are about. `record.mjs returned` names it again. If the human posted a second, different screenshot, L04 fails and no record can be built on the ledger: post a stop instead.
 
-- **E04 failed, or anything personal is visible** (a face, a person, a document, an address, a screen, a view out of a window): hide the comment (**···** → **Hide**) and ask GitHub Support to remove the uploaded file. Deleting the comment does not delete the file. Then post a stop. Do not continue. Hiding may change the comment's edit time, which the verifier counts as an edit (L05, see [dry runs](dry-runs.md)). Protecting the person comes first, even though the pilot then ends in FAIL rather than STOPPED. Never hide a ledger comment for any other reason.
+- **E04 failed, or anything personal is visible** (a face, a person, a document, an address, a screen, a view out of a window): hide the comment (**···** → **Hide**) and ask GitHub Support to remove the uploaded file. Deleting the comment does not delete the file. Then post a stop. Do not continue. Hiding changes the comment's edit time, and unhiding does not undo it, so the verifier counts the record as edited (L05). This was confirmed in test C2 (see [dry runs](dry-runs.md)). Protecting the person comes first, even though the pilot then ends in FAIL rather than STOPPED. Never hide a ledger comment for any other reason.
 - **Otherwise:** post this, replacing `CODE`. Set each check to `true` or `false` as you see it:
 
 ```json

@@ -2,7 +2,7 @@
 
 The pilot does not need B4, B5, B6 or B7 to be resolved: it relays the task by hand, and every report says so. This page records who owns each item, what is open in the MEKU web app repository `mekusimeku/screenshot-magic-5054`, and the change MEKU would need later, so that nobody duplicates or collides with work already under way.
 
-This work made **no change** in `screenshot-magic-5054`. Its `main` (commit `f36d318`) and its open pull requests were read on 2026-11-28. The work stayed away from anything about MEKU POCKET and from payment code.
+This work made **no change** in `screenshot-magic-5054`. Its `main` (commit `f36d318`, and again at `28134eb`, which changes only the homepage) and its open pull requests were read on 2026-11-28. The work stayed away from anything about MEKU POCKET and from payment code.
 
 | # | What is missing | Who decides or owns it | Open work on the same files | Needed for POW-001? |
 | --- | --- | --- | --- | --- |

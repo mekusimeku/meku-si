@@ -2,9 +2,11 @@
 
 This page covers what only the MEKU founder can do before the pilot opens: a phone test, a second reviewer account, the developer invitation and the pilot key. Nothing here moves money, creates a mission or touches MEKU POCKET, and nothing here posts in a ledger. The operator steps after that are in the [operator runbook](operator-runbook.md).
 
+**Status, 28 November 2026.** Section 1, the phone test, is complete: tests A, B and C1 to C3 all passed or behaved as expected (record: [dry runs](dry-runs.md)). Next is section 2, the second reviewer account.
+
 Do it in this order:
 
-1. [Phone test](#1-phone-test-about-15-minutes): about 15 minutes, no key and no pilot.
+1. [Phone test](#1-phone-test-about-15-minutes): about 15 minutes, no key and no pilot. Done on 28 November 2026.
 2. [Second reviewer account](#2-second-reviewer-account): one new account and one database row.
 3. Send the [developer invitation](developer-invitation.md) and wait for a yes that confirms the four statements.
 4. [Pilot key](#3-pilot-key-issue-limit-watch-revoke), only after that yes.
@@ -13,7 +15,7 @@ Do it in this order:
 
 Wherever a step says "ask an agent", any agent working for you can run the command, for example a Claude session. These commands need no key and change nothing; they only read public GitHub data.
 
-Screen labels below are copied from the MEKU web app's code (`main` at commit `f36d318`, 2026-11-28). If the site shows a different label, it was deployed from an older or newer version: stop and check before going on.
+Screen labels below are copied from the MEKU web app's code: `main` at commit `f36d318`, checked again at `28134eb` on 28 November 2026. The only change in between is the homepage. If the site shows a different label, it was deployed from an older or newer version: stop and check before going on.
 
 ## 1. Phone test (about 15 minutes)
 
@@ -53,7 +55,7 @@ This checks, before anyone else is involved, that records and screenshots posted
 **Test C: three things nobody has checked yet (5 minutes).** Each answer decides whether a rule of the pilot works in practice, so post what you see in PR #43:
 
 1. Add a reaction (for example 👍) to your test A comment, then ask an agent to run `check-comment` on it again. It must still say `PASS`. If it now says "edited", reactions change GitHub's edit time, and any outsider could make a record look edited.
-2. On the same test A comment, tap **···**, then **Hide**, and choose a reason. Ask an agent to run `check-comment` on it once more. If it now says "edited", hiding a comment for privacy also counts as an edit. Then unhide it.
+2. On the same test A comment, tap **···**, then **Hide**, and choose a reason. Ask an agent to run `check-comment` on it once more. If it now says "edited", hiding a comment for privacy also counts as an edit. Then unhide it. (Result on 28 November: it does say "edited", and it still does after unhiding. That is why a ledger comment is hidden only to protect someone's privacy.)
 3. Open PR #43 in a private Safari tab, signed out. Both test comments must be visible there. GitHub sometimes hides comments from new accounts; the human's account is tested the same way in their dry run.
 
 Both test comments stay in PR #43. They are not in any ledger, so they never count as pilot records.

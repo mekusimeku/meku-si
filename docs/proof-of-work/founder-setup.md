@@ -36,19 +36,19 @@ This checks, before anyone else is involved, that records and screenshots posted
 
    It must end with `PASS`. If it says `FAIL`, it names the problem, for example curly quotes. Fix that and repeat with a new comment. Never edit a comment.
 
-**Test B: post a screenshot.**
+**Test B: clean a screenshot and post it.** This is an assisted dry run: MEKU testing its own tools on your iPhone. It is not participant testing, and it says nothing about any participant's phone ([dry runs](dry-runs.md)). Your first test found EXIF and Photoshop metadata in iPhone screenshots, so every screenshot now goes through the [image cleaner](image-cleaner.md).
 
-1. Take a photo of a blank sheet of paper, with nothing else in the picture.
-2. Open the photo in Photos and tap it once, so the buttons and the bar with the time disappear. Press the side button and volume up together.
-3. Open the screenshot and swipe up on it. If you see a map or a place name, do not post it: the test has already found a problem, so post only that finding in PR #43.
-4. In PR #43, start a new comment, tap the paperclip ("Paste, drop, or click to add files"), choose the screenshot and tap **Comment**. Write nothing else in that comment.
-5. Copy the link of that comment, as in test A, and ask an agent to run:
+1. Open the image cleaner in Safari. Until MEKU hosts it, use the private claude.ai link from the chat. Tap **Check this phone's browser**, then **Run the check**. All five lines must say *passed*. If one does not, post the lines in PR #43 and stop here.
+2. Take a photo of a blank sheet of paper, with nothing else in the picture. Open it in Photos, tap it once so the buttons and the bar with the time disappear, and press the side button and volume up together.
+3. In the cleaner, tap **Choose the screenshot** and pick that screenshot. Wait for **Ready to post**, tap **Save clean PNG** and save it to Files.
+4. In PR #43, start a new comment. On the first line write `Assisted dry run (MEKU), not participant testing`. Then tap the paperclip ("Paste, drop, or click to add files"), choose **Choose File**, not the photo library, pick the file named `pow-clean-….png`, and tap **Comment**.
+5. Copy the link of that comment, as in test A, and ask an agent whose network can download GitHub attachments to run:
 
    ```sh
    node tools/pow/record.mjs check-image <your comment link>
    ```
 
-   It must end with `PASS`. A `WARN` about a screenshot note or a time chunk is fine. If it says `FAIL`, try the other ways the [human guide](human-guide.md#step-3-do-the-task) mentions: crop the screenshot, then post from the GitHub app instead of Safari. Check each new comment the same way. Post the results in PR #43 either way. They show which way of posting works on an iPhone, and the human's phone is tested the same way later.
+   It must end with `PASS`. A download error is no result, not a pass: ask an agent somewhere else. If it says `FAIL`, post the output in PR #43. The human's phone is tested the same way later, in their own participant dry run.
 
 **Test C: three things nobody has checked yet (5 minutes).** Each answer decides whether a rule of the pilot works in practice, so post what you see in PR #43:
 

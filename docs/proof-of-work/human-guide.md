@@ -22,14 +22,14 @@ You need a GitHub account, paper, a pen and a phone with a camera. It takes unde
 
 ## Before you start: a dry run of your screenshot
 
-Some phones add hidden data to images, and the pilot can only use a screenshot that carries none. So the operator will ask you to test your phone once, before the pilot starts:
+Phones add hidden data to images, even to screenshots, and the pilot can only use a picture that carries none. So you clean every screenshot with the **MEKU image cleaner**, a web page the operator sends you. It works entirely on your phone and uploads nothing. Before the pilot starts, you test the whole path once:
 
 1. Take a photo of a **blank** sheet of paper, with nothing else in the picture.
 2. Make a screenshot of it exactly as step 3 below describes.
-3. Before posting, open the screenshot in your photo app and swipe up on it. If you see a map or a place name, the image carries a location: do not post it, and tell the operator.
-4. In the dry-run issue the operator sends you, post one comment with the evidence block from step 4 below and that screenshot attached, exactly as you will in the ledger, from the same phone and the same app or browser.
+3. Open the image cleaner, tap **Choose the screenshot** and pick it. Wait for **Ready to post**, tap **Save clean PNG** and save the file to Files. If the page does not say **Ready to post**, post nothing and tell the operator what it says.
+4. In the dry-run issue the operator sends you, post one comment with the evidence block from step 4 below and the clean file attached: tap the paperclip, then **Choose File**, and pick the file named `pow-clean-….png`. Never attach a picture from Photos: the phone can add hidden data again. Use the same phone and the same app or browser you will use in the pilot.
 
-Anything you post on GitHub is public at once, so post only the screenshot of the blank page, never the photo itself. Your GitHub username appears on that issue. The operator has the image checked and tells you whether it passed, and also checks that your comment can be seen by others: GitHub sometimes hides comments from brand-new accounts. If the check did not pass, the operator will suggest another way to make the screenshot, and you try again.
+Anything you post on GitHub is public at once, so post only the clean screenshot of the blank page, never the photo itself. Your GitHub username appears on that issue. You do this dry run yourself. The operator may explain each step, but will not take, clean or post the picture for you. The operator has the image checked and tells you whether it passed, and also checks that your comment can be seen by others: GitHub sometimes hides comments from brand-new accounts. If the check did not pass, the operator will help you find the step that went wrong, and you try again.
 
 ## What the request says
 
@@ -91,11 +91,12 @@ The developer will post a comment whose first line says, for example, `write K7Q
 1. Write the **code** from the request and, right after it, the **2 characters** from the developer's comment, clearly by hand on a piece of paper: 10 characters on one line. Every character is a capital letter or a digit, never I, L, O or U.
 2. Put the **named object** next to the paper on a plain surface such as a table or the floor.
 3. Take **one photo** showing only the paper and the object.
-4. Take a **screenshot** of that photo, the same way as in the dry run. Open the photo and tap it once so the buttons and the bar with the time disappear. On an iPhone, press the side button and volume up together. On most Android phones, press power and volume down together. If the bar with the time is still visible, crop it away. A screenshot normally carries no location data, and the verifier checks the file anyway.
+4. Take a **screenshot** of that photo, the same way as in the dry run. Open the photo and tap it once so the buttons and the bar with the time disappear. On an iPhone, press the side button and volume up together. On most Android phones, press power and volume down together. If the bar with the time is still visible, crop it away.
+5. **Clean the screenshot** with the image cleaner, as in the dry run: choose it, wait for **Ready to post**, tap **Save clean PNG** and save it to Files.
 
 ## Step 4: post the evidence
 
-Post a **new comment** in the ledger with exactly this block and attach the **screenshot** to the same comment, one image only, and write nothing else in it. The block counts only together with its screenshot. On GitHub, use the paperclip or "Paste, drop, or click to add files":
+Post a **new comment** in the ledger with exactly this block and attach the **clean screenshot** to the same comment, one image only, and write nothing else in it. The block counts only together with its screenshot. On GitHub, tap the paperclip ("Paste, drop, or click to add files"), then **Choose File**, and pick the file named `pow-clean-….png`, never a picture from Photos. The block:
 
 ```json
 {

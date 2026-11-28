@@ -62,6 +62,7 @@ Elapsed: request to decision [h]; object named to evidence [h].
 
 - The human consented at [time], after the offer at [time]. The object `[OBJECT]` and the suffix `[SUFFIX]` were named at [time]. Evidence arrived at [time], [h] after the reveal.
 - Evidence file: `[evidence/<sha256>.png]`, SHA-256 `[sha256]`, [media type], [width × height], [bytes]. Metadata findings: [none / list].
+- Cleaned with the [image cleaner](../../docs/proof-of-work/image-cleaner.md) on the human's phone: [yes, scanner id shown on the page / no]. Participant dry run: [link to the dry-run comment, and its check-image result].
 
 ## 6. Result and decision
 

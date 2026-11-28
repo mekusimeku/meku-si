@@ -36,7 +36,9 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Offline tests, including planted faults and docs-to-tools checks
-        run: node --test tools/pow/pow.test.mjs tools/pow/pow-docs.test.mjs
+        run: node --test tools/pow/pow.test.mjs tools/pow/pow-docs.test.mjs tools/pow/clean-image.test.mjs
+      - name: The image cleaner page is built from the current evidence image check
+        run: node tools/pow/build-clean-image.mjs --check
       - name: Synthetic ledger end to end, JavaScript and independent Python digests agree
         run: |
           node tools/pow/synthetic.mjs "$RUNNER_TEMP/pow"

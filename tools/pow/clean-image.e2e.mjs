@@ -77,6 +77,9 @@ async function inputs() {
   // 6. A picture too small for evidence: the page must refuse it and offer no file.
   const tiny = await (await photoLike(200, 150)).png().toBuffer();
   list.push({ name: "too-small.png", bytes: new Uint8Array(tiny), expect: { width: 200, height: 150 }, refuse: true });
+  // 7. A blank picture of one flat colour: refused, nothing to save.
+  const flat = await sharp({ create: { width: 800, height: 600, channels: 3, background: "#ffffff" } }).png().toBuffer();
+  list.push({ name: "blank.png", bytes: new Uint8Array(flat), expect: { width: 800, height: 600 }, refuse: true });
   for (const item of list) writeFileSync(join(out, item.name), item.bytes);
   return list;
 }
@@ -140,8 +143,9 @@ for (const item of await inputs()) {
   const ok = await tab.$eval("#status", (el) => el.classList.contains("ok"));
   const facts = await tab.$$eval("#facts dt", (dts) => Object.fromEntries(dts.map((dt) => [dt.textContent, dt.nextElementSibling.textContent])));
   const removed = await tab.$$eval("#removed li", (lis) => lis.map((li) => li.textContent));
-  const saveDisabled = await tab.getAttribute("#save", "aria-disabled");
-  const row = { input: item.name, inputBytes: item.bytes.length, inputFindings: scanImage(Buffer.from(item.bytes)).findings.map((f) => f.code), pageVerdict: ok ? "ready" : "not ready", saveDisabled, status, facts, removed, refuse: !!item.refuse };
+  const saveDisabled = (await tab.isHidden("#report")) ? "hidden" : await tab.getAttribute("#save", "aria-disabled");
+  const previewHidden = await tab.isHidden("#preview");
+  const row = { input: item.name, inputBytes: item.bytes.length, inputFindings: scanImage(Buffer.from(item.bytes)).findings.map((f) => f.code), pageVerdict: ok ? "ready" : "not ready", saveDisabled, previewHidden, status, facts, removed, refuse: !!item.refuse };
   if (ok) {
     if (item.name === "iphone-screenshot.png") await tab.screenshot({ path: join(out, "page-cleaned.png"), fullPage: true });
     const [download] = await Promise.all([tab.waitForEvent("download"), tab.click("#save")]);
@@ -187,8 +191,8 @@ const failed =
   !selfTest.some((t) => t.includes("This browser cleans pictures correctly")) ||
   results.some((r) =>
     r.refuse
-      ? r.pageVerdict !== "not ready" || r.saveDisabled !== "true"
-      : r.input !== "largest-screenshot.png" && (r.pageVerdict !== "ready" || r.saveDisabled !== "false" || r.scannerFindings.length || r.size !== r.expectedSize || r.pixelsVsOriginal.shareOver8 > 0.001),
+      ? r.pageVerdict !== "not ready" || !["true", "hidden"].includes(r.saveDisabled) || (r.saveDisabled === "hidden" && !r.previewHidden)
+      : r.pageVerdict !== "ready" || r.saveDisabled !== "false" || r.scannerFindings.length || r.size !== r.expectedSize || r.pixelsVsOriginal.shareOver8 > 0.001,
   );
 console.log(failed ? "\nE2E: FAIL" : `\nE2E: PASS (files in ${out})`);
 process.exit(failed ? 1 : 0);

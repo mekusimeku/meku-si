@@ -88,7 +88,8 @@ export class ByteBuffer extends Uint8Array {
   indexOf(needle, from = 0) {
     if (typeof needle === "number") return Uint8Array.prototype.indexOf.call(this, needle, from);
     if (!(needle instanceof Uint8Array)) throw new TypeError("indexOf needs a byte or bytes");
-    const start = Math.max(0, Math.trunc(from) || 0);
+    if (from < 0) throw new RangeError("a negative offset is not supported");
+    const start = Math.trunc(from) || 0;
     if (needle.length === 0) return Math.min(start, this.length);
     outer: for (let i = start; i + needle.length <= this.length; i += 1) {
       for (let j = 0; j < needle.length; j += 1) if (this[i + j] !== needle[j]) continue outer;
@@ -179,6 +180,40 @@ export function pngEssentialChunks(bytes) {
     at += c.end - c.start;
   }
   return out;
+}
+
+const CHANNELS = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+
+/**
+ * Whether the PNG's pixel data is complete: it inflates without error to exactly the size its
+ * header promises. A cut stream can still carry valid CRCs and pass the metadata check, and
+ * some decoders show it anyway. null where this browser cannot inflate (no DecompressionStream).
+ */
+export async function pngPixelDataComplete(bytes) {
+  if (typeof DecompressionStream !== "function") return null;
+  const { chunks } = readPngChunks(bytes);
+  const ihdr = chunks[0].data;
+  const view = dataView(ihdr);
+  const [width, height, depth, colour, interlace] = [view.getUint32(0), view.getUint32(4), ihdr[8], ihdr[9], ihdr[12]];
+  if (!(colour in CHANNELS) || interlace !== 0) return false;
+  const expected = height * (1 + Math.ceil((width * CHANNELS[colour] * depth) / 8));
+  const idat = joinBytes(chunks.filter((c) => c.type === "IDAT").map((c) => c.data));
+  try {
+    const reader = new Blob([idat]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > expected) {
+        await reader.cancel();
+        return false;
+      }
+    }
+    return total === expected;
+  } catch {
+    return false;
+  }
 }
 
 /** Chunk types of a PNG, in order (for tests and the page's report). */

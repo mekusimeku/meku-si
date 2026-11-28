@@ -76,9 +76,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       console.error("tools/pow/clean-image.html is out of date: run node tools/pow/build-clean-image.mjs and commit the result.");
       process.exit(1);
     }
-    console.log(`clean-image.html is up to date (scanner ${scannerId()}).`);
+    console.log(`clean-image.html is up to date (scanner ${scannerId()}, page SHA-256 ${createHash("sha256").update(page).digest("hex")}).`);
   } else {
     writeFileSync(PAGE_PATH, page);
-    console.log(`Wrote ${PAGE_PATH} (scanner ${scannerId()}).`);
+    console.log(`Wrote ${PAGE_PATH} (scanner ${scannerId()}, page SHA-256 ${createHash("sha256").update(page).digest("hex")}).`);
   }
 }

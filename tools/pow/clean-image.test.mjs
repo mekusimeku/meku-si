@@ -17,6 +17,7 @@ import {
   makePngChunk,
   pngChunkTypes,
   pngEssentialChunks,
+  pngPixelDataComplete,
   readPngChunks,
   testExifTiff,
   testJpegMetadata,
@@ -171,6 +172,23 @@ test("cleaning keeps only the pixel chunks, unchanged, and the result passes lib
   for (const code of ["EXIF_PRESENT", "GPS_PRESENT", "JPEG_METADATA_SEGMENT", "XMP_LOCATION"]) assert.ok(fails(scanImage(Buffer.from(selfTestJpeg))).includes(code), code);
 });
 
+test("the pixel data must unpack to exactly the size the header promises", async () => {
+  const good = new Uint8Array(makePng());
+  assert.equal(await pngPixelDataComplete(good), true);
+  // The same file with the end of its pixel stream cut off, CRCs made valid again: still passes
+  // the metadata check, but is refused here.
+  const { chunks } = readPngChunks(good);
+  const idat = chunks.find((c) => c.type === "IDAT");
+  const cut = Buffer.concat([Buffer.from(good.subarray(0, idat.start)), pngChunk("IDAT", Buffer.from(idat.data.subarray(0, idat.data.length - 12))), Buffer.from(good.subarray(idat.end))]);
+  assert.deepEqual(scanImage(cut).findings, []);
+  assert.equal(await pngPixelDataComplete(new Uint8Array(cut)), false);
+  // Pixel data for a picture of another size is refused too.
+  const ihdr = Buffer.from(good.subarray(chunks[0].start + 8, chunks[0].end - 4));
+  ihdr.writeUInt32BE(241, 4);
+  const taller = Buffer.concat([Buffer.from(good.subarray(0, 8)), pngChunk("IHDR", ihdr), Buffer.from(good.subarray(chunks[0].end))]);
+  assert.equal(await pngPixelDataComplete(new Uint8Array(taller)), false);
+});
+
 test("the page names what it removes", () => {
   const png = Buffer.concat([makePng(320, 240, [iccpChunk(makeIcc()), pngChunk("eXIf", tiffWithGps()), xmpChunk(SCREENSHOT_XMP), pngChunk("tIME", Buffer.alloc(7)), pngChunk("pHYs", Buffer.alloc(9)), pngChunk("abCd", Buffer.alloc(1))]), Buffer.from("x")]);
   assert.deepEqual(describeHiddenData(new Uint8Array(png)), ["colour profile", "EXIF data", "XMP data", "time stamp", "pixel density", "chunk abCd", "data after the end of the image"]);
@@ -211,6 +229,7 @@ test("ByteBuffer behaves like Buffer wherever the scanner uses it", () => {
   assert.deepEqual([...ByteBuffer.concat([ByteBuffer.from([1, 2]), new Uint8Array([3])])], [1, 2, 3]);
   assert.equal(ByteBuffer.isBuffer(ByteBuffer.from([1])), true);
   assert.equal(ByteBuffer.isBuffer(new Uint8Array(1)), false);
+  assert.throws(() => ByteBuffer.from([1, 2, 3]).indexOf(ByteBuffer.from([3]), -1), RangeError, "an offset Node would count from the end is refused, not misread");
   if (typeof zlib.crc32 === "function") for (const data of [Buffer.alloc(0), Buffer.from("IHDR"), Buffer.alloc(1000, 7)]) assert.equal(crc32(data), zlib.crc32(data));
   assert.equal(makePngChunk("tEXt", new Uint8Array([1])).length, 13);
   assert.equal(testExifTiff().length, 32);

@@ -203,7 +203,8 @@ class ByteBuffer extends Uint8Array {
   indexOf(needle, from = 0) {
     if (typeof needle === "number") return Uint8Array.prototype.indexOf.call(this, needle, from);
     if (!(needle instanceof Uint8Array)) throw new TypeError("indexOf needs a byte or bytes");
-    const start = Math.max(0, Math.trunc(from) || 0);
+    if (from < 0) throw new RangeError("a negative offset is not supported");
+    const start = Math.trunc(from) || 0;
     if (needle.length === 0) return Math.min(start, this.length);
     outer: for (let i = start; i + needle.length <= this.length; i += 1) {
       for (let j = 0; j < needle.length; j += 1) if (this[i + j] !== needle[j]) continue outer;
@@ -294,6 +295,40 @@ function pngEssentialChunks(bytes) {
     at += c.end - c.start;
   }
   return out;
+}
+
+const CHANNELS = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+
+/**
+ * Whether the PNG's pixel data is complete: it inflates without error to exactly the size its
+ * header promises. A cut stream can still carry valid CRCs and pass the metadata check, and
+ * some decoders show it anyway. null where this browser cannot inflate (no DecompressionStream).
+ */
+async function pngPixelDataComplete(bytes) {
+  if (typeof DecompressionStream !== "function") return null;
+  const { chunks } = readPngChunks(bytes);
+  const ihdr = chunks[0].data;
+  const view = dataView(ihdr);
+  const [width, height, depth, colour, interlace] = [view.getUint32(0), view.getUint32(4), ihdr[8], ihdr[9], ihdr[12]];
+  if (!(colour in CHANNELS) || interlace !== 0) return false;
+  const expected = height * (1 + Math.ceil((width * CHANNELS[colour] * depth) / 8));
+  const idat = joinBytes(chunks.filter((c) => c.type === "IDAT").map((c) => c.data));
+  try {
+    const reader = new Blob([idat]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > expected) {
+        await reader.cancel();
+        return false;
+      }
+    }
+    return total === expected;
+  } catch {
+    return false;
+  }
 }
 
 /** Chunk types of a PNG, in order (for tests and the page's report). */
@@ -772,7 +807,7 @@ const els = {
   facts: $("facts"), removed: $("removed"), save: $("save"), saveNote: $("save-note"), again: $("again"),
   runTest: $("run-test"), results: $("test-results"),
 };
-const MAX_PIXELS = 16777216; // the largest canvas iPhone browsers draw
+const MAX_PIXELS = 8388608; // twice the largest iPhone screenshot; photos are refused early
 const MAX_INPUT_BYTES = 60 * 1024 * 1024;
 let current = null; // { blob, name, url }
 let busy = false;
@@ -812,13 +847,18 @@ const release = (canvas) => {
   canvas.height = 0;
 };
 
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => (timer = setTimeout(() => reject(new Error(message)), ms)))]).finally(() => clearTimeout(timer));
+}
+
 async function decode(blob) {
   const url = URL.createObjectURL(blob);
   const img = new Image();
   img.decoding = "async";
   img.src = url;
   try {
-    await img.decode();
+    await withTimeout(img.decode(), 30000, "timeout");
   } catch {
     URL.revokeObjectURL(url);
     throw new Error("This browser cannot open this picture. Use a screenshot (PNG or JPEG).");
@@ -827,7 +867,8 @@ async function decode(blob) {
 }
 
 function toBlob(canvas) {
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("The browser could not save the picture as PNG."))), "image/png"));
+  const saved = new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("The browser could not save the picture as PNG."))), "image/png"));
+  return withTimeout(saved, 60000, "The browser took too long to save the picture. Try again.");
 }
 
 function comparePixels(a, b) {
@@ -842,8 +883,8 @@ function comparePixels(a, b) {
     if (d > max) max = d;
     if (d > 3) differ += 1;
   }
-  const pixels = x.length / 4;
-  return { same: differ <= pixels / 1000, differ, max, pixels };
+  // "The same" means every pixel within 3 of 255: what a PNG round trip can change, and no more.
+  return { same: max <= 3, differ, max, pixels: x.length / 4 };
 }
 
 async function sha256Hex(bytes) {
@@ -872,6 +913,11 @@ async function cleanPicture(blob) {
     const first = canvasFor(width, height, false);
     first.ctx.drawImage(source.img, 0, 0, width, height);
     const shown = first.ctx.getImageData(0, 0, width, height);
+    // A picture of one flat colour (or nothing at all) cannot be evidence: refuse it.
+    const d = shown.data;
+    let blank = true;
+    for (let i = 4; i < d.length; i += 4) if (d[i] !== d[0] || d[i + 1] !== d[1] || d[i + 2] !== d[2] || d[i + 3] !== d[3]) { blank = false; break; }
+    if (blank) throw new Error("The picture is blank: every pixel has the same colour. Choose the screenshot of your photo.");
     let opaque = true;
     for (let i = 3; i < shown.data.length; i += 4) if (shown.data[i] !== 255) { opaque = false; break; }
     // An opaque picture is saved without an alpha channel, which keeps the file smaller.
@@ -884,6 +930,7 @@ async function cleanPicture(blob) {
     if (out !== first) release(out.canvas);
     release(first.canvas);
     const clean = pngEssentialChunks(encoded);
+    const complete = await pngPixelDataComplete(clean);
     // The saved file, read back: same size, same pixels as the picture on screen.
     const back = await decode(new Blob([clean], { type: "image/png" }));
     let pixels;
@@ -907,7 +954,7 @@ async function cleanPicture(blob) {
     } catch {}
     const removed = describeHiddenData(original);
     if (originalScan.findings.some((f) => f.code === "GPS_PRESENT" || f.code === "XMP_LOCATION")) removed.unshift("location");
-    return { original, clean, width, height, pixels, scan, removed, kind: kindOf(original), sha256: await sha256Hex(clean) };
+    return { original, clean, width, height, pixels, complete, scan, removed, kind: kindOf(original), sha256: await sha256Hex(clean) };
   } finally {
     source.done();
   }
@@ -924,7 +971,7 @@ function advice(finding) {
 
 function show(result) {
   const fails = result.scan.findings.filter((f) => f.level === "FAIL");
-  const ready = fails.length === 0 && result.pixels.same;
+  const ready = fails.length === 0 && result.pixels.same && result.complete !== false;
   if (current?.url) URL.revokeObjectURL(current.url);
   const blob = new Blob([result.clean], { type: "image/png" });
   const name = `pow-clean-${(result.sha256 ?? String(Date.now())).slice(0, 8)}.png`;
@@ -934,13 +981,15 @@ function show(result) {
   els.empty.hidden = true;
   els.tray.classList.add("has-image");
   if (ready) setStatus("ok", "Ready to post", "The clean PNG passes the POW evidence image check, and its pixels match the picture.");
-  else if (!result.pixels.same) setStatus("bad", "Not ready", `The cleaned picture differs from the original in ${result.pixels.differ} pixels. Try again in a normal (not private) browser tab.`);
+  else if (result.complete === false) setStatus("bad", "Not ready", "The saved file's pixel data is incomplete. Do not post it. Try again, and tell the operator if it happens again.");
+  else if (!result.pixels.same) setStatus("bad", "Not ready", `The saved picture differs from what this browser drew, in ${result.pixels.differ} pixels by up to ${result.pixels.max} of 255. Do not post it, and tell the operator.`);
   else setStatus("bad", "Not ready", `${fails[0].detail}. ${advice(fails[0])}`);
   const rows = [
     ["Picture", `${result.width} × ${result.height} pixels`],
     ["Clean file", `${mb(result.clean.length)} PNG`],
     ["Original", `${mb(result.original.length)} ${result.kind}`],
-    ["Pixels", result.pixels.same ? (result.pixels.max === 0 ? "identical to the picture" : `the same, within ${result.pixels.max} of 255`) : `${result.pixels.differ} differ`],
+    ["Pixels", result.pixels.max === 0 ? "identical to the picture" : result.pixels.same ? `the same, within ${result.pixels.max} of 255` : `${result.pixels.differ} differ, by up to ${result.pixels.max} of 255`],
+    ["Pixel data", result.complete === null ? "not checked in this browser" : result.complete ? "complete" : "incomplete"],
     ["Check", fails.length ? `FAIL: ${codes(fails)}` : result.scan.findings.length ? `PASS with notes: ${codes(result.scan.findings)}` : "PASS"],
     ["SHA-256", result.sha256 ?? "not available in this browser"],
   ];
@@ -969,10 +1018,24 @@ function show(result) {
   els.report.hidden = false;
 }
 
+// Back to the empty tray: nothing from an earlier picture stays on screen or can be saved.
+function resetTray() {
+  if (current?.url) URL.revokeObjectURL(current.url);
+  current = null;
+  els.preview.hidden = true;
+  els.preview.removeAttribute("src");
+  els.empty.hidden = false;
+  els.tray.classList.remove("has-image");
+  els.save.setAttribute("aria-disabled", "true");
+  els.save.href = "#";
+  els.save.removeAttribute("download");
+}
+
 async function handle(file) {
   if (!file || busy) return;
   busy = true;
   els.report.hidden = true;
+  resetTray();
   setStatus("busy", "Cleaning…", "This can take a few seconds on a phone.");
   try {
     show(await cleanPicture(file));
@@ -998,7 +1061,7 @@ els.save.addEventListener("click", async (event) => {
   event.preventDefault();
   const downloads = await downloadsReady;
   if (!downloads) {
-    els.saveNote.textContent = "Saving is not available in this view. Open this page in Safari and try again.";
+    els.saveNote.textContent = "Saving is not available in this view. Do not use another way to save the picture; tell the operator.";
     return;
   }
   try {
@@ -1050,8 +1113,8 @@ async function selfTest() {
       const result = await cleanPicture(new Blob([dirty], { type }));
       const after = [...new Set(result.scan.findings.filter((f) => f.level === "FAIL").map((f) => f.code))];
       const onlyPixels = pngChunkTypes(result.clean).every((t) => ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"].includes(t));
-      record(after.length === 0 && result.pixels.same && onlyPixels && result.width === 600 && result.height === 400,
-        `Cleaned: ${after.length ? `FAIL ${after.join(", ")}` : "passes the check"}, ${result.pixels.same ? "pixels unchanged" : `${result.pixels.differ} pixels differ`}, ${onlyPixels ? "only pixel data left" : "other data left"}.`);
+      record(after.length === 0 && result.pixels.same && result.complete !== false && onlyPixels && result.width === 600 && result.height === 400,
+        `Cleaned: ${after.length ? `FAIL ${after.join(", ")}` : "passes the check"}, ${result.pixels.same ? "pixels unchanged" : `${result.pixels.differ} pixels differ`}, ${result.complete === false ? "pixel data incomplete" : "pixel data complete"}, ${onlyPixels ? "only pixel data left" : "other data left"}.`);
     }
   } catch (error) {
     record(false, `The test stopped: ${error instanceof Error ? error.message : String(error)}`);

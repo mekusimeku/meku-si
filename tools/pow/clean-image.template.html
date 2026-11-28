@@ -235,7 +235,7 @@ async function cleanPicture(blob) {
   const { width, height } = source;
   try {
     if (!width || !height) throw new Error("This picture has no size this browser can read.");
-    if (width * height > MAX_PIXELS) throw new Error(`This picture has ${Math.round((width * height) / 1e6)} million pixels, more than a phone browser can draw. Use a screenshot.`);
+    if (width * height > MAX_PIXELS) throw new Error(`This picture has ${((width * height) / 1e6).toFixed(1)} million pixels, more than this page accepts (${(MAX_PIXELS / 1e6).toFixed(1)} million). Use a screenshot.`);
     const first = canvasFor(width, height, false);
     first.ctx.drawImage(source.img, 0, 0, width, height);
     const shown = first.ctx.getImageData(0, 0, width, height);

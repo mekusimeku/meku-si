@@ -31,7 +31,7 @@ The image cleaner is a single web page, [`tools/pow/clean-image.html`](../../too
 - **How that is checked.** The tests below check the page's code for this, and the browser test runs it under a content security policy that blocks all network access. claude.ai's published rules for its pages also block requests to other sites; this work does not test that.
 - **Where the page itself comes from.** The page has to be loaded from somewhere. For now, the founder opens it as a private page on claude.ai. Loading the page is an ordinary web request to that host; the picture is never part of it.
 - **For participants**, MEKU decides where the page lives: either the founder shares that claude.ai page, or MEKU hosts the same file on a site it controls.
-- **Checking the copy.** Whichever host is used, it must be this exact file. The footer's scanner id names only the check's code, not the whole page. The page is identified by its SHA-256, which `node tools/pow/build-clean-image.mjs --check` prints at the approved commit. Download the hosted copy and compare its SHA-256 with that before sending its link to anyone.
+- **Checking the copy.** Whichever host is used, it must be this exact file. The footer's scanner id names only the check's code, not the whole page. The page is identified by its SHA-256, which `node tools/pow/build-clean-image.mjs --check` prints at the approved commit. Download the hosted copy and compare its SHA-256 with that before sending its link to anyone. Confirm the stored copy matches before anyone relies on it. For the claude.ai copy, an agent can read the stored page. If the host changes the file, the hash will not match, and that copy must not be used. This comparison has not been made yet.
 
 ## The page's check is the evidence check, never weaker
 
@@ -65,7 +65,8 @@ All five lines must say *passed*.
 - **Size.**
   - Pictures over about 8.4 million pixels are refused, to keep the phone's memory use low; screenshots are far smaller (the largest iPhone screenshot has 3.8 million pixels), and photos should not be posted anyway.
   - A clean file over 10 MB fails the check. Crop the screenshot closer to the paper and the object.
-- **Fingerprinting protection.** Safari can add faint noise when a page reads its canvas. The page compares the saved pixels with what it drew, and the self-test does the same on the device. So any noise shows as **Not ready**; it cannot slip through. If that happens, tell the operator; do not look for another way to save the picture.
+- **Fingerprinting protection.** Safari can add faint noise when a page reads its canvas. Noise that changes the saved pixels shows as **Not ready**, both in the page's pixel check and in the self-test. If that happens, tell the operator; do not look for another way to save the picture.
+- **Older Safari.** Safari before iOS 16.4 cannot check that the pixel data is complete. There the page says *not checked in this browser* for the pixel data, and only the operator's look at the posted picture covers it. Use an up-to-date iPhone.
 - **HEIC.** Safari opens HEIC pictures; Chrome on a computer does not.
 
 ## Files and tests

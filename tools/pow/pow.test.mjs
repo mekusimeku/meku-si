@@ -653,7 +653,8 @@ test("export records an attachment redirected off GitHub as failed, without savi
 test("attachment downloads follow GitHub's redirects one hop at a time, refuse other hosts unasked, and time out plainly", async () => {
   const png = makePng();
   const start = "https://github.com/user-attachments/assets/0a9e8cc1-1f5e-48a9-9c88-c9b65e3ac842";
-  const signed = "https://private-user-images.githubusercontent.com/1/2.png?jwt=x";
+  // Where GitHub really sends a download without a session (seen on its own runners, 2026-11-28).
+  const signed = "https://github-production-user-asset-6210df.s3.amazonaws.com/1/2.png?X-Amz-Signature=x";
   const asked = [];
   const steps = [];
   const github = async (url, init) => {
@@ -666,7 +667,19 @@ test("attachment downloads follow GitHub's redirects one hop at a time, refuse o
   const got = await downloadAttachment(start, { fetchImpl: github, onStep: (s) => steps.push(s) });
   assert.deepEqual(Buffer.from(got.bytes), Buffer.from(png));
   assert.deepEqual(asked, [start, signed]);
-  assert.deepEqual(steps, ["asking github.com", "redirected to private-user-images.githubusercontent.com"]);
+  assert.deepEqual(steps, ["asking github.com", "redirected to github-production-user-asset-6210df.s3.amazonaws.com"]);
+  // So is a signed githubusercontent.com address.
+  const viaUserContent = async (url) =>
+    String(url) === start ? new Response(null, { status: 302, headers: { location: "https://private-user-images.githubusercontent.com/1/2.png?jwt=x" } }) : new Response(png, { status: 200 });
+  assert.deepEqual(Buffer.from((await downloadAttachment(start, { fetchImpl: viaUserContent })).bytes), Buffer.from(png));
+  // Any other bucket on S3 is refused, before it is contacted.
+  const otherBucket = [];
+  const bucket = async (url) => {
+    otherBucket.push(String(url));
+    return new Response(null, { status: 302, headers: { location: "https://someone-else.s3.amazonaws.com/x.png" } });
+  };
+  await assert.rejects(downloadAttachment(start, { fetchImpl: bucket }), /unexpected host: someone-else\.s3\.amazonaws\.com/);
+  assert.deepEqual(otherBucket, [start]);
   // A hop off GitHub is refused before anything is sent to that host.
   const offsite = [];
   const evil = async (url) => {
@@ -695,6 +708,23 @@ test("attachment downloads follow GitHub's redirects one hop at a time, refuse o
   };
   await assert.rejects(downloadAttachment(start, { fetchImpl: refused }), /could not reach github\.com while downloading the attachment: ECONNREFUSED/);
   await assert.rejects(downloadAttachment(start, { fetchImpl: async () => new Response("no", { status: 403 }) }), /answered HTTP 403 \(github\.com\)/);
+  // An answer that is not read is cancelled, so its open connection cannot keep the command
+  // running after the error (which looked like a hang on the founder's laptop).
+  const cancelled = [];
+  const unread = (status, url) => {
+    const response = new Response("body", { status });
+    const original = response.body.cancel.bind(response.body);
+    response.body.cancel = (...args) => {
+      cancelled.push(status);
+      return original(...args);
+    };
+    if (url) Object.defineProperty(response, "url", { value: url });
+    return response;
+  };
+  await assert.rejects(downloadAttachment(start, { fetchImpl: async () => unread(404) }), /HTTP 404/);
+  await assert.rejects(downloadAttachment(start, { fetchImpl: async () => unread(200, "https://evil.example/x.png") }), /unexpected host/);
+  await assert.rejects(fetchComment("https://github.com/mekusimeku/meku-si/pull/43#issuecomment-1", { fetchImpl: async () => unread(500) }), /HTTP 500/);
+  assert.deepEqual(cancelled, [404, 200, 500]);
 });
 
 // ---- CLIs --------------------------------------------------------------------------------

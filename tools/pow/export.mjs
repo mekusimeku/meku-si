@@ -38,7 +38,10 @@ export async function fetchComment(link, { fetchImpl = fetch, token, timeoutMs =
       headers: apiHeaders(token),
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!response.ok) throw new Error(`GitHub API answered HTTP ${response.status} for that comment`);
+    if (!response.ok) {
+      await discard(response);
+      throw new Error(`GitHub API answered HTTP ${response.status} for that comment`);
+    }
     c = await response.json();
   } catch (error) {
     throw networkError(error, "api.github.com", "reading the comment", timeoutMs);
@@ -70,8 +73,16 @@ async function readCapped(response, cap) {
   return Buffer.concat(chunks);
 }
 
-const allowedAssetHost = (host) => host === "github.com" || host.endsWith(".githubusercontent.com");
+// GitHub serves attachments from github.com, its githubusercontent.com hosts and its own asset
+// bucket on Amazon S3: on 28 November 2026 a download without a session was redirected from
+// github.com/user-attachments to that bucket. Only GitHub's exact bucket is allowed, never S3 in
+// general, and only after github.com itself redirected there.
+const GITHUB_ASSET_BUCKETS = new Set(["github-production-user-asset-6210df.s3.amazonaws.com"]);
+const allowedAssetHost = (host) => host === "github.com" || host.endsWith(".githubusercontent.com") || GITHUB_ASSET_BUCKETS.has(host);
 const MAX_REDIRECTS = 5;
+// An answer that is not read must be cancelled: otherwise its open connection keeps the command
+// running after it has already printed its error, which looks like a hang.
+const discard = (response) => response?.body?.cancel().catch(() => {});
 
 /**
  * A network failure, said plainly: which host, which step, and for a timeout how long it waited.
@@ -107,15 +118,21 @@ export async function downloadAttachment(url, { fetchImpl = fetch, timeoutMs = 6
     }
     // A fetch that followed redirects itself still has to end on GitHub.
     const answeredBy = new URL(response.url || current).hostname;
-    if (!allowedAssetHost(answeredBy)) throw new Error(`attachment redirected to an unexpected host: ${answeredBy}`);
+    if (!allowedAssetHost(answeredBy)) {
+      await discard(response);
+      throw new Error(`attachment redirected to an unexpected host: ${answeredBy}`);
+    }
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
-      await response.body?.cancel().catch(() => {});
+      await discard(response);
       if (!location) throw new Error(`${host} answered HTTP ${response.status} without saying where to go`);
       current = new URL(location, current).toString();
       continue;
     }
-    if (!response.ok) throw new Error(`attachment download answered HTTP ${response.status} (${host})`);
+    if (!response.ok) {
+      await discard(response);
+      throw new Error(`attachment download answered HTTP ${response.status} (${host})`);
+    }
     try {
       const bytes = await readCapped(response, MAX_EVIDENCE_BYTES);
       return { bytes, contentType: response.headers.get("content-type"), host };
@@ -133,7 +150,10 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
   // The issue itself: never a pull request, and GitHub's own spelling of its address, so that a
   // verifier who types different capitals still checks the request text against the same URL.
   const issueResponse = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`, { headers, signal: AbortSignal.timeout(30_000) });
-  if (!issueResponse.ok) throw new Error(`GitHub API answered HTTP ${issueResponse.status} for the issue`);
+  if (!issueResponse.ok) {
+    await discard(issueResponse);
+    throw new Error(`GitHub API answered HTTP ${issueResponse.status} for the issue`);
+  }
   const issue = await issueResponse.json();
   if (issue?.pull_request) throw new Error("that number is a pull request, not an issue; a ledger is an issue");
   const canonicalUrl = typeof issue?.html_url === "string" && isLedgerUrl(issue.html_url) ? issue.html_url : issueUrl;
@@ -141,7 +161,10 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}/comments?per_page=100&page=${page}`;
     const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) throw new Error(`GitHub API answered HTTP ${response.status} for comments page ${page}`);
+    if (!response.ok) {
+      await discard(response);
+      throw new Error(`GitHub API answered HTTP ${response.status} for comments page ${page}`);
+    }
     const batch = await response.json();
     if (!Array.isArray(batch)) throw new Error("GitHub API answer is not a list of comments");
     for (const c of batch)

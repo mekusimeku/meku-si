@@ -1,0 +1,45 @@
+name: Check a posted POW picture
+
+# Downloads one posted picture through GitHub's own network and runs the evidence image check on
+# it, exactly as `node tools/pow/record.mjs check-image <comment link>` does on a computer. It
+# needs no key and no laptop: from the GitHub app or website, open Actions, choose this workflow,
+# tap "Run workflow" and paste the comment link. On this pull request it checks the founder's
+# assisted dry-run picture (test B, comment 7237118279).
+
+on:
+  workflow_dispatch:
+    inputs:
+      link:
+        description: "Link of the comment that holds the picture (ends with #issuecomment-...)"
+        required: true
+  pull_request:
+    paths:
+      - tools/pow/export.mjs
+      - tools/pow/record.mjs
+      - .github/workflows/pow-check-posted-picture.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download the posted picture and run the evidence image check
+        env:
+          LINK: ${{ github.event.inputs.link || 'https://github.com/mekusimeku/meku-si/pull/43#issuecomment-7237118279' }}
+          # Read-only, and the tool sends it only to api.github.com, never with the picture's download.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          case "$LINK" in
+            https://github.com/*#issuecomment-*) ;;
+            *) echo "Give the link of a comment: https://github.com/<owner>/<repo>/(issues|pull)/<n>#issuecomment-<id>"; exit 3 ;;
+          esac
+          node tools/pow/record.mjs check-image "$LINK"

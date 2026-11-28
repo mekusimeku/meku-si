@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>POW image cleaner</title>
+<style>
+/* VOICE: plain and exact, a lab tool with one job, for someone holding a phone.
+   IDEA: a photo lab's clean-up tray: the picture goes in carrying hidden notes and comes out bare.
+   PICTURE: the tool itself, first: a large tray that becomes the cleaned picture under its verdict.
+   COLOUR and TYPE: black and white, one mint field for "ready", one red for "not ready"; system
+   fonts only, because this page loads nothing from anywhere.
+   LAYOUT: one column up to 640px, 48px targets, the steps after the tool, the self-test folded. */
+:root{--bg:#fff;--ink:#0b0b0b;--muted:#585858;--line:#dcdcdc;--tray:#f3f3f3;--mint:#b8f5d0;--mint-ink:#06361d;--bad:#ffd9dc;--bad-ink:#6a0010;--btn:#0b0b0b;--btn-ink:#fff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b0b0b;--ink:#f2f2f2;--muted:#a9a9a9;--line:#2b2b2b;--tray:#161616;--mint:#b8f5d0;--mint-ink:#06361d;--bad:#4a0710;--bad-ink:#ffd9dc;--btn:#f2f2f2;--btn-ink:#0b0b0b;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0b0b0b;--ink:#f2f2f2;--muted:#a9a9a9;--line:#2b2b2b;--tray:#161616;--mint:#b8f5d0;--mint-ink:#06361d;--bad:#4a0710;--bad-ink:#ffd9dc;--btn:#f2f2f2;--btn-ink:#0b0b0b;color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow-x:clip}
+.wrap{max-width:640px;margin:0 auto;padding:clamp(20px,5vw,40px) max(4vw,16px) 48px}
+h1{font-size:clamp(32px,8vw,44px);line-height:1.05;margin:4px 0 10px;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:20px;line-height:1.2;margin:0 0 10px}
+h3{font-size:16px;margin:0 0 6px}
+.small{font-size:13px;color:var(--muted);margin:0}
+.lede{margin:0 0 20px;color:var(--muted);max-width:60ch}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+.tray{display:grid;place-items:center;min-height:min(56vh,440px);border:2px dashed var(--line);border-radius:18px;background:var(--tray);cursor:pointer;overflow:hidden;position:relative}
+.tray:focus-within,.tray:hover{border-color:var(--ink)}
+.tray.has-image{border-style:solid;cursor:default}
+.tray-empty{display:grid;gap:6px;text-align:center;padding:28px}
+.tray-empty strong{font-size:22px}
+.tray img{display:block;max-width:100%;max-height:min(62vh,560px);-webkit-touch-callout:none;user-select:none;background:repeating-conic-gradient(#d8d8d8 0 25%,#fff 0 50%) 0 0/16px 16px}
+.status{margin:14px 0 0;padding:0;font-weight:600;min-height:1.5em}
+.status.ok,.status.bad,.status.busy{padding:14px 16px;border-radius:14px}
+.status.ok{background:var(--mint);color:var(--mint-ink)}
+.status.bad{background:var(--bad);color:var(--bad-ink)}
+.status.busy{background:var(--tray)}
+.status span{display:block;font-weight:400;margin-top:2px}
+.facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;margin:16px 0;font-size:15px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;overflow-wrap:anywhere}
+.chips{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;padding:0}
+.chips li{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:14px}
+.button{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;padding:12px 18px;border-radius:14px;border:2px solid var(--btn);background:transparent;color:var(--ink);font:inherit;font-weight:650;text-decoration:none;cursor:pointer;margin-top:10px}
+.button.primary{background:var(--btn);color:var(--btn-ink)}
+.button[aria-disabled=true],.button:disabled{opacity:.4;pointer-events:none}
+.button:focus-visible,.tray:focus-within{outline:3px solid #2f7cf6;outline-offset:3px}
+.note{font-size:14px;color:var(--muted);margin:8px 0 0;min-height:1.4em}
+section{margin-top:30px}
+ol{padding-left:1.3em;margin:0}
+ol li{margin:0 0 10px;padding-left:4px}
+details{margin-top:30px;border-top:1px solid var(--line);padding-top:16px}
+summary{cursor:pointer;font-weight:650;font-size:18px;padding:10px 0}
+.results{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:8px}
+.results li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;font-size:15px}
+.badge{font-size:12px;font-weight:700;border-radius:999px;padding:2px 9px;margin-top:2px}
+.badge.pass{background:var(--mint);color:var(--mint-ink)}
+.badge.fail{background:var(--bad);color:var(--bad-ink)}
+.foot{margin-top:34px;border-top:1px solid var(--line);padding-top:14px}
+code{font-size:13px;overflow-wrap:anywhere}
+@media (prefers-reduced-motion:no-preference){.status{transition:background-color .2s}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="small">MEKU proof of work, pilot POW-001</p>
+    <h1>Clean a screenshot</h1>
+    <p class="lede">This removes the hidden data a phone or an editor adds to a picture (EXIF, location, XMP, Photoshop data, colour profiles) and saves what you see as a clean PNG. Everything happens on this phone. The picture is never uploaded.</p>
+  </header>
+
+  <label class="tray" id="tray" for="file">
+    <span class="tray-empty" id="tray-empty">
+      <strong>Choose the screenshot</strong>
+      <span>Tap here and pick it from Photos or Files.</span>
+    </span>
+    <img id="preview" alt="The cleaned picture" hidden>
+  </label>
+  <input id="file" class="sr" type="file" accept="image/*">
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+
+  <div id="report" hidden>
+    <dl class="facts" id="facts"></dl>
+    <h3>Removed from the original</h3>
+    <ul class="chips" id="removed"></ul>
+    <a id="save" class="button primary" href="#" role="button" aria-disabled="true">Save clean PNG</a>
+    <p id="save-note" class="note" aria-live="polite"></p>
+    <button id="again" class="button" type="button">Choose another picture</button>
+  </div>
+
+  <section>
+    <h2>Then post it</h2>
+    <ol>
+      <li><strong>Save it to Files.</strong> Tap <em>Save clean PNG</em>. If a share sheet opens, choose <em>Save to Files</em>, not <em>Save Image</em>.</li>
+      <li><strong>Attach it from Files.</strong> In the GitHub comment, tap the paperclip, then <em>Choose File</em>, and pick the clean PNG from Downloads or the folder you chose.</li>
+      <li><strong>Never from Photos.</strong> Picking the picture from Photos lets the phone add hidden data again.</li>
+    </ol>
+  </section>
+
+  <details id="selftest">
+    <summary>Check this phone's browser</summary>
+    <p class="note">This makes two test pictures full of hidden data, cleans them here and checks the results. It takes a few seconds and uses no picture of yours.</p>
+    <button id="run-test" class="button" type="button">Run the check</button>
+    <ul class="results" id="test-results"></ul>
+  </details>
+
+  <footer class="foot">
+    <p class="small">This page makes no network requests and works offline once loaded. Its check is a verbatim copy of the evidence image check in <code>tools/pow/lib.mjs</code> (scanner @@SCANNER_ID@@), the code that <code>record.mjs check-image</code> and the POW verifier run. The operator still checks the file you post.</p>
+  </footer>
+</main>
+<script>
+"use strict";
+(() => {
+/*@@CORE@@*/
+
+// The evidence image check of lib.mjs, verbatim. Buffer is the small stand-in above; reading
+// compressed data is not offered here, so a file that needs it fails the check (stricter, never
+// weaker). A cleaned file never holds compressed data outside its pixels.
+const POW = (() => {
+  const Buffer = ByteBuffer;
+  const inflateSync = () => {
+    throw new Error("compressed data is not read by the in-browser check");
+  };
+/*@@SCANNER@@*/
+  return { scanImage, MAX_EVIDENCE_BYTES, MIN_EVIDENCE_SHORT_SIDE };
+})();
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  file: $("file"), tray: $("tray"), empty: $("tray-empty"), preview: $("preview"), status: $("status"), report: $("report"),
+  facts: $("facts"), removed: $("removed"), save: $("save"), saveNote: $("save-note"), again: $("again"),
+  runTest: $("run-test"), results: $("test-results"),
+};
+const MAX_PIXELS = 8388608; // twice the largest iPhone screenshot; photos are refused early
+const MAX_INPUT_BYTES = 60 * 1024 * 1024;
+let current = null; // { blob, name, url }
+let busy = false;
+
+// Inside claude.ai the page runs in a frame that may not start downloads itself; the viewer's
+// "downloads" capability saves the file instead. Anywhere else, a plain download link does.
+const inViewer = !!(window.claude && typeof window.claude.use === "function");
+const downloadsReady = (() => {
+  if (!inViewer) return Promise.resolve(null);
+  try {
+    return Promise.resolve(window.claude.use("downloads")).catch(() => null);
+  } catch {
+    return Promise.resolve(null);
+  }
+})();
+
+function setStatus(kind, title, detail) {
+  els.status.className = `status ${kind}`;
+  els.status.textContent = title;
+  if (detail) {
+    const span = document.createElement("span");
+    span.textContent = detail;
+    els.status.append(span);
+  }
+}
+
+function canvasFor(width, height, opaque) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { alpha: !opaque, colorSpace: "srgb" });
+  if (!ctx) throw new Error("This browser could not make a drawing surface for this picture.");
+  return { canvas, ctx };
+}
+const release = (canvas) => {
+  canvas.width = 0;
+  canvas.height = 0;
+};
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => (timer = setTimeout(() => reject(new Error(message)), ms)))]).finally(() => clearTimeout(timer));
+}
+
+async function decode(blob) {
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.decoding = "async";
+  img.src = url;
+  try {
+    await withTimeout(img.decode(), 30000, "timeout");
+  } catch {
+    URL.revokeObjectURL(url);
+    throw new Error("This browser cannot open this picture. Use a screenshot (PNG or JPEG).");
+  }
+  return { img, width: img.naturalWidth, height: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+}
+
+function toBlob(canvas) {
+  const saved = new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("The browser could not save the picture as PNG."))), "image/png"));
+  return withTimeout(saved, 60000, "The browser took too long to save the picture. Try again.");
+}
+
+function comparePixels(a, b) {
+  if (a.width !== b.width || a.height !== b.height) return { same: false, differ: a.width * a.height, max: 255, pixels: a.width * a.height };
+  const x = a.data;
+  const y = b.data;
+  let differ = 0;
+  let max = 0;
+  for (let i = 0; i < x.length; i += 4) {
+    let d = Math.abs(x[i + 3] - y[i + 3]);
+    if (x[i + 3] >= 32) d = Math.max(d, Math.abs(x[i] - y[i]), Math.abs(x[i + 1] - y[i + 1]), Math.abs(x[i + 2] - y[i + 2]));
+    if (d > max) max = d;
+    if (d > 3) differ += 1;
+  }
+  // "The same" means every pixel within 3 of 255: what a PNG round trip can change, and no more.
+  return { same: max <= 3, differ, max, pixels: x.length / 4 };
+}
+
+async function sha256Hex(bytes) {
+  if (!(window.crypto && crypto.subtle)) return null;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function kindOf(bytes) {
+  if (isPng(bytes)) return "PNG";
+  if (isJpeg(bytes)) return "JPEG";
+  const head = String.fromCharCode.apply(null, bytes.subarray(0, 12));
+  if (head.slice(4, 8) === "ftyp") return "HEIC";
+  return "image";
+}
+
+/** Draws the picture as this browser shows it, keeps only its pixels as PNG, and checks it. */
+async function cleanPicture(blob) {
+  if (blob.size > MAX_INPUT_BYTES) throw new Error("This file is too large for this page. Use a screenshot.");
+  const original = new Uint8Array(await blob.arrayBuffer());
+  const source = await decode(blob);
+  const { width, height } = source;
+  try {
+    if (!width || !height) throw new Error("This picture has no size this browser can read.");
+    if (width * height > MAX_PIXELS) throw new Error(`This picture has ${((width * height) / 1e6).toFixed(1)} million pixels, more than this page accepts (${(MAX_PIXELS / 1e6).toFixed(1)} million). Use a screenshot.`);
+    const first = canvasFor(width, height, false);
+    first.ctx.drawImage(source.img, 0, 0, width, height);
+    const shown = first.ctx.getImageData(0, 0, width, height);
+    // A picture of one flat colour (or nothing at all) cannot be evidence: refuse it.
+    const d = shown.data;
+    let blank = true;
+    for (let i = 4; i < d.length; i += 4) if (d[i] !== d[0] || d[i + 1] !== d[1] || d[i + 2] !== d[2] || d[i + 3] !== d[3]) { blank = false; break; }
+    if (blank) throw new Error("The picture is blank: every pixel has the same colour. Choose the screenshot of your photo.");
+    let opaque = true;
+    for (let i = 3; i < shown.data.length; i += 4) if (shown.data[i] !== 255) { opaque = false; break; }
+    // An opaque picture is saved without an alpha channel, which keeps the file smaller.
+    let out = first;
+    if (opaque) {
+      out = canvasFor(width, height, true);
+      out.ctx.drawImage(first.canvas, 0, 0);
+    }
+    const encoded = new Uint8Array(await (await toBlob(out.canvas)).arrayBuffer());
+    if (out !== first) release(out.canvas);
+    release(first.canvas);
+    const clean = pngEssentialChunks(encoded);
+    const complete = await pngPixelDataComplete(clean);
+    // The saved file, read back: same size, same pixels as the picture on screen.
+    const back = await decode(new Blob([clean], { type: "image/png" }));
+    let pixels;
+    try {
+      const check = canvasFor(back.width, back.height, false);
+      check.ctx.drawImage(back.img, 0, 0);
+      pixels = comparePixels(shown, check.ctx.getImageData(0, 0, back.width, back.height));
+      release(check.canvas);
+    } finally {
+      back.done();
+    }
+    let scan;
+    try {
+      scan = POW.scanImage(clean);
+    } catch {
+      scan = { findings: [{ level: "FAIL", code: "CHECK_ERROR", detail: "the check could not read the cleaned file" }] };
+    }
+    let originalScan = { findings: [] };
+    try {
+      originalScan = POW.scanImage(original);
+    } catch {}
+    const removed = describeHiddenData(original);
+    if (originalScan.findings.some((f) => f.code === "GPS_PRESENT" || f.code === "XMP_LOCATION")) removed.unshift("location");
+    return { original, clean, width, height, pixels, complete, scan, removed, kind: kindOf(original), sha256: await sha256Hex(clean) };
+  } finally {
+    source.done();
+  }
+}
+
+const codes = (findings) => [...new Set(findings.map((f) => f.code))].join(", ");
+const mb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+function advice(finding) {
+  if (finding.code === "TOO_LARGE") return "The clean file is over 10 MB. Crop the screenshot closer to the paper and the object, then choose it again.";
+  if (finding.code === "TOO_SMALL") return `The picture is too small: its shorter side must be at least ${POW.MIN_EVIDENCE_SHORT_SIDE} pixels.`;
+  return "Do not post this picture. Take a new screenshot and try again.";
+}
+
+function show(result) {
+  const fails = result.scan.findings.filter((f) => f.level === "FAIL");
+  const ready = fails.length === 0 && result.pixels.same && result.complete !== false;
+  if (current?.url) URL.revokeObjectURL(current.url);
+  const blob = new Blob([result.clean], { type: "image/png" });
+  const name = `pow-clean-${(result.sha256 ?? String(Date.now())).slice(0, 8)}.png`;
+  current = { blob, name, url: URL.createObjectURL(blob), ready };
+  els.preview.src = current.url;
+  els.preview.hidden = false;
+  els.empty.hidden = true;
+  els.tray.classList.add("has-image");
+  if (ready) setStatus("ok", "Ready to post", "The clean PNG passes the POW evidence image check, and its pixels match the picture.");
+  else if (result.complete === false) setStatus("bad", "Not ready", "The saved file's pixel data is incomplete. Do not post it. Try again, and tell the operator if it happens again.");
+  else if (!result.pixels.same) setStatus("bad", "Not ready", `The saved picture differs from what this browser drew, in ${result.pixels.differ} pixels by up to ${result.pixels.max} of 255. Do not post it, and tell the operator.`);
+  else setStatus("bad", "Not ready", `${fails[0].detail}. ${advice(fails[0])}`);
+  const rows = [
+    ["Picture", `${result.width} × ${result.height} pixels`],
+    ["Clean file", `${mb(result.clean.length)} PNG`],
+    ["Original", `${mb(result.original.length)} ${result.kind}`],
+    ["Pixels", result.pixels.max === 0 ? "identical to the picture" : result.pixels.same ? `the same, within ${result.pixels.max} of 255` : `${result.pixels.differ} differ, by up to ${result.pixels.max} of 255`],
+    ["Pixel data", result.complete === null ? "not checked in this browser" : result.complete ? "complete" : "incomplete"],
+    ["Check", fails.length ? `FAIL: ${codes(fails)}` : result.scan.findings.length ? `PASS with notes: ${codes(result.scan.findings)}` : "PASS"],
+    ["SHA-256", result.sha256 ?? "not available in this browser"],
+  ];
+  els.facts.replaceChildren(...rows.flatMap(([k, v]) => {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = v;
+    return [dt, dd];
+  }));
+  const removed = result.removed.length ? result.removed : ["nothing: the picture had no hidden data"];
+  els.removed.replaceChildren(...removed.map((r) => {
+    const li = document.createElement("li");
+    li.textContent = r;
+    return li;
+  }));
+  els.save.setAttribute("aria-disabled", String(!ready));
+  if (ready && !inViewer) {
+    els.save.href = current.url;
+    els.save.download = name;
+  } else {
+    els.save.href = "#";
+    els.save.removeAttribute("download");
+  }
+  els.saveNote.textContent = "";
+  els.report.hidden = false;
+}
+
+// Back to the empty tray: nothing from an earlier picture stays on screen or can be saved.
+function resetTray() {
+  if (current?.url) URL.revokeObjectURL(current.url);
+  current = null;
+  els.preview.hidden = true;
+  els.preview.removeAttribute("src");
+  els.empty.hidden = false;
+  els.tray.classList.remove("has-image");
+  els.save.setAttribute("aria-disabled", "true");
+  els.save.href = "#";
+  els.save.removeAttribute("download");
+}
+
+async function handle(file) {
+  if (!file || busy) return;
+  busy = true;
+  els.report.hidden = true;
+  resetTray();
+  setStatus("busy", "Cleaning…", "This can take a few seconds on a phone.");
+  try {
+    show(await cleanPicture(file));
+  } catch (error) {
+    setStatus("bad", "Could not clean this picture", error instanceof Error ? error.message : String(error));
+  } finally {
+    busy = false;
+    els.file.value = "";
+  }
+}
+
+els.file.addEventListener("change", () => handle(els.file.files && els.file.files[0]));
+els.again.addEventListener("click", () => els.file.click());
+els.save.addEventListener("click", async (event) => {
+  if (!current || !current.ready) {
+    event.preventDefault();
+    return;
+  }
+  if (!inViewer) {
+    els.saveNote.textContent = `Saved as ${current.name}. On an iPhone it is in Files, under Downloads.`;
+    return;
+  }
+  event.preventDefault();
+  const downloads = await downloadsReady;
+  if (!downloads) {
+    els.saveNote.textContent = "Saving is not available in this view. Do not use another way to save the picture; tell the operator.";
+    return;
+  }
+  try {
+    await downloads.save({ filename: current.name, data: current.blob });
+    els.saveNote.textContent = `Saved as ${current.name}. If a share sheet opened, you chose where it went; otherwise look in Files, under Downloads.`;
+  } catch (error) {
+    const code = error && error.code;
+    els.saveNote.textContent =
+      code === "declined" ? "Not saved." :
+      code === "rate_limited" ? "A save is already waiting for an answer. Try again in a moment." :
+      code === "host_unavailable" ? "This app cannot save files. Open this page in Safari." :
+      "Could not save here. Open this page in Safari and try again.";
+  }
+});
+
+// ---- Self-test: two pictures full of hidden data, cleaned and checked on this device --------
+
+function testCanvas(width, height) {
+  const { canvas, ctx } = canvasFor(width, height, true);
+  const g = ctx.createLinearGradient(0, 0, width, height);
+  g.addColorStop(0, "#0a7d4f");
+  g.addColorStop(1, "#e0569c");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(width * 0.1, height * 0.3, width * 0.8, height * 0.4);
+  ctx.fillStyle = "#111111";
+  ctx.font = `700 ${Math.round(height / 7)}px -apple-system, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("POW 2345 TEST", width / 2, height / 2);
+  return canvas;
+}
+
+async function selfTest() {
+  const rows = [];
+  const record = (ok, text) => rows.push({ ok, text });
+  const fails = (bytes) => [...new Set(POW.scanImage(bytes).findings.filter((f) => f.level === "FAIL").map((f) => f.code))];
+  try {
+    const canvas = testCanvas(600, 400);
+    const png = new Uint8Array(await (await toBlob(canvas)).arrayBuffer());
+    const jpeg = new Uint8Array(await (await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92))).arrayBuffer());
+    release(canvas);
+    const dirtyPng = withPngChunks(png, testPngMetadata());
+    const dirtyJpeg = withJpegSegments(jpeg, testJpegMetadata());
+    for (const [label, dirty, type] of [["PNG with EXIF location, XMP, a text note and a time stamp", dirtyPng, "image/png"], ["JPEG with EXIF location, Photoshop data, XMP and a comment", dirtyJpeg, "image/jpeg"]]) {
+      const before = fails(dirty);
+      record(before.includes("GPS_PRESENT") && before.includes("EXIF_PRESENT"), `Test ${label}: the check refuses it (${before.join(", ") || "no finding"}).`);
+      const result = await cleanPicture(new Blob([dirty], { type }));
+      const after = [...new Set(result.scan.findings.filter((f) => f.level === "FAIL").map((f) => f.code))];
+      const onlyPixels = pngChunkTypes(result.clean).every((t) => ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"].includes(t));
+      record(after.length === 0 && result.pixels.same && result.complete !== false && onlyPixels && result.width === 600 && result.height === 400,
+        `Cleaned: ${after.length ? `FAIL ${after.join(", ")}` : "passes the check"}, ${result.pixels.same ? "pixels unchanged" : `${result.pixels.differ} pixels differ`}, ${result.complete === false ? "pixel data incomplete" : "pixel data complete"}, ${onlyPixels ? "only pixel data left" : "other data left"}.`);
+    }
+  } catch (error) {
+    record(false, `The test stopped: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const ok = rows.length === 4 && rows.every((r) => r.ok);
+  rows.push({ ok, text: ok ? "This browser cleans pictures correctly." : "Something failed: do not use this browser for POW pictures, and tell the operator." });
+  rows.push({ ok: null, text: `Browser: ${navigator.userAgent}` });
+  els.results.replaceChildren(...rows.map((r) => {
+    const li = document.createElement("li");
+    const badge = document.createElement("span");
+    badge.className = `badge ${r.ok === null ? "" : r.ok ? "pass" : "fail"}`;
+    badge.textContent = r.ok === null ? "info" : r.ok ? "passed" : "failed";
+    const text = document.createElement("span");
+    text.textContent = r.text;
+    li.append(badge, text);
+    return li;
+  }));
+  return ok;
+}
+
+els.runTest.addEventListener("click", async () => {
+  if (busy) return;
+  busy = true;
+  els.runTest.disabled = true;
+  els.results.replaceChildren();
+  try {
+    await selfTest();
+  } finally {
+    els.runTest.disabled = false;
+    busy = false;
+  }
+});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,396 @@
+#!/usr/bin/env node
+// Builds MEKU proof-of-work ledger records (meku.pow/1) as ready-to-post GitHub comments.
+// Records that depend on earlier ones are computed from an exported bundle, so nobody
+// retypes hashes by hand. Prints to stdout only; posts nothing; needs no credentials.
+
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import {
+  CODE_ALPHABET,
+  CODE_LENGTH,
+  CYCLE_HOURS,
+  EVIDENCE_HOURS_AFTER_REVEAL,
+  MCP_ENDPOINT,
+  OBJECTS,
+  PROTOCOL,
+  TASK_KIND,
+  VARIANT,
+  canonicalize,
+  displaySafe,
+  extractAttachmentUrls,
+  extractRecords,
+  isGithubLogin,
+  isSyntheticPilot,
+  ledgerDigest,
+  readRecordComment,
+  recordJsonSchema,
+  recordProblems,
+  requestIdCommitment,
+  scanImage,
+  sha256Hex,
+} from "./lib.mjs";
+import { postableComment } from "./request.mjs";
+import { loadBundleFile, verifyBundle } from "./verify.mjs";
+
+const envelope = (pilotId, seq, type, role) => ({ pow: PROTOCOL, pilot_id: pilotId, ...(seq === null ? {} : { seq }), type, role });
+
+function ensureValid(record) {
+  const problems = recordProblems(record);
+  if (problems.length) throw new Error(`record would be invalid: ${problems.join("; ")}`);
+  return record;
+}
+
+export function openedRecord({ pilotId, operator, developer, protocolUrl }) {
+  return ensureValid({
+    ...envelope(pilotId, 0, "pilot_opened", "operator"),
+    protocol: protocolUrl,
+    mcp_endpoint: MCP_ENDPOINT,
+    variant: VARIANT,
+    roster: { operator, developer },
+    task: {
+      kind: TASK_KIND,
+      code_alphabet: CODE_ALPHABET,
+      code_length: CODE_LENGTH,
+      objects: [...OBJECTS],
+      evidence_hours_after_reveal: EVIDENCE_HOURS_AFTER_REVEAL,
+      cycle_hours: CYCLE_HOURS,
+    },
+    payment: "none",
+  });
+}
+
+export function reviewedRecord({ pilotId, code, decision, reviewerRole, samePerson, note }) {
+  return ensureValid({
+    ...envelope(pilotId, 3, "request_reviewed", "operator"),
+    code,
+    decision,
+    reviewer_role: reviewerRole,
+    reviewer_is_key_issuer: false,
+    // Disclosed either way: two accounts held by one person separate the review only by account.
+    reviewer_same_person_as_key_issuer: samePerson,
+    ...(note ? { note } : {}),
+  });
+}
+
+/** The seq the next record takes in a ledger, from an exported bundle: for a stop or a close
+ *  typed by hand, where a wrong number would leave the record uncounted. */
+export function nextSeq(bundlePath) {
+  const { bundle, loadEvidence } = loadBundleFile(bundlePath);
+  return verifyBundle(bundle, { loadEvidence, allowSynthetic: true }).record_count;
+}
+
+/** Ledger state from a bundle (a file path, or { bundle, loadEvidence } in memory),
+ *  refusing to build on a ledger that already fails verification. */
+function ledgerState(source) {
+  const { bundle, loadEvidence } = typeof source === "string" ? loadBundleFile(source) : source;
+  const result = verifyBundle(bundle, { loadEvidence, allowSynthetic: true, expectOperator: source?.expectOperator });
+  if (result.verdict === "FAIL") {
+    const failing = result.checks.filter((c) => c.status === "FAIL").map((c) => `${c.id}: ${c.details[0]}`);
+    throw new Error(`the ledger already fails verification, so no record is built on it:\n  ${failing.join("\n  ")}`);
+  }
+  return { bundle, loadEvidence, result, records: result.records_in_order };
+}
+
+function requireLast(records, type) {
+  const last = records.at(-1);
+  if (last?.type !== type) throw new Error(`the ledger must end with ${type}; it ends with ${last?.type ?? "nothing"}`);
+  return last;
+}
+
+const ledgerCode = (records) => records.find((r) => r.type === "request_submitted")?.code;
+
+export function offeredRecord({ bundlePath, human, registered, channel }) {
+  const { records } = ledgerState(bundlePath);
+  const observed = requireLast(records, "request_status_observed");
+  return ensureValid({
+    ...envelope(observed.pilot_id, observed.seq + 1, "task_offered", "operator"),
+    code: ledgerCode(records),
+    human,
+    human_is_registered_meku_human: registered,
+    task_shown: "ledger-seq-4",
+    channel,
+    payment: "none",
+  });
+}
+
+export function consentRecord({ pilotId }) {
+  return ensureValid({
+    ...envelope(pilotId, 6, "human_consent", "human"),
+    consents: { voluntary_participation: true, may_reject_or_stop: true, responsible_for_safety: true, safety_checklist: true },
+    adult_18_plus: true,
+    unpaid_understood: true,
+    publication: { photo_public: true, github_login_public: true },
+    independence: { not_meku_staff_or_contractor: true, not_the_developer: true },
+  });
+}
+
+export function evidenceRecord({ pilotId }) {
+  return ensureValid({
+    ...envelope(pilotId, 8, "evidence_submitted", "human"),
+    statements: { code_physically_written: true, object_placed_after_reveal: true, no_people_or_personal_data: true, metadata_removed: true },
+    evidence: "attached-in-this-comment",
+  });
+}
+
+function evidenceFromLedger(bundle, loadEvidence, url) {
+  const entry = (bundle.evidence_files ?? []).find((e) => typeof e?.url === "string" && e.url.toLowerCase() === url.toLowerCase());
+  const bytes = entry ? loadEvidence(entry.file) : null;
+  if (!bytes) throw new Error("the evidence file is not in the bundle; export it first with export.mjs");
+  return { bytes, sha256: sha256Hex(bytes), scan: scanImage(bytes) };
+}
+
+export function returnedRecord({ bundlePath, codeVisible, objectVisible, noPersonalData, note }) {
+  const { records } = ledgerState(bundlePath);
+  const evidence = requireLast(records, "evidence_submitted");
+  return ensureValid({
+    ...envelope(evidence.pilot_id, evidence.seq + 1, "result_returned", "operator"),
+    code: ledgerCode(records),
+    evidence: "ledger-seq-8",
+    meku_check: { code_visible: codeVisible, object_visible: objectVisible, no_personal_data_visible: noPersonalData },
+    ...(note ? { note } : {}),
+  });
+}
+
+export function decisionRecord({ bundlePath, accept, checks, reason }) {
+  const { bundle, loadEvidence, result, records } = ledgerState(bundlePath);
+  const returned = requireLast(records, "result_returned");
+  // The evidence is the attachment of the roster human's evidence comment, as the verifier
+  // found it, never a copy of the same record posted by someone else.
+  if (!result.evidence?.url) throw new Error("the verifier found no single evidence attachment from the human");
+  const file = evidenceFromLedger(bundle, loadEvidence, result.evidence.url);
+  if (accept && Object.values(checks).some((v) => v !== true)) throw new Error("ACCEPTED requires every check to be true; otherwise use --reject");
+  return ensureValid({
+    ...envelope(returned.pilot_id, returned.seq + 1, "requester_decision", "developer"),
+    decision: accept ? "ACCEPTED" : "REJECTED",
+    checks,
+    evidence_sha256: file.sha256,
+    ledger_digest: ledgerDigest(returned.pilot_id, records),
+    reason,
+  });
+}
+
+export function closedRecord({ pilotId, seq, outcome, note }) {
+  return ensureValid({ ...envelope(pilotId, seq, "pilot_closed", "operator"), key_revoked: true, outcome, ...(note ? { note } : {}) });
+}
+
+export function stopRecord({ pilotId, seq, role, reason }) {
+  return ensureValid({ ...envelope(pilotId, seq, "stop", role), reason });
+}
+
+export function verificationRecord({ bundlePath, tool, manualChecks, notes, allowSynthetic = false }) {
+  const { bundle, loadEvidence } = loadBundleFile(bundlePath);
+  const result = verifyBundle(bundle, { loadEvidence, allowSynthetic });
+  return ensureValid({
+    ...envelope(result.pilot_id, null, "independent_verification", "verifier"),
+    verdict: result.verdict,
+    ledger_digest: result.ledger_digest,
+    tool,
+    manual_checks: manualChecks,
+    ...(notes ? { notes } : {}),
+  });
+}
+
+// ---- CLI ---------------------------------------------------------------------
+
+/** How the verifier would read one posted comment: for the phone test before a pilot. */
+export function commentReport(comment) {
+  const lines = [];
+  const problems = [];
+  const body = String(comment.body ?? "");
+  const edited = comment.updated_at !== comment.created_at;
+  lines.push(`Comment by ${comment.author} at ${comment.created_at}${edited ? " (edited)" : ""}`);
+  if (edited) problems.push("the comment was edited; in a ledger an edited record fails (L05)");
+  const read = readRecordComment(body);
+  if (!read) problems.push("the verifier finds no meku.pow/1 record in this comment");
+  else if (read.problem) {
+    problems.push(`the verifier would not count it: ${read.problem}`);
+    if (/[\u201C\u201D\u201E\u201F\u2033]/.test(body))
+      problems.push("it contains curly quotes, which an iPhone types when Smart Punctuation is on: turn it off and post the block again");
+  } else {
+    const p = recordProblems(read.record);
+    lines.push(`Record: seq ${read.record.seq ?? "-"} ${read.record.type} (${read.record.pilot_id}): ${p.length ? "INVALID" : "valid"}`);
+    if (read.image) lines.push(`Image: ${read.image}`);
+    problems.push(...p);
+  }
+  return { ok: problems.length === 0, lines, problems };
+}
+
+const USAGE = `Usage: node tools/pow/record.mjs <command> [options]
+  opened     --pilot POW-001 --operator <login> --developer <login> --protocol-url <url>
+  reviewed   --pilot POW-001 --code <CODE> --decision approved|rejected --reviewer-role seek_reviewer|admin --same-person yes|no [--note "..."]
+  offered    --bundle <bundle.json> --human <login> --registered yes|no --channel github|email|in_person|phone|message|other
+  consent    --pilot POW-001                       (the human's record; identical for every pilot)
+  evidence   --pilot POW-001                       (the human's record; attach the screenshot in the same comment)
+  returned   --bundle <bundle.json> [--code-visible] [--object-visible] [--no-personal-data] [--note "..."]
+  decision   --bundle <bundle.json> --accept|--reject --reason "..." [--code-visible] [--code-matches] [--object-visible] [--object-matches] [--no-personal-data]
+  closed     --pilot POW-001 (--seq <n> | --bundle <bundle.json>) --outcome completed|stopped|rejected_by_review --key-revoked [--note "..."]
+  stop       --pilot POW-001 (--seq <n> | --bundle <bundle.json>) --role developer|operator|human --reason "..."
+  verification --bundle <bundle.json> --tool "<tool and version>" [--code-legible] [--object-matching] [--no-personal-data] [--physical] [--human-did-not-withdraw] [--other-comments-consistent] [--notes "..."]
+  check-image <file | attachment URL | comment link> (the evidence checks E03 and E04, e.g. on a test screenshot before a pilot)
+  check-comment <GitHub comment link>              (how the verifier reads one posted record, e.g. one posted from a phone)
+  digest     --bundle <bundle.json>                (ledger digest over every record in the bundle)
+  request-id-sha256 <uuid>
+  hash-file  <path>
+  schema                                           (JSON Schema for every record type)`;
+
+async function main(argv) {
+  const [command, ...rest] = argv;
+  const opt = (name) => {
+    const i = rest.indexOf(`--${name}`);
+    return i === -1 ? undefined : rest[i + 1];
+  };
+  const flag = (name) => rest.includes(`--${name}`);
+  const pilotId = opt("pilot") ?? "POW-001";
+  const need = (name) => {
+    const value = opt(name);
+    if (value === undefined || value.startsWith("--")) throw new Error(`--${name} is required`);
+    return value;
+  };
+  const login = (name) => {
+    const value = need(name);
+    if (!isGithubLogin(value, { synthetic: isSyntheticPilot(pilotId) })) throw new Error(`--${name} must be a GitHub login without @`);
+    return value;
+  };
+  const yesNo = (name) => {
+    const value = need(name);
+    if (value !== "yes" && value !== "no") throw new Error(`--${name} must be yes or no`);
+    return value === "yes";
+  };
+  const print = (record) => console.log(postableComment(record));
+  try {
+    switch (command) {
+      case "opened":
+        print(openedRecord({ pilotId, operator: login("operator"), developer: login("developer"), protocolUrl: need("protocol-url") }));
+        return 0;
+      case "reviewed":
+        print(reviewedRecord({ pilotId, code: need("code"), decision: need("decision"), reviewerRole: need("reviewer-role"), samePerson: yesNo("same-person"), note: opt("note") }));
+        return 0;
+      case "offered":
+        print(offeredRecord({ bundlePath: need("bundle"), human: login("human"), registered: yesNo("registered"), channel: need("channel") }));
+        return 0;
+      case "consent":
+        print(consentRecord({ pilotId }));
+        return 0;
+      case "evidence":
+        print(evidenceRecord({ pilotId }));
+        return 0;
+      case "returned": {
+        const record = returnedRecord({
+          bundlePath: need("bundle"),
+          codeVisible: flag("code-visible"),
+          objectVisible: flag("object-visible"),
+          noPersonalData: flag("no-personal-data"),
+          note: opt("note"),
+        });
+        // The checks are about one screenshot: the one the verifier counts. Name it.
+        const url = ledgerState(need("bundle")).result.evidence?.url;
+        console.error(`These checks are about the screenshot at ${url ?? "(none found)"}. Look at that one, no other. Copy only what follows:\n`);
+        print(record);
+        return 0;
+      }
+      case "decision": {
+        if (flag("accept") === flag("reject")) throw new Error("choose exactly one of --accept or --reject");
+        const checks = {
+          code_visible: flag("code-visible"),
+          code_matches: flag("code-matches"),
+          object_visible: flag("object-visible"),
+          object_matches: flag("object-matches"),
+          no_personal_data_visible: flag("no-personal-data"),
+        };
+        print(decisionRecord({ bundlePath: need("bundle"), accept: flag("accept"), checks, reason: need("reason") }));
+        return 0;
+      }
+      case "closed":
+        if (!flag("key-revoked")) throw new Error("revoke the pilot key first, then pass --key-revoked");
+        print(closedRecord({ pilotId, seq: opt("bundle") ? nextSeq(opt("bundle")) : Number(need("seq")), outcome: need("outcome"), note: opt("note") }));
+        return 0;
+      case "stop":
+        print(stopRecord({ pilotId, seq: opt("bundle") ? nextSeq(opt("bundle")) : Number(need("seq")), role: need("role"), reason: need("reason") }));
+        return 0;
+      case "verification": {
+        const manualChecks = {
+          code_legible_and_matching: flag("code-legible"),
+          object_matching: flag("object-matching"),
+          no_personal_data_visible: flag("no-personal-data"),
+          physical_arrangement: flag("physical"),
+          human_did_not_withdraw: flag("human-did-not-withdraw"),
+          other_comments_consistent: flag("other-comments-consistent"),
+        };
+        print(verificationRecord({ bundlePath: need("bundle"), tool: need("tool"), manualChecks, notes: opt("notes"), allowSynthetic: flag("allow-synthetic") }));
+        return 0;
+      }
+      case "digest": {
+        const { bundle, loadEvidence } = loadBundleFile(need("bundle"));
+        const result = verifyBundle(bundle, { loadEvidence, allowSynthetic: true });
+        console.log(`${result.ledger_digest} (through seq ${result.record_count - 1}; verifier verdict ${result.verdict})`);
+        return 0;
+      }
+      case "request-id-sha256":
+        console.log(requestIdCommitment(rest[0]));
+        return 0;
+      case "hash-file":
+        console.log(sha256Hex(readFileSync(rest[0])));
+        return 0;
+      case "check-image": {
+        // A file, or a GitHub attachment URL (a test screenshot posted the way the human will
+        // post theirs), checked exactly as the verifier checks evidence (E03 and E04).
+        // A comment link checks every attachment in that comment.
+        if (!rest[0]) throw new Error("check-image needs a file, a GitHub attachment URL or a comment link");
+        const sources = [];
+        // Every network step is announced on standard error, so a slow or blocked network shows
+        // where it stalls instead of looking like a hang.
+        if (rest[0].includes("#issuecomment-")) {
+          const { fetchComment } = await import("./export.mjs");
+          console.error("Reading the comment from api.github.com (waits up to 30 s)...");
+          const comment = await fetchComment(rest[0], { token: process.env.GITHUB_TOKEN || undefined });
+          sources.push(...extractAttachmentUrls(comment.body));
+          if (!sources.length) throw new Error("that comment holds no GitHub attachment");
+          console.error(`The comment holds ${sources.length} attachment${sources.length === 1 ? "" : "s"}.`);
+        } else sources.push(rest[0]);
+        let failed = false;
+        for (const source of sources) {
+          let bytes;
+          if (/^https?:\/\//i.test(source)) {
+            const { downloadAttachment } = await import("./export.mjs");
+            console.error(`Downloading ${source} (each step waits up to 60 s)...`);
+            const started = Date.now();
+            try {
+              bytes = (await downloadAttachment(source, { onStep: (step) => console.error(`  ${step}`) })).bytes;
+            } catch (error) {
+              throw new Error(
+                `${error.message}\nThe picture could not be downloaded here. Instead, open the comment in a browser, save the picture, and run: node tools/pow/record.mjs check-image <saved file>. Its SHA-256 must equal the one the image cleaner showed.`,
+              );
+            }
+            console.log(`Downloaded ${source}: ${bytes.length} bytes, SHA-256 ${sha256Hex(bytes)}, in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+          } else bytes = readFileSync(source);
+          const result = scanImage(bytes);
+          for (const f of result.findings) console.log(`${f.level.padEnd(5)} ${f.code}: ${f.detail}`);
+          const bad = result.findings.some((f) => f.level === "FAIL");
+          failed ||= bad;
+          console.log(`${bad ? "FAIL" : "PASS"}: ${result.mediaType ?? "unknown type"} ${result.width ?? "?"}x${result.height ?? "?"}${bad ? " (do not post an image made this way)" : ""}`);
+        }
+        return failed ? 1 : 0;
+      }
+      case "check-comment": {
+        if (!rest[0]) throw new Error("check-comment needs a GitHub comment link");
+        const { fetchComment } = await import("./export.mjs");
+        const report = commentReport(await fetchComment(rest[0], { token: process.env.GITHUB_TOKEN || undefined }));
+        for (const line of report.lines) console.log(displaySafe(line));
+        for (const problem of report.problems) console.log(displaySafe(`FAIL  ${problem}`));
+        console.log(report.ok ? "PASS: the verifier reads this record exactly as posted" : "FAIL: fix the way of posting before using it in a ledger");
+        return report.ok ? 0 : 1;
+      }
+      case "schema":
+        console.log(JSON.stringify(recordJsonSchema(), null, 2));
+        return 0;
+      default:
+        console.error(USAGE);
+        return 3;
+    }
+  } catch (error) {
+    console.error(`ERROR: ${error.message}`);
+    return 1;
+  }
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exitCode = await main(process.argv.slice(2));

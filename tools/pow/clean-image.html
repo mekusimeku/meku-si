@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>POW image cleaner</title>
+<style>
+/* VOICE: plain and exact, a lab tool with one job, for someone holding a phone.
+   IDEA: a photo lab's clean-up tray: the picture goes in carrying hidden notes and comes out bare.
+   PICTURE: the tool itself, first: a large tray that becomes the cleaned picture under its verdict.
+   COLOUR and TYPE: black and white, one mint field for "ready", one red for "not ready"; system
+   fonts only, because this page loads nothing from anywhere.
+   LAYOUT: one column up to 640px, 48px targets, the steps after the tool, the self-test folded. */
+:root{--bg:#fff;--ink:#0b0b0b;--muted:#585858;--line:#dcdcdc;--tray:#f3f3f3;--mint:#b8f5d0;--mint-ink:#06361d;--bad:#ffd9dc;--bad-ink:#6a0010;--btn:#0b0b0b;--btn-ink:#fff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b0b0b;--ink:#f2f2f2;--muted:#a9a9a9;--line:#2b2b2b;--tray:#161616;--mint:#b8f5d0;--mint-ink:#06361d;--bad:#4a0710;--bad-ink:#ffd9dc;--btn:#f2f2f2;--btn-ink:#0b0b0b;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0b0b0b;--ink:#f2f2f2;--muted:#a9a9a9;--line:#2b2b2b;--tray:#161616;--mint:#b8f5d0;--mint-ink:#06361d;--bad:#4a0710;--bad-ink:#ffd9dc;--btn:#f2f2f2;--btn-ink:#0b0b0b;color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow-x:clip}
+.wrap{max-width:640px;margin:0 auto;padding:clamp(20px,5vw,40px) max(4vw,16px) 48px}
+h1{font-size:clamp(32px,8vw,44px);line-height:1.05;margin:4px 0 10px;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:20px;line-height:1.2;margin:0 0 10px}
+h3{font-size:16px;margin:0 0 6px}
+.small{font-size:13px;color:var(--muted);margin:0}
+.lede{margin:0 0 20px;color:var(--muted);max-width:60ch}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+.tray{display:grid;place-items:center;min-height:min(56vh,440px);border:2px dashed var(--line);border-radius:18px;background:var(--tray);cursor:pointer;overflow:hidden;position:relative}
+.tray:focus-within,.tray:hover{border-color:var(--ink)}
+.tray.has-image{border-style:solid;cursor:default}
+.tray-empty{display:grid;gap:6px;text-align:center;padding:28px}
+.tray-empty strong{font-size:22px}
+.tray img{display:block;max-width:100%;max-height:min(62vh,560px);-webkit-touch-callout:none;user-select:none;background:repeating-conic-gradient(#d8d8d8 0 25%,#fff 0 50%) 0 0/16px 16px}
+.status{margin:14px 0 0;padding:0;font-weight:600;min-height:1.5em}
+.status.ok,.status.bad,.status.busy{padding:14px 16px;border-radius:14px}
+.status.ok{background:var(--mint);color:var(--mint-ink)}
+.status.bad{background:var(--bad);color:var(--bad-ink)}
+.status.busy{background:var(--tray)}
+.status span{display:block;font-weight:400;margin-top:2px}
+.facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;margin:16px 0;font-size:15px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;overflow-wrap:anywhere}
+.chips{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;padding:0}
+.chips li{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:14px}
+.button{display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;padding:12px 18px;border-radius:14px;border:2px solid var(--btn);background:transparent;color:var(--ink);font:inherit;font-weight:650;text-decoration:none;cursor:pointer;margin-top:10px}
+.button.primary{background:var(--btn);color:var(--btn-ink)}
+.button[aria-disabled=true],.button:disabled{opacity:.4;pointer-events:none}
+.button:focus-visible,.tray:focus-within{outline:3px solid #2f7cf6;outline-offset:3px}
+.note{font-size:14px;color:var(--muted);margin:8px 0 0;min-height:1.4em}
+section{margin-top:30px}
+ol{padding-left:1.3em;margin:0}
+ol li{margin:0 0 10px;padding-left:4px}
+details{margin-top:30px;border-top:1px solid var(--line);padding-top:16px}
+summary{cursor:pointer;font-weight:650;font-size:18px;padding:10px 0}
+.results{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:8px}
+.results li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;font-size:15px}
+.badge{font-size:12px;font-weight:700;border-radius:999px;padding:2px 9px;margin-top:2px}
+.badge.pass{background:var(--mint);color:var(--mint-ink)}
+.badge.fail{background:var(--bad);color:var(--bad-ink)}
+.foot{margin-top:34px;border-top:1px solid var(--line);padding-top:14px}
+code{font-size:13px;overflow-wrap:anywhere}
+@media (prefers-reduced-motion:no-preference){.status{transition:background-color .2s}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="small">MEKU proof of work, pilot POW-001</p>
+    <h1>Clean a screenshot</h1>
+    <p class="lede">This removes the hidden data a phone or an editor adds to a picture (EXIF, location, XMP, Photoshop data, colour profiles) and saves what you see as a clean PNG. Everything happens on this phone. The picture is never uploaded.</p>
+  </header>
+
+  <label class="tray" id="tray" for="file">
+    <span class="tray-empty" id="tray-empty">
+      <strong>Choose the screenshot</strong>
+      <span>Tap here and pick it from Photos or Files.</span>
+    </span>
+    <img id="preview" alt="The cleaned picture" hidden>
+  </label>
+  <input id="file" class="sr" type="file" accept="image/*">
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+
+  <div id="report" hidden>
+    <dl class="facts" id="facts"></dl>
+    <h3>Removed from the original</h3>
+    <ul class="chips" id="removed"></ul>
+    <a id="save" class="button primary" href="#" role="button" aria-disabled="true">Save clean PNG</a>
+    <p id="save-note" class="note" aria-live="polite"></p>
+    <button id="again" class="button" type="button">Choose another picture</button>
+  </div>
+
+  <section>
+    <h2>Then post it</h2>
+    <ol>
+      <li><strong>Save it to Files.</strong> Tap <em>Save clean PNG</em>. If a share sheet opens, choose <em>Save to Files</em>, not <em>Save Image</em>.</li>
+      <li><strong>Attach it from Files.</strong> In the GitHub comment, tap the paperclip, then <em>Choose File</em>, and pick the clean PNG from Downloads or the folder you chose.</li>
+      <li><strong>Never from Photos.</strong> Picking the picture from Photos lets the phone add hidden data again.</li>
+    </ol>
+  </section>
+
+  <details id="selftest">
+    <summary>Check this phone's browser</summary>
+    <p class="note">This makes two test pictures full of hidden data, cleans them here and checks the results. It takes a few seconds and uses no picture of yours.</p>
+    <button id="run-test" class="button" type="button">Run the check</button>
+    <ul class="results" id="test-results"></ul>
+  </details>
+
+  <footer class="foot">
+    <p class="small">This page makes no network requests and works offline once loaded. Its check is a verbatim copy of the evidence image check in <code>tools/pow/lib.mjs</code> (scanner b872866f332c), the code that <code>record.mjs check-image</code> and the POW verifier run. The operator still checks the file you post.</p>
+  </footer>
+</main>
+<script>
+"use strict";
+(() => {
+// MEKU proof-of-work image cleaner: the part shared by the page and the Node tests.
+// Plain JavaScript on Uint8Array. No imports, no Node or browser APIs beyond TextEncoder and
+// TextDecoder, and no network: build-clean-image.mjs copies this file into the page unchanged,
+// apart from removing the word "export".
+
+/** A Uint8Array with exactly the Buffer methods the POW image scanner in lib.mjs uses. */
+class ByteBuffer extends Uint8Array {
+  static from(value, encoding) {
+    if (typeof value === "string") {
+      if (encoding === "latin1" || encoding === "binary") {
+        const out = new ByteBuffer(value.length);
+        for (let i = 0; i < value.length; i += 1) out[i] = value.charCodeAt(i) & 0xff;
+        return out;
+      }
+      if (encoding !== undefined && encoding !== "utf8" && encoding !== "utf-8") throw new TypeError(`unsupported encoding ${encoding}`);
+      const bytes = new TextEncoder().encode(value);
+      return new ByteBuffer(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    }
+    if (value instanceof ArrayBuffer) return new ByteBuffer(value.slice(0));
+    if (ArrayBuffer.isView(value)) {
+      const out = new ByteBuffer(value.byteLength);
+      out.set(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+      return out;
+    }
+    if (Array.isArray(value)) {
+      const out = new ByteBuffer(value.length);
+      for (let i = 0; i < value.length; i += 1) out[i] = value[i];
+      return out;
+    }
+    throw new TypeError("ByteBuffer.from needs a string, an array or bytes");
+  }
+
+  static isBuffer(value) {
+    return value instanceof ByteBuffer;
+  }
+
+  static concat(list) {
+    let total = 0;
+    for (const part of list) total += part.length;
+    const out = new ByteBuffer(total);
+    let at = 0;
+    for (const part of list) {
+      out.set(part, at);
+      at += part.length;
+    }
+    return out;
+  }
+
+  readUInt16BE(offset) {
+    return dataView(this).getUint16(offset, false);
+  }
+
+  readUInt16LE(offset) {
+    return dataView(this).getUint16(offset, true);
+  }
+
+  readUInt32BE(offset) {
+    return dataView(this).getUint32(offset, false);
+  }
+
+  readUInt32LE(offset) {
+    return dataView(this).getUint32(offset, true);
+  }
+
+  // Node's rules for the range: a missing or negative start is 0, an end past the bytes is the
+  // end, and an empty range gives "".
+  toString(encoding = "utf8", start, end) {
+    const length = this.length;
+    const from = start === undefined || start < 0 ? 0 : Math.trunc(start);
+    const to = end === undefined || end > length ? length : Math.trunc(end);
+    if (from >= length || to <= from) return "";
+    const part = this.subarray(from, to);
+    if (encoding === "latin1" || encoding === "binary") {
+      let text = "";
+      for (let i = 0; i < part.length; i += 8192) text += String.fromCharCode.apply(null, part.subarray(i, i + 8192));
+      return text;
+    }
+    if (encoding === "utf8" || encoding === "utf-8") return new TextDecoder("utf-8").decode(part);
+    throw new TypeError(`unsupported encoding ${encoding}`);
+  }
+
+  equals(other) {
+    if (!(other instanceof Uint8Array) || other.length !== this.length) return false;
+    for (let i = 0; i < this.length; i += 1) if (this[i] !== other[i]) return false;
+    return true;
+  }
+
+  indexOf(needle, from = 0) {
+    if (typeof needle === "number") return Uint8Array.prototype.indexOf.call(this, needle, from);
+    if (!(needle instanceof Uint8Array)) throw new TypeError("indexOf needs a byte or bytes");
+    if (from < 0) throw new RangeError("a negative offset is not supported");
+    const start = Math.trunc(from) || 0;
+    if (needle.length === 0) return Math.min(start, this.length);
+    outer: for (let i = start; i + needle.length <= this.length; i += 1) {
+      for (let j = 0; j < needle.length; j += 1) if (this[i + j] !== needle[j]) continue outer;
+      return i;
+    }
+    return -1;
+  }
+
+  includes(needle, from = 0) {
+    return this.indexOf(needle, from) !== -1;
+  }
+}
+
+function dataView(bytes) {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+/** The CRC-32 that PNG chunks carry. */
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+const PNG_SIGNATURE_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function isPng(bytes) {
+  return bytes.length >= 8 && PNG_SIGNATURE_BYTES.every((b, i) => bytes[i] === b);
+}
+
+function isJpeg(bytes) {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
+const latin1 = (bytes) => String.fromCharCode.apply(null, bytes);
+
+/** The chunks of a PNG in order, and how many bytes follow IEND. Throws on a damaged file. */
+function readPngChunks(bytes) {
+  if (!isPng(bytes)) throw new Error("not a PNG file");
+  const view = dataView(bytes);
+  const chunks = [];
+  let offset = 8;
+  while (offset + 12 <= bytes.length) {
+    const length = view.getUint32(offset);
+    const end = offset + 12 + length;
+    if (length > 0x7fffffff || end > bytes.length) throw new Error("a chunk runs past the end of the file");
+    const type = latin1(bytes.subarray(offset + 4, offset + 8));
+    const crcOk = crc32(bytes.subarray(offset + 4, end - 4)) === view.getUint32(end - 4);
+    chunks.push({ type, start: offset, end, data: bytes.subarray(offset + 8, end - 4), crcOk });
+    offset = end;
+    if (type === "IEND") return { chunks, trailing: bytes.length - offset };
+  }
+  throw new Error("the file has no IEND chunk");
+}
+
+// What a picture needs: its header, palette and transparency, and its pixels. Nothing else.
+const PIXEL_CHUNKS = new Set(["IHDR", "PLTE", "tRNS", "IDAT", "IEND"]);
+
+/**
+ * The same PNG with every chunk dropped except IHDR, PLTE, tRNS, IDAT and IEND, and nothing after
+ * IEND. Colour profiles go too: the page draws every picture as sRGB, which a PNG without colour
+ * chunks means. Throws on a PNG that is damaged or has no pixels.
+ */
+function pngEssentialChunks(bytes) {
+  const { chunks } = readPngChunks(bytes);
+  if (chunks[0].type !== "IHDR" || chunks[0].data.length !== 13 || chunks.filter((c) => c.type === "IHDR").length !== 1)
+    throw new Error("the PNG does not start with exactly one header");
+  if (!chunks.some((c) => c.type === "IDAT")) throw new Error("the PNG holds no pixel data");
+  const kept = chunks.filter((c) => PIXEL_CHUNKS.has(c.type));
+  if (kept.some((c) => !c.crcOk)) throw new Error("a pixel chunk of the PNG is damaged");
+  let total = 8;
+  for (const c of kept) total += c.end - c.start;
+  const out = new Uint8Array(total);
+  out.set(PNG_SIGNATURE_BYTES, 0);
+  let at = 8;
+  for (const c of kept) {
+    out.set(bytes.subarray(c.start, c.end), at);
+    at += c.end - c.start;
+  }
+  return out;
+}
+
+const CHANNELS = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+
+/**
+ * Whether the PNG's pixel data is complete: it inflates without error to exactly the size its
+ * header promises. A cut stream can still carry valid CRCs and pass the metadata check, and
+ * some decoders show it anyway. null where this browser cannot inflate (no DecompressionStream).
+ */
+async function pngPixelDataComplete(bytes) {
+  if (typeof DecompressionStream !== "function") return null;
+  const { chunks } = readPngChunks(bytes);
+  const ihdr = chunks[0].data;
+  const view = dataView(ihdr);
+  const [width, height, depth, colour, interlace] = [view.getUint32(0), view.getUint32(4), ihdr[8], ihdr[9], ihdr[12]];
+  if (!(colour in CHANNELS) || interlace !== 0) return false;
+  const expected = height * (1 + Math.ceil((width * CHANNELS[colour] * depth) / 8));
+  const idat = joinBytes(chunks.filter((c) => c.type === "IDAT").map((c) => c.data));
+  try {
+    const reader = new Blob([idat]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > expected) {
+        await reader.cancel();
+        return false;
+      }
+    }
+    return total === expected;
+  } catch {
+    return false;
+  }
+}
+
+/** Chunk types of a PNG, in order (for tests and the page's report). */
+function pngChunkTypes(bytes) {
+  return readPngChunks(bytes).chunks.map((c) => c.type);
+}
+
+const PNG_NAMES = {
+  eXIf: "EXIF data",
+  zxIf: "EXIF data",
+  iCCP: "colour profile",
+  sRGB: "colour tag",
+  gAMA: "colour tag",
+  cHRM: "colour tag",
+  cICP: "colour tag",
+  mDCv: "colour tag",
+  cLLi: "colour tag",
+  sBIT: "colour tag",
+  pHYs: "pixel density",
+  tIME: "time stamp",
+  tEXt: "text notes",
+  zTXt: "text notes",
+  iTXt: "text notes",
+  iDOT: "Apple layout data",
+  bKGD: "background colour",
+  acTL: "animation",
+  fcTL: "animation",
+  fdAT: "animation",
+};
+
+/** The hidden parts of an image file, in words, for the page to say what it removed. */
+function describeHiddenData(bytes) {
+  const found = [];
+  const add = (what) => {
+    if (!found.includes(what)) found.push(what);
+  };
+  if (isPng(bytes)) {
+    try {
+      const { chunks, trailing } = readPngChunks(bytes);
+      for (const c of chunks) {
+        if (PIXEL_CHUNKS.has(c.type)) continue;
+        if (c.type === "iTXt" && latin1(c.data.subarray(0, 18)) === "XML:com.adobe.xmp\0") add("XMP data");
+        else add(PNG_NAMES[c.type] ?? `chunk ${c.type}`);
+      }
+      if (trailing > 0) add("data after the end of the image");
+    } catch {
+      add("a damaged or unusual file structure");
+    }
+    return found;
+  }
+  if (isJpeg(bytes)) {
+    let offset = 2;
+    let ended = false;
+    while (offset + 2 <= bytes.length && bytes[offset] === 0xff) {
+      const marker = bytes[offset + 1];
+      if (marker === 0xff) {
+        offset += 1;
+        continue;
+      }
+      if (marker === 0xd9) {
+        offset += 2;
+        ended = true;
+        break;
+      }
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+        offset += 2;
+        continue;
+      }
+      if (offset + 4 > bytes.length) break;
+      const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+      const seg = bytes.subarray(offset + 4, offset + 2 + length);
+      const head = (n) => latin1(seg.subarray(0, n));
+      if (marker === 0xe0) add(head(5) === "JFIF\0" ? "JFIF header" : head(5) === "JFXX\0" ? "thumbnail" : "segment APP0");
+      else if (marker === 0xe1) add(head(6) === "Exif\0\0" ? "EXIF data" : head(4) === "http" ? "XMP data" : "segment APP1");
+      else if (marker === 0xe2) add(head(12) === "ICC_PROFILE\0" ? "colour profile" : head(4) === "MPF\0" ? "extra images (MPF)" : "segment APP2");
+      else if (marker === 0xed) add(head(14) === "Photoshop 3.0\0" ? "Photoshop data" : "segment APP13");
+      else if (marker === 0xee) add("Adobe colour flag");
+      else if (marker === 0xfe) add("comment");
+      else if (marker >= 0xe3 && marker <= 0xef) add(`segment APP${marker - 0xe0}`);
+      if (marker === 0xda) {
+        // The pixels: skip them up to the end-of-image marker.
+        let i = offset + 2 + length;
+        while (i + 1 < bytes.length && !(bytes[i] === 0xff && bytes[i + 1] !== 0x00 && !(bytes[i + 1] >= 0xd0 && bytes[i + 1] <= 0xd7))) i += 1;
+        offset = i;
+        continue;
+      }
+      offset += 2 + length;
+    }
+    if (!ended) add("a damaged or unusual file structure");
+    else if (offset < bytes.length) add("data after the end of the image");
+    return found;
+  }
+  const head = latin1(bytes.subarray(0, 12));
+  if (head.slice(4, 8) === "ftyp") add("a HEIC or HEIF file, with its EXIF data");
+  else if (head.startsWith("RIFF") && head.slice(8, 12) === "WEBP") add("a WebP file, with any data it holds");
+  else if (head.startsWith("GIF8")) add("a GIF file, with any data it holds");
+  else add("a file in another format, with any data it holds");
+  return found;
+}
+
+// ---- Test images with hidden data, for the page's self-test and the Node tests ----------
+
+/** One PNG chunk with its length and CRC. */
+function makePngChunk(type, data) {
+  const out = new Uint8Array(12 + data.length);
+  const view = dataView(out);
+  view.setUint32(0, data.length);
+  for (let i = 0; i < 4; i += 1) out[4 + i] = type.charCodeAt(i);
+  out.set(data, 8);
+  view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+  return out;
+}
+
+/** The PNG with the given chunks inserted just before IEND. */
+function withPngChunks(png, extra) {
+  const { chunks } = readPngChunks(png);
+  const iend = chunks[chunks.length - 1];
+  const parts = [png.subarray(0, iend.start), ...extra, png.subarray(iend.start, iend.end)];
+  return joinBytes(parts);
+}
+
+/** The JPEG with the given [marker, payload] segments inserted just after its start marker. */
+function withJpegSegments(jpeg, segments) {
+  const parts = [jpeg.subarray(0, 2)];
+  for (const [marker, payload] of segments) {
+    const head = new Uint8Array([0xff, marker, (payload.length + 2) >> 8, (payload.length + 2) & 0xff]);
+    parts.push(head, payload);
+  }
+  parts.push(jpeg.subarray(2));
+  return joinBytes(parts);
+}
+
+function joinBytes(parts) {
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}
+
+const asciiBytes = (text) => Uint8Array.from(text, (ch) => ch.charCodeAt(0) & 0xff);
+
+/** A TIFF block, as EXIF holds it, whose first directory points at GPS data. */
+function testExifTiff() {
+  const t = new Uint8Array(32);
+  const v = dataView(t);
+  t.set(asciiBytes("II*\0"), 0);
+  v.setUint32(4, 8, true);
+  v.setUint16(8, 1, true);
+  v.setUint16(10, 0x8825, true);
+  v.setUint16(12, 4, true);
+  v.setUint32(14, 1, true);
+  v.setUint32(18, 26, true);
+  v.setUint32(22, 0, true);
+  v.setUint16(26, 0, true);
+  return t;
+}
+
+/** An XMP packet naming a place and an editing program, like the ones phones and editors add. */
+const TEST_XMP =
+  '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+  '<rdf:Description rdf:about="" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" xmlns:xmp="http://ns.adobe.com/xap/1.0/">' +
+  "<photoshop:City>Testville</photoshop:City><xmp:CreatorTool>Test editor</xmp:CreatorTool>" +
+  "</rdf:Description></rdf:RDF></x:xmpmeta>";
+
+/** PNG chunks like a phone's: EXIF with GPS, XMP, a text note and a time stamp. */
+function testPngMetadata() {
+  return [
+    makePngChunk("eXIf", testExifTiff()),
+    makePngChunk("iTXt", joinBytes([asciiBytes("XML:com.adobe.xmp\0\0\0\0\0"), new TextEncoder().encode(TEST_XMP)])),
+    makePngChunk("tEXt", asciiBytes("Software\0Test editor")),
+    makePngChunk("tIME", new Uint8Array([0x07, 0xea, 11, 28, 7, 0, 0])),
+  ];
+}
+
+/** JPEG segments like an edited photo's: EXIF with GPS, Photoshop data, XMP and a comment. */
+function testJpegMetadata() {
+  const iptcCaption = joinBytes([new Uint8Array([0x1c, 0x02, 0x78, 0x00, 0x04]), asciiBytes("test")]);
+  const resource = joinBytes([asciiBytes("8BIM"), new Uint8Array([0x04, 0x04, 0, 0, 0, 0, 0, iptcCaption.length]), iptcCaption, new Uint8Array(iptcCaption.length % 2)]);
+  return [
+    [0xe1, joinBytes([asciiBytes("Exif\0\0"), testExifTiff()])],
+    [0xed, joinBytes([asciiBytes("Photoshop 3.0\0"), resource])],
+    [0xe1, joinBytes([asciiBytes("http://ns.adobe.com/xap/1.0/\0"), new TextEncoder().encode(TEST_XMP)])],
+    [0xfe, asciiBytes("Test comment")],
+  ];
+}
+
+
+// The evidence image check of lib.mjs, verbatim. Buffer is the small stand-in above; reading
+// compressed data is not offered here, so a file that needs it fails the check (stricter, never
+// weaker). A cleaned file never holds compressed data outside its pixels.
+const POW = (() => {
+  const Buffer = ByteBuffer;
+  const inflateSync = () => {
+    throw new Error("compressed data is not read by the in-browser check");
+  };
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+const MIN_EVIDENCE_SHORT_SIDE = 240;
+
+// ---------------------------------------------------------------------------
+// Evidence image checks (PNG and JPEG only). This is an ALLOW-LIST: only structures known to
+// carry pixels or colour information pass. Anything else, including data after the end of
+// the image, fails, because metadata can reveal where and with which device a photo was taken.
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+// Pixel, palette, transparency and colour chunks only.
+const PNG_ALLOWED = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "sBIT", "sRGB", "cICP", "mDCv", "cLLi", "pHYs", "bKGD", "iDOT"]);
+const LOCATION_TEXT =
+  /GPS|exif:GPS|photoshop:(?:City|State|Country)|Iptc4xmpCore:(?:Location|City|CountryCode)|Iptc4xmpExt:Location|LocationShown|LocationCreated|latitude|longitude/i;
+
+const fail = (code, detail) => ({ level: "FAIL", code, detail });
+const warnF = (code, detail) => ({ level: "WARN", code, detail });
+
+function tiffHasGps(tiff) {
+  if (tiff.length < 8) return false;
+  const little = tiff[0] === 0x49 && tiff[1] === 0x49;
+  if (!little && !(tiff[0] === 0x4d && tiff[1] === 0x4d)) return false;
+  const u16 = (o) => (little ? tiff.readUInt16LE(o) : tiff.readUInt16BE(o));
+  const u32 = (o) => (little ? tiff.readUInt32LE(o) : tiff.readUInt32BE(o));
+  const ifd0 = u32(4);
+  if (ifd0 + 2 > tiff.length) return false;
+  for (let i = 0; i < u16(ifd0); i += 1) {
+    const entry = ifd0 + 2 + i * 12;
+    if (entry + 12 > tiff.length) break;
+    if (u16(entry) === 0x8825) return true;
+  }
+  return false;
+}
+
+function exifFindings(tiff) {
+  return [
+    fail("EXIF_PRESENT", "EXIF metadata is present"),
+    ...(tiffHasGps(tiff) ? [fail("GPS_PRESENT", "EXIF GPS location data is present: treat the image as public and request removal now")] : []),
+  ];
+}
+
+// The only XMP a phone screenshot needs: its pixel size, orientation, resolution and the
+// comment "Screenshot". Every element, attribute and text value in the packet is checked, so a
+// name, device, place or any other text anywhere in it fails.
+const XMP_ELEMENTS = new Set([
+  "x:xmpmeta", "rdf:RDF", "rdf:Description", "rdf:Alt", "rdf:Seq", "rdf:Bag", "rdf:li", "exif:PixelXDimension",
+  "exif:PixelYDimension", "exif:UserComment", "tiff:Orientation", "tiff:XResolution", "tiff:YResolution", "tiff:ResolutionUnit",
+]);
+const XMP_VALUE_NAMES = new Set([...XMP_ELEMENTS].filter((n) => n.startsWith("exif:") || n.startsWith("tiff:")));
+const XMP_VALUE = /^(?:[0-9]{1,6}(?:[./][0-9]{1,6})?|screenshot)$/i;
+
+function xmpFindings(text) {
+  if (LOCATION_TEXT.test(text)) return [fail("XMP_LOCATION", "XMP metadata contains location fields")];
+  const bad = (what) => [fail("XMP_FIELD", `XMP that a screenshot does not need: ${what}`)];
+  const packet = String(text).replace(/^\uFEFF/, "").replace(/<\?xpacket\b[^?<>]*\?>/g, "");
+  for (const token of packet.split(/(<[^>]*>)/)) {
+    if (!token) continue;
+    if (!token.startsWith("<")) {
+      const value = token.trim();
+      if (value && !XMP_VALUE.test(value)) return bad(`the text ${JSON.stringify(value.slice(0, 40))}`);
+      continue;
+    }
+    if (/^<[!?]/.test(token)) return bad("a comment, declaration or processing instruction");
+    const tag = token.match(/^<\/?([A-Za-z_][\w.-]*(?::[A-Za-z_][\w.-]*)?)((?:\s+[^\s=<>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*\/?>$/);
+    if (!tag) return bad("a malformed tag");
+    if (!XMP_ELEMENTS.has(tag[1])) return bad(`the element ${tag[1]}`);
+    for (const attr of tag[2].matchAll(/([^\s=<>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+      const [name, value] = [attr[1], attr[2] ?? attr[3]];
+      const ok =
+        name === "xmlns" || name.startsWith("xmlns:")
+          ? /^[\x21-\x7e]{1,200}$/.test(value)
+          : name === "x:xmptk"
+            ? /^[A-Za-z0-9 ._-]{0,60}$/.test(value)
+            : name === "rdf:about"
+              ? value === ""
+              : name === "rdf:parseType"
+                ? value === "Resource"
+                : name === "xml:lang"
+                  ? /^[A-Za-z-]{1,20}$/.test(value)
+                  : XMP_VALUE_NAMES.has(name) && XMP_VALUE.test(value.trim());
+      if (!ok) return bad(`the attribute ${name}`);
+    }
+  }
+  return [warnF("XMP_PRESENT", "screenshot XMP with only its pixel size, orientation, resolution and the word Screenshot")];
+}
+
+// A colour profile may carry only colour tags, each inside the profile, and short texts (its
+// name and copyright). Anything else, or another file hidden inside, fails.
+const ICC_TAGS = new Set([
+  "desc", "cprt", "wtpt", "bkpt", "rXYZ", "gXYZ", "bXYZ", "rTRC", "gTRC", "bTRC", "kTRC", "chad", "chrm", "lumi", "meas",
+  "tech", "view", "vued", "dmnd", "dmdd", "A2B0", "A2B1", "A2B2", "B2A0", "B2A1", "B2A2", "gamt", "pre0", "pre1", "pre2", "cicp",
+]);
+const ICC_TEXT_TAGS = new Set(["desc", "cprt", "dmnd", "dmdd", "vued"]);
+const MAX_ICC_BYTES = 128 * 1024;
+
+function iccFindings(profile) {
+  const bad = (what) => [fail("ICC_PROFILE", `colour profile ${what}`)];
+  if (profile.length < 132 || profile.length > MAX_ICC_BYTES) return bad(`of ${profile.length} bytes is outside the expected size`);
+  if (profile.readUInt32BE(0) !== profile.length || profile.toString("latin1", 36, 40) !== "acsp") return bad("has a malformed header");
+  const count = profile.readUInt32BE(128);
+  if (count > 64 || 132 + count * 12 > profile.length) return bad("has a malformed tag table");
+  for (let i = 0; i < count; i += 1) {
+    const entry = 132 + i * 12;
+    const sig = profile.toString("latin1", entry, entry + 4);
+    const offset = profile.readUInt32BE(entry + 4);
+    const size = profile.readUInt32BE(entry + 8);
+    if (!ICC_TAGS.has(sig)) return bad(`holds the tag ${JSON.stringify(sig)}, which is not colour data`);
+    if (offset + size > profile.length || offset < 132) return bad(`tag ${sig} lies outside the profile`);
+    if (ICC_TEXT_TAGS.has(sig) && size > 8192) return bad(`text tag ${sig} is ${size} bytes long`);
+  }
+  if (profile.includes(Buffer.from("Exif\0\0", "latin1"))) return bad("holds EXIF data");
+  return [];
+}
+
+function pngIccFindings(data) {
+  // iCCP: profile name (1-79 bytes)\0 method compressed-profile
+  const zero = data.indexOf(0);
+  if (zero < 1 || zero > 79 || data[zero + 1] !== 0) return [fail("ICC_PROFILE", "malformed colour profile chunk")];
+  try {
+    return iccFindings(inflateSync(data.subarray(zero + 2), { maxOutputLength: MAX_ICC_BYTES + 1 }));
+  } catch {
+    return [fail("ICC_PROFILE", "unreadable colour profile chunk")];
+  }
+}
+
+function scanPng(bytes) {
+  const out = { mediaType: "image/png", width: null, height: null, findings: [] };
+  let offset = 8;
+  let sawEnd = false;
+  while (offset + 12 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString("latin1", offset + 4, offset + 8);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    if (dataEnd + 4 > bytes.length) {
+      out.findings.push(fail("PNG_TRUNCATED", `chunk ${JSON.stringify(type)} runs past the end of the file`));
+      return out;
+    }
+    const data = bytes.subarray(dataStart, dataEnd);
+    if (type === "IHDR" && length >= 8) {
+      out.width = data.readUInt32BE(0);
+      out.height = data.readUInt32BE(4);
+    } else if (type === "eXIf" || type === "zxIf") {
+      out.findings.push(...exifFindings(data));
+    } else if (type === "iCCP") {
+      out.findings.push(...pngIccFindings(data));
+    } else if (type === "iTXt" && data.toString("latin1", 0, 18) === "XML:com.adobe.xmp\0") {
+      out.findings.push(...pngXmpFindings(data));
+    } else if (type === "tIME") {
+      out.findings.push(warnF("PNG_TIME", "a last-modified time chunk is present"));
+    } else if (!PNG_ALLOWED.has(type)) {
+      out.findings.push(fail("PNG_METADATA_CHUNK", `chunk ${JSON.stringify(type)} is not allowed in evidence (only pixel and colour chunks are)`));
+    }
+    offset = dataEnd + 4;
+    if (type === "IEND") {
+      sawEnd = true;
+      break;
+    }
+  }
+  if (!sawEnd) out.findings.push(fail("PNG_TRUNCATED", "no IEND chunk"));
+  else if (offset < bytes.length) out.findings.push(fail("DATA_AFTER_END", `${bytes.length - offset} bytes follow the end of the image`));
+  return out;
+}
+
+function pngXmpFindings(data) {
+  // iTXt: keyword\0 flag method language\0 translated\0 text
+  try {
+    const zero = 17;
+    const flag = data[zero + 1];
+    const langEnd = data.indexOf(0, zero + 3);
+    const transEnd = data.indexOf(0, langEnd + 1);
+    if (langEnd === -1 || transEnd === -1) return [fail("PNG_METADATA_CHUNK", "malformed XMP chunk")];
+    const raw = data.subarray(transEnd + 1);
+    // Capped: a small compressed chunk must not expand into gigabytes.
+    return xmpFindings((flag === 1 ? inflateSync(raw, { maxOutputLength: 1 << 20 }) : raw).toString("utf8"));
+  } catch {
+    return [fail("PNG_METADATA_CHUNK", "unreadable XMP chunk")];
+  }
+}
+
+const JPEG_SOF = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+// Tables and frame/scan headers carry pixels and coding data, not metadata.
+const JPEG_TABLES = new Set([0xc4, 0xcc, 0xdb, 0xdd]);
+
+function scanJpeg(bytes) {
+  const out = { mediaType: "image/jpeg", width: null, height: null, findings: [] };
+  const iccChunks = [];
+  let offset = 2;
+  let sawEnd = false;
+  while (offset + 2 <= bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      out.findings.push(fail("JPEG_MALFORMED", `expected a marker at byte ${offset}`));
+      return out;
+    }
+    const marker = bytes[offset + 1];
+    if (marker === 0xff) {
+      offset += 1; // fill byte
+      continue;
+    }
+    if (marker === 0xd9) {
+      offset += 2;
+      sawEnd = true;
+      break;
+    }
+    if (marker >= 0xd0 && marker <= 0xd7) {
+      offset += 2;
+      continue;
+    }
+    if (offset + 4 > bytes.length) break;
+    const length = bytes.readUInt16BE(offset + 2);
+    const segEnd = offset + 2 + length;
+    if (length < 2 || segEnd > bytes.length) {
+      out.findings.push(fail("JPEG_TRUNCATED", `segment 0x${marker.toString(16)} runs past the end`));
+      return out;
+    }
+    const seg = bytes.subarray(offset + 4, segEnd);
+    if (marker === 0xe0 && seg.toString("latin1", 0, 5) === "JFIF\0") {
+      // JFIF header: resolution and at most a raw RGB thumbnail. (JFXX thumbnails, which can
+      // hold a whole JPEG with EXIF, are refused below.)
+    } else if (marker === 0xe2 && seg.toString("latin1", 0, 12) === "ICC_PROFILE\0" && seg.length > 14) {
+      // A colour profile, possibly split over several segments: checked once reassembled.
+      iccChunks.push({ seq: seg[12], data: seg.subarray(14) });
+    } else if (marker === 0xee && seg.toString("latin1", 0, 5) === "Adobe") {
+      // Adobe colour transform flag: always exactly 12 bytes.
+      if (seg.length !== 12) out.findings.push(fail("JPEG_METADATA_SEGMENT", `an Adobe segment of ${seg.length} bytes instead of 12`));
+    } else if (marker === 0xe1 && seg.subarray(0, 6).equals(Buffer.from("Exif\0\0", "latin1"))) {
+      out.findings.push(...exifFindings(seg.subarray(6)));
+    } else if (marker === 0xe1 && seg.toString("latin1", 0, 29) === "http://ns.adobe.com/xap/1.0/\0") {
+      out.findings.push(...xmpFindings(seg.toString("utf8", 29)).map((f) => ({ ...f, level: "FAIL" })));
+    } else if (JPEG_SOF.has(marker)) {
+      if (seg.length >= 5) {
+        out.height = seg.readUInt16BE(1);
+        out.width = seg.readUInt16BE(3);
+      }
+    } else if (JPEG_TABLES.has(marker)) {
+      // Huffman, arithmetic, quantisation and restart tables.
+    } else if (marker === 0xda) {
+      // Start of scan: skip the entropy-coded data up to the next real marker.
+      let i = segEnd;
+      while (i + 1 < bytes.length && !(bytes[i] === 0xff && bytes[i + 1] !== 0x00 && !(bytes[i + 1] >= 0xd0 && bytes[i + 1] <= 0xd7))) i += 1;
+      offset = i;
+      continue;
+    } else {
+      out.findings.push(fail("JPEG_METADATA_SEGMENT", `segment 0x${marker.toString(16)} is not allowed in evidence (only pixel and colour segments are)`));
+    }
+    offset = segEnd;
+  }
+  if (!sawEnd) out.findings.push(fail("JPEG_TRUNCATED", "no end-of-image marker"));
+  else if (offset < bytes.length) out.findings.push(fail("DATA_AFTER_END", `${bytes.length - offset} bytes follow the end of the image`));
+  if (iccChunks.length) out.findings.push(...iccFindings(Buffer.concat(iccChunks.sort((a, b) => a.seq - b.seq).map((c) => c.data))));
+  return out;
+}
+
+/** Media type, dimensions and findings for an evidence file. A FAIL finding blocks PASS. */
+function scanImage(bytes) {
+  if (!Buffer.isBuffer(bytes)) bytes = Buffer.from(bytes);
+  let result;
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(PNG_SIGNATURE)) result = scanPng(bytes);
+  else if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) result = scanJpeg(bytes);
+  else return { mediaType: null, width: null, height: null, findings: [fail("UNSUPPORTED_TYPE", "evidence must be a PNG or JPEG file")] };
+  if (bytes.length > MAX_EVIDENCE_BYTES) result.findings.push(fail("TOO_LARGE", `file is larger than ${MAX_EVIDENCE_BYTES} bytes`));
+  if (!result.width || !result.height) result.findings.push(fail("NO_DIMENSIONS", "image dimensions could not be read"));
+  else if (Math.min(result.width, result.height) < MIN_EVIDENCE_SHORT_SIDE)
+    result.findings.push(fail("TOO_SMALL", `shorter side is below ${MIN_EVIDENCE_SHORT_SIDE} pixels`));
+  return result;
+}
+
+/** Findings that concern the file's shape rather than its metadata. */
+const SHAPE_FINDINGS = new Set(["UNSUPPORTED_TYPE", "TOO_LARGE", "NO_DIMENSIONS", "TOO_SMALL", "PNG_TRUNCATED", "JPEG_MALFORMED", "JPEG_TRUNCATED"]);
+
+  return { scanImage, MAX_EVIDENCE_BYTES, MIN_EVIDENCE_SHORT_SIDE };
+})();
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  file: $("file"), tray: $("tray"), empty: $("tray-empty"), preview: $("preview"), status: $("status"), report: $("report"),
+  facts: $("facts"), removed: $("removed"), save: $("save"), saveNote: $("save-note"), again: $("again"),
+  runTest: $("run-test"), results: $("test-results"),
+};
+const MAX_PIXELS = 8388608; // twice the largest iPhone screenshot; photos are refused early
+const MAX_INPUT_BYTES = 60 * 1024 * 1024;
+let current = null; // { blob, name, url }
+let busy = false;
+
+// Inside claude.ai the page runs in a frame that may not start downloads itself; the viewer's
+// "downloads" capability saves the file instead. Anywhere else, a plain download link does.
+const inViewer = !!(window.claude && typeof window.claude.use === "function");
+const downloadsReady = (() => {
+  if (!inViewer) return Promise.resolve(null);
+  try {
+    return Promise.resolve(window.claude.use("downloads")).catch(() => null);
+  } catch {
+    return Promise.resolve(null);
+  }
+})();
+
+function setStatus(kind, title, detail) {
+  els.status.className = `status ${kind}`;
+  els.status.textContent = title;
+  if (detail) {
+    const span = document.createElement("span");
+    span.textContent = detail;
+    els.status.append(span);
+  }
+}
+
+function canvasFor(width, height, opaque) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { alpha: !opaque, colorSpace: "srgb" });
+  if (!ctx) throw new Error("This browser could not make a drawing surface for this picture.");
+  return { canvas, ctx };
+}
+const release = (canvas) => {
+  canvas.width = 0;
+  canvas.height = 0;
+};
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => (timer = setTimeout(() => reject(new Error(message)), ms)))]).finally(() => clearTimeout(timer));
+}
+
+async function decode(blob) {
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.decoding = "async";
+  img.src = url;
+  try {
+    await withTimeout(img.decode(), 30000, "timeout");
+  } catch {
+    URL.revokeObjectURL(url);
+    throw new Error("This browser cannot open this picture. Use a screenshot (PNG or JPEG).");
+  }
+  return { img, width: img.naturalWidth, height: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+}
+
+function toBlob(canvas) {
+  const saved = new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("The browser could not save the picture as PNG."))), "image/png"));
+  return withTimeout(saved, 60000, "The browser took too long to save the picture. Try again.");
+}
+
+function comparePixels(a, b) {
+  if (a.width !== b.width || a.height !== b.height) return { same: false, differ: a.width * a.height, max: 255, pixels: a.width * a.height };
+  const x = a.data;
+  const y = b.data;
+  let differ = 0;
+  let max = 0;
+  for (let i = 0; i < x.length; i += 4) {
+    let d = Math.abs(x[i + 3] - y[i + 3]);
+    if (x[i + 3] >= 32) d = Math.max(d, Math.abs(x[i] - y[i]), Math.abs(x[i + 1] - y[i + 1]), Math.abs(x[i + 2] - y[i + 2]));
+    if (d > max) max = d;
+    if (d > 3) differ += 1;
+  }
+  // "The same" means every pixel within 3 of 255: what a PNG round trip can change, and no more.
+  return { same: max <= 3, differ, max, pixels: x.length / 4 };
+}
+
+async function sha256Hex(bytes) {
+  if (!(window.crypto && crypto.subtle)) return null;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function kindOf(bytes) {
+  if (isPng(bytes)) return "PNG";
+  if (isJpeg(bytes)) return "JPEG";
+  const head = String.fromCharCode.apply(null, bytes.subarray(0, 12));
+  if (head.slice(4, 8) === "ftyp") return "HEIC";
+  return "image";
+}
+
+/** Draws the picture as this browser shows it, keeps only its pixels as PNG, and checks it. */
+async function cleanPicture(blob) {
+  if (blob.size > MAX_INPUT_BYTES) throw new Error("This file is too large for this page. Use a screenshot.");
+  const original = new Uint8Array(await blob.arrayBuffer());
+  const source = await decode(blob);
+  const { width, height } = source;
+  try {
+    if (!width || !height) throw new Error("This picture has no size this browser can read.");
+    if (width * height > MAX_PIXELS) throw new Error(`This picture has ${((width * height) / 1e6).toFixed(1)} million pixels, more than this page accepts (${(MAX_PIXELS / 1e6).toFixed(1)} million). Use a screenshot.`);
+    const first = canvasFor(width, height, false);
+    first.ctx.drawImage(source.img, 0, 0, width, height);
+    const shown = first.ctx.getImageData(0, 0, width, height);
+    // A picture of one flat colour (or nothing at all) cannot be evidence: refuse it.
+    const d = shown.data;
+    let blank = true;
+    for (let i = 4; i < d.length; i += 4) if (d[i] !== d[0] || d[i + 1] !== d[1] || d[i + 2] !== d[2] || d[i + 3] !== d[3]) { blank = false; break; }
+    if (blank) throw new Error("The picture is blank: every pixel has the same colour. Choose the screenshot of your photo.");
+    let opaque = true;
+    for (let i = 3; i < shown.data.length; i += 4) if (shown.data[i] !== 255) { opaque = false; break; }
+    // An opaque picture is saved without an alpha channel, which keeps the file smaller.
+    let out = first;
+    if (opaque) {
+      out = canvasFor(width, height, true);
+      out.ctx.drawImage(first.canvas, 0, 0);
+    }
+    const encoded = new Uint8Array(await (await toBlob(out.canvas)).arrayBuffer());
+    if (out !== first) release(out.canvas);
+    release(first.canvas);
+    const clean = pngEssentialChunks(encoded);
+    const complete = await pngPixelDataComplete(clean);
+    // The saved file, read back: same size, same pixels as the picture on screen.
+    const back = await decode(new Blob([clean], { type: "image/png" }));
+    let pixels;
+    try {
+      const check = canvasFor(back.width, back.height, false);
+      check.ctx.drawImage(back.img, 0, 0);
+      pixels = comparePixels(shown, check.ctx.getImageData(0, 0, back.width, back.height));
+      release(check.canvas);
+    } finally {
+      back.done();
+    }
+    let scan;
+    try {
+      scan = POW.scanImage(clean);
+    } catch {
+      scan = { findings: [{ level: "FAIL", code: "CHECK_ERROR", detail: "the check could not read the cleaned file" }] };
+    }
+    let originalScan = { findings: [] };
+    try {
+      originalScan = POW.scanImage(original);
+    } catch {}
+    const removed = describeHiddenData(original);
+    if (originalScan.findings.some((f) => f.code === "GPS_PRESENT" || f.code === "XMP_LOCATION")) removed.unshift("location");
+    return { original, clean, width, height, pixels, complete, scan, removed, kind: kindOf(original), sha256: await sha256Hex(clean) };
+  } finally {
+    source.done();
+  }
+}
+
+const codes = (findings) => [...new Set(findings.map((f) => f.code))].join(", ");
+const mb = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+function advice(finding) {
+  if (finding.code === "TOO_LARGE") return "The clean file is over 10 MB. Crop the screenshot closer to the paper and the object, then choose it again.";
+  if (finding.code === "TOO_SMALL") return `The picture is too small: its shorter side must be at least ${POW.MIN_EVIDENCE_SHORT_SIDE} pixels.`;
+  return "Do not post this picture. Take a new screenshot and try again.";
+}
+
+function show(result) {
+  const fails = result.scan.findings.filter((f) => f.level === "FAIL");
+  const ready = fails.length === 0 && result.pixels.same && result.complete !== false;
+  if (current?.url) URL.revokeObjectURL(current.url);
+  const blob = new Blob([result.clean], { type: "image/png" });
+  const name = `pow-clean-${(result.sha256 ?? String(Date.now())).slice(0, 8)}.png`;
+  current = { blob, name, url: URL.createObjectURL(blob), ready };
+  els.preview.src = current.url;
+  els.preview.hidden = false;
+  els.empty.hidden = true;
+  els.tray.classList.add("has-image");
+  if (ready) setStatus("ok", "Ready to post", "The clean PNG passes the POW evidence image check, and its pixels match the picture.");
+  else if (result.complete === false) setStatus("bad", "Not ready", "The saved file's pixel data is incomplete. Do not post it. Try again, and tell the operator if it happens again.");
+  else if (!result.pixels.same) setStatus("bad", "Not ready", `The saved picture differs from what this browser drew, in ${result.pixels.differ} pixels by up to ${result.pixels.max} of 255. Do not post it, and tell the operator.`);
+  else setStatus("bad", "Not ready", `${fails[0].detail}. ${advice(fails[0])}`);
+  const rows = [
+    ["Picture", `${result.width} × ${result.height} pixels`],
+    ["Clean file", `${mb(result.clean.length)} PNG`],
+    ["Original", `${mb(result.original.length)} ${result.kind}`],
+    ["Pixels", result.pixels.max === 0 ? "identical to the picture" : result.pixels.same ? `the same, within ${result.pixels.max} of 255` : `${result.pixels.differ} differ, by up to ${result.pixels.max} of 255`],
+    ["Pixel data", result.complete === null ? "not checked in this browser" : result.complete ? "complete" : "incomplete"],
+    ["Check", fails.length ? `FAIL: ${codes(fails)}` : result.scan.findings.length ? `PASS with notes: ${codes(result.scan.findings)}` : "PASS"],
+    ["SHA-256", result.sha256 ?? "not available in this browser"],
+  ];
+  els.facts.replaceChildren(...rows.flatMap(([k, v]) => {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = v;
+    return [dt, dd];
+  }));
+  const removed = result.removed.length ? result.removed : ["nothing: the picture had no hidden data"];
+  els.removed.replaceChildren(...removed.map((r) => {
+    const li = document.createElement("li");
+    li.textContent = r;
+    return li;
+  }));
+  els.save.setAttribute("aria-disabled", String(!ready));
+  if (ready && !inViewer) {
+    els.save.href = current.url;
+    els.save.download = name;
+  } else {
+    els.save.href = "#";
+    els.save.removeAttribute("download");
+  }
+  els.saveNote.textContent = "";
+  els.report.hidden = false;
+}
+
+// Back to the empty tray: nothing from an earlier picture stays on screen or can be saved.
+function resetTray() {
+  if (current?.url) URL.revokeObjectURL(current.url);
+  current = null;
+  els.preview.hidden = true;
+  els.preview.removeAttribute("src");
+  els.empty.hidden = false;
+  els.tray.classList.remove("has-image");
+  els.save.setAttribute("aria-disabled", "true");
+  els.save.href = "#";
+  els.save.removeAttribute("download");
+}
+
+async function handle(file) {
+  if (!file || busy) return;
+  busy = true;
+  els.report.hidden = true;
+  resetTray();
+  setStatus("busy", "Cleaning…", "This can take a few seconds on a phone.");
+  try {
+    show(await cleanPicture(file));
+  } catch (error) {
+    setStatus("bad", "Could not clean this picture", error instanceof Error ? error.message : String(error));
+  } finally {
+    busy = false;
+    els.file.value = "";
+  }
+}
+
+els.file.addEventListener("change", () => handle(els.file.files && els.file.files[0]));
+els.again.addEventListener("click", () => els.file.click());
+els.save.addEventListener("click", async (event) => {
+  if (!current || !current.ready) {
+    event.preventDefault();
+    return;
+  }
+  if (!inViewer) {
+    els.saveNote.textContent = `Saved as ${current.name}. On an iPhone it is in Files, under Downloads.`;
+    return;
+  }
+  event.preventDefault();
+  const downloads = await downloadsReady;
+  if (!downloads) {
+    els.saveNote.textContent = "Saving is not available in this view. Do not use another way to save the picture; tell the operator.";
+    return;
+  }
+  try {
+    await downloads.save({ filename: current.name, data: current.blob });
+    els.saveNote.textContent = `Saved as ${current.name}. If a share sheet opened, you chose where it went; otherwise look in Files, under Downloads.`;
+  } catch (error) {
+    const code = error && error.code;
+    els.saveNote.textContent =
+      code === "declined" ? "Not saved." :
+      code === "rate_limited" ? "A save is already waiting for an answer. Try again in a moment." :
+      code === "host_unavailable" ? "This app cannot save files. Open this page in Safari." :
+      "Could not save here. Open this page in Safari and try again.";
+  }
+});
+
+// ---- Self-test: two pictures full of hidden data, cleaned and checked on this device --------
+
+function testCanvas(width, height) {
+  const { canvas, ctx } = canvasFor(width, height, true);
+  const g = ctx.createLinearGradient(0, 0, width, height);
+  g.addColorStop(0, "#0a7d4f");
+  g.addColorStop(1, "#e0569c");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(width * 0.1, height * 0.3, width * 0.8, height * 0.4);
+  ctx.fillStyle = "#111111";
+  ctx.font = `700 ${Math.round(height / 7)}px -apple-system, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("POW 2345 TEST", width / 2, height / 2);
+  return canvas;
+}
+
+async function selfTest() {
+  const rows = [];
+  const record = (ok, text) => rows.push({ ok, text });
+  const fails = (bytes) => [...new Set(POW.scanImage(bytes).findings.filter((f) => f.level === "FAIL").map((f) => f.code))];
+  try {
+    const canvas = testCanvas(600, 400);
+    const png = new Uint8Array(await (await toBlob(canvas)).arrayBuffer());
+    const jpeg = new Uint8Array(await (await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.92))).arrayBuffer());
+    release(canvas);
+    const dirtyPng = withPngChunks(png, testPngMetadata());
+    const dirtyJpeg = withJpegSegments(jpeg, testJpegMetadata());
+    for (const [label, dirty, type] of [["PNG with EXIF location, XMP, a text note and a time stamp", dirtyPng, "image/png"], ["JPEG with EXIF location, Photoshop data, XMP and a comment", dirtyJpeg, "image/jpeg"]]) {
+      const before = fails(dirty);
+      record(before.includes("GPS_PRESENT") && before.includes("EXIF_PRESENT"), `Test ${label}: the check refuses it (${before.join(", ") || "no finding"}).`);
+      const result = await cleanPicture(new Blob([dirty], { type }));
+      const after = [...new Set(result.scan.findings.filter((f) => f.level === "FAIL").map((f) => f.code))];
+      const onlyPixels = pngChunkTypes(result.clean).every((t) => ["IHDR", "PLTE", "tRNS", "IDAT", "IEND"].includes(t));
+      record(after.length === 0 && result.pixels.same && result.complete !== false && onlyPixels && result.width === 600 && result.height === 400,
+        `Cleaned: ${after.length ? `FAIL ${after.join(", ")}` : "passes the check"}, ${result.pixels.same ? "pixels unchanged" : `${result.pixels.differ} pixels differ`}, ${result.complete === false ? "pixel data incomplete" : "pixel data complete"}, ${onlyPixels ? "only pixel data left" : "other data left"}.`);
+    }
+  } catch (error) {
+    record(false, `The test stopped: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const ok = rows.length === 4 && rows.every((r) => r.ok);
+  rows.push({ ok, text: ok ? "This browser cleans pictures correctly." : "Something failed: do not use this browser for POW pictures, and tell the operator." });
+  rows.push({ ok: null, text: `Browser: ${navigator.userAgent}` });
+  els.results.replaceChildren(...rows.map((r) => {
+    const li = document.createElement("li");
+    const badge = document.createElement("span");
+    badge.className = `badge ${r.ok === null ? "" : r.ok ? "pass" : "fail"}`;
+    badge.textContent = r.ok === null ? "info" : r.ok ? "passed" : "failed";
+    const text = document.createElement("span");
+    text.textContent = r.text;
+    li.append(badge, text);
+    return li;
+  }));
+  return ok;
+}
+
+els.runTest.addEventListener("click", async () => {
+  if (busy) return;
+  busy = true;
+  els.runTest.disabled = true;
+  els.results.replaceChildren();
+  try {
+    await selfTest();
+  } finally {
+    els.runTest.disabled = false;
+    busy = false;
+  }
+});
+})();
+</script>
+</body>
+</html>

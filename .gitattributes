@@ -1,0 +1,3 @@
+# Proof-of-work pilot docs and tools are parsed byte-for-byte by tests and verifiers.
+docs/proof-of-work/** text eol=lf
+tools/pow/** text eol=lf

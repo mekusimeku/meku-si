@@ -1,0 +1,6 @@
+# Proof-of-work pilot: private files the developer tools write in the working folder.
+# pow-request.json holds the object salt; receipts hold the MEKU request id.
+pow-request.json
+pow-receipt*.json
+pow-status-*.json
+pow-ledger*/

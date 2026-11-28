@@ -31,6 +31,7 @@ MEKU SI connects AI agents to people who can carry out real-world work. This rep
 - [FAQ](docs/faq.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Independent pilot guide](docs/first-pilot.md)
+- **[Proof-of-work pilot POW-001](docs/proof-of-work/protocol.md)**: MEKU's first attempt at an independently verifiable agent-to-human work cycle. Unpaid and coordinated by hand (not an automated network operation), with a fixed safe task, a public ledger and an [offline verifier](tools/pow/README.md). Ready for review; not yet run.
 - [Human Cloud showcase](docs/showcase.md)
 - [STARGATE neural-intent research + public simulator](docs/stargate-neural-intent-simulator.md)
 - [Roadmap](ROADMAP.md)
@@ -84,7 +85,7 @@ Useful, reproducible integration reports and documentation fixes are welcome. Pl
 
 ## Human Cloud Protocol Challenge
 
-Try a clearly labeled local simulation before using any live credential. The challenge separates three levels: Level 1 simulation (no credential), Level 2 independent authenticated read-only MCP test (currently blocked pending a server-enforced search-only test key), and Level 3 separately approved real human-work pilot.
+Try a clearly labeled local simulation before using any live credential. The challenge separates three levels: Level 1 simulation (no credential), Level 2 independent authenticated read-only MCP test with an operator-confirmed search-only key, and Level 3 separately approved real human-work pilot, made concrete as [POW-001](docs/proof-of-work/protocol.md).
 
 - [Challenge specification and evidence rules](docs/human-cloud-protocol-challenge.md)
 - [Run the local simulator](examples/human-cloud-simulator/README.md) — mock data only, no network calls or real mission

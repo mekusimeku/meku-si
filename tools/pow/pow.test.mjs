@@ -609,7 +609,7 @@ test("export pages comments, downloads only evidence attachments, and never send
   const png = p.files.get(p.bundle.evidence_files[0].file);
   const seen = [];
   const fetchImpl = async (url, init = {}) => {
-    seen.push({ url: String(url), auth: init.headers?.Authorization });
+    seen.push({ url: String(url), auth: init.headers?.Authorization, redirect: init.redirect });
     if (String(url).startsWith("https://api.github.com/")) {
       const page = Number(new URL(url).searchParams.get("page"));
       const all = p.bundle.comments.map((c) => ({ id: c.id, user: { login: c.author }, created_at: c.created_at, updated_at: c.updated_at, html_url: c.html_url, body: c.body }));
@@ -628,6 +628,7 @@ test("export pages comments, downloads only evidence attachments, and never send
   assert.equal(attachmentCalls.length, 1);
   assert.equal(attachmentCalls[0].auth, undefined);
   assert.ok(seen.filter((s) => s.url.startsWith("https://api.github.com/")).every((s) => s.auth === "Bearer ghp_test_token"));
+  assert.ok(seen.filter((s) => s.url.startsWith("https://api.github.com/")).every((s) => s.redirect === "error"), "the token never follows a redirect");
   const r = verifyBundle(JSON.parse(readFileSync(join(out, "bundle.json"), "utf8")), { loadEvidence: (f) => readFileSync(join(out, f)), allowSynthetic: true });
   assert.equal(r.verdict, "PASS");
 });

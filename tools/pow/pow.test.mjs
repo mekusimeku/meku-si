@@ -725,6 +725,41 @@ test("attachment downloads follow GitHub's redirects one hop at a time, refuse o
   await assert.rejects(downloadAttachment(start, { fetchImpl: async () => unread(200, "https://evil.example/x.png") }), /unexpected host/);
   await assert.rejects(fetchComment("https://github.com/mekusimeku/meku-si/pull/43#issuecomment-1", { fetchImpl: async () => unread(500) }), /HTTP 500/);
   assert.deepEqual(cancelled, [404, 200, 500]);
+  // A redirect answer is closed too, before the next hop.
+  const hops = [];
+  const closing = async (url) => {
+    if (String(url) === start) {
+      const response = new Response("moved", { status: 302, headers: { location: signed } });
+      const original = response.body.cancel.bind(response.body);
+      response.body.cancel = (...args) => {
+        hops.push("closed");
+        return original(...args);
+      };
+      return response;
+    }
+    hops.push("next hop");
+    return new Response(png, { status: 200 });
+  };
+  await downloadAttachment(start, { fetchImpl: closing });
+  assert.deepEqual(hops, ["closed", "next hop"]);
+  // Every hop is plain HTTPS on the default port, and GitHub's bucket only straight after github.com.
+  const via = (location) => async (url) => (String(url) === start ? new Response(null, { status: 302, headers: { location } }) : new Response(png, { status: 200 }));
+  await assert.rejects(downloadAttachment(start, { fetchImpl: via("http://github-production-user-asset-6210df.s3.amazonaws.com/x.png") }), /not plain HTTPS/);
+  await assert.rejects(downloadAttachment(start, { fetchImpl: via("https://github-production-user-asset-6210df.s3.amazonaws.com:8443/x.png") }), /not plain HTTPS/);
+  const twoHops = async (url) =>
+    String(url) === start
+      ? new Response(null, { status: 302, headers: { location: "https://private-user-images.githubusercontent.com/1/2.png" } })
+      : new Response(null, { status: 302, headers: { location: "https://github-production-user-asset-6210df.s3.amazonaws.com/x.png" } });
+  await assert.rejects(downloadAttachment(start, { fetchImpl: twoHops }), /unexpected host: github-production-user-asset-6210df/);
+  // The API is never followed through a redirect, so a token cannot leave api.github.com.
+  let apiRedirect;
+  await fetchComment("https://github.com/mekusimeku/meku-si/pull/43#issuecomment-1", {
+    fetchImpl: async (url, init) => {
+      apiRedirect = init.redirect;
+      return new Response(JSON.stringify({ id: 1, user: { login: "x" }, body: "" }), { status: 200 });
+    },
+  });
+  assert.equal(apiRedirect, "error");
 });
 
 // ---- CLIs --------------------------------------------------------------------------------

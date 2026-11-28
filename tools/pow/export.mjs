@@ -34,8 +34,10 @@ export async function fetchComment(link, { fetchImpl = fetch, token, timeoutMs =
   let response;
   let c;
   try {
+    // redirect "error": the token, if any, can never travel on to another address.
     response = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/issues/comments/${id}`, {
       headers: apiHeaders(token),
+      redirect: "error",
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
@@ -106,9 +108,14 @@ function networkError(error, host, step, timeoutMs) {
 export async function downloadAttachment(url, { fetchImpl = fetch, timeoutMs = 60_000, onStep = () => {} } = {}) {
   if (extractAttachmentUrls(url).length !== 1 || extractAttachmentUrls(url)[0] !== url) throw new Error("not a GitHub attachment URL");
   let current = url;
+  let previousHost = null;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    const host = new URL(current).hostname;
-    if (!allowedAssetHost(host)) throw new Error(`attachment redirected to an unexpected host: ${host}`);
+    const address = new URL(current);
+    const host = address.hostname;
+    if (!allowedAssetHost(host) || (GITHUB_ASSET_BUCKETS.has(host) && previousHost !== "github.com"))
+      throw new Error(`attachment redirected to an unexpected host: ${host}`);
+    if (address.protocol !== "https:" || address.port !== "") throw new Error(`attachment redirected to an address that is not plain HTTPS: ${address.origin}`);
+    previousHost = host;
     onStep(hop === 0 ? `asking ${host}` : `redirected to ${host}`);
     let response;
     try {
@@ -149,7 +156,7 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
   const headers = apiHeaders(token);
   // The issue itself: never a pull request, and GitHub's own spelling of its address, so that a
   // verifier who types different capitals still checks the request text against the same URL.
-  const issueResponse = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`, { headers, signal: AbortSignal.timeout(30_000) });
+  const issueResponse = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`, { headers, redirect: "error", signal: AbortSignal.timeout(30_000) });
   if (!issueResponse.ok) {
     await discard(issueResponse);
     throw new Error(`GitHub API answered HTTP ${issueResponse.status} for the issue`);
@@ -160,7 +167,7 @@ export async function exportLedger({ issueUrl, outDir, fetchImpl = fetch, token,
   const comments = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}/comments?per_page=100&page=${page}`;
-    const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(30_000) });
+    const response = await fetchImpl(url, { headers, redirect: "error", signal: AbortSignal.timeout(30_000) });
     if (!response.ok) {
       await discard(response);
       throw new Error(`GitHub API answered HTTP ${response.status} for comments page ${page}`);

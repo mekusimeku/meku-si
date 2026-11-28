@@ -37,4 +37,9 @@ jobs:
           LINK: ${{ github.event.inputs.link || 'https://github.com/mekusimeku/meku-si/pull/43#issuecomment-7237118279' }}
           # Read-only, and the tool sends it only to api.github.com, never with the picture's download.
           GITHUB_TOKEN: ${{ github.token }}
-        run: node tools/pow/record.mjs check-image "$LINK"
+        run: |
+          case "$LINK" in
+            https://github.com/*#issuecomment-*) ;;
+            *) echo "Give the link of a comment: https://github.com/<owner>/<repo>/(issues|pull)/<n>#issuecomment-<id>"; exit 3 ;;
+          esac
+          node tools/pow/record.mjs check-image "$LINK"

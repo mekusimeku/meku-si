@@ -27,17 +27,24 @@ POW-001 has three kinds of run. Keep them apart in every post, report and reply,
 | 2026-11-28 | Founder, with this repository's agent | Phone test B: a screenshot posted from the iPhone, `check-image` on comment 7235940325 | No result: the agent session could not download the attachment (HTTP 403, its own network rules) |
 | 2026-11-28 | Founder | Cropped and uncropped iPhone screenshots | The founder found EXIF and Photoshop metadata in both, which the check refuses. This led to the [image cleaner](image-cleaner.md) |
 | 2026-11-28 | Founder: physical iPhone with Safari, then his Windows laptop | Test B with the image cleaner, tools at `258cf65`. Self-test 5 of 5 passed and the cleaner said *Ready to post*. The file was posted in PR #43 with **Choose File** (comment 7237118279), then downloaded from GitHub in a browser on the laptop. Its SHA-256, `6c1dc9b369385cf70942fb09de0e4dcc998c8c10e13923db8ac8ad6ace371a7e`, equals the cleaned file's. `check-image` was run on that download | PASS: `image/png 1284x2778`. GitHub serves the cleaned file unchanged, and it passes the check |
-| 2026-11-28 | Founder's Windows laptop | `check-image` with the comment link, which downloads the picture itself | Unresolved: it hung and was stopped with Ctrl+C (see below) |
+| 2026-11-28 | Founder's Windows laptop | `check-image` with the comment link, which downloads the picture itself | It hung and was stopped with Ctrl+C. Cause found and fixed in `5a50be9` (see below) |
+| 2026-11-28 | GitHub's own runner, workflow *Check a posted POW picture* ([run 46142999621](https://github.com/mekusimeku/meku-si/actions/runs/46142999621)), tools at `5a50be9` | `check-image` with the comment link of test B, downloading the picture automatically | Downloaded 1,622,592 bytes with SHA-256 `6c1dc9b369385cf70942fb09de0e4dcc998c8c10e13923db8ac8ad6ace371a7e`, the hash the founder computed: PASS, `image/png 1284x2778` |
 | 2026-11-28 | This repository's agent, through GitHub's API as the MEKU account (not from the phone) | Test C1: a 👍 reaction on the test A comment, then `check-comment` | The comment's edit time did not change, and the check still says PASS. A reaction does not make a record look edited |
 
 Next: tests C2 (hide, then unhide) and C3 (the signed-out view), on the phone. No participant dry run has taken place yet.
 
 ## The automated download of a posted picture
 
-`check-image` with a comment link reads the comment from api.github.com and downloads the picture itself.
-- **What made it look hung.** On the founder's laptop it did not finish. A network that never answers made the command wait in silence: up to 30 s for the comment, then 60 s for the picture. Only then did it fail, with a message that did not say where.
-- **What it does now.** It says each step as it goes, follows GitHub's redirects one hop at a time (refusing any host that is not GitHub's before contacting it), and on failure names the host and the step.
-- **What is still unknown.** Why the laptop's network did not answer has not been found. A common cause is that Node does not use the proxy settings Windows and the browser use.
-- **Two ways that work without the laptop's download:**
+`check-image` with a comment link reads the comment from api.github.com and downloads the picture itself. It hung on the founder's laptop. The cause was found by running the same command on GitHub's own runner:
+
+- **The cause.** For a download without a session, GitHub redirects `github.com/user-attachments/...` to its asset bucket, `github-production-user-asset-6210df.s3.amazonaws.com`. The tool's list of allowed hosts did not include it, so the download was refused. The tool then left that refused answer open, which kept the command running for up to a minute after it had printed its error. That looked like a hang.
+- **What this also broke.** `verify.mjs --from-issue` could not have downloaded the evidence of any real ledger.
+- **The fix, in `5a50be9`:**
+  - The tool now allows exactly that GitHub bucket, never S3 in general, and only as a redirect from github.com.
+  - It closes every answer it does not read.
+  - It announces each step, refuses any other host before contacting it, and names the host and step when something fails.
+- **The result.** On GitHub's runner the command then downloaded the test B picture automatically, with the same SHA-256 the founder computed, and the check passed.
+- **On the laptop**, the same command should now finish as well. Running it again there is optional and needs no new upload.
+- **Two other ways to check a posted picture:**
+  - **The workflow.** *Check a posted POW picture* runs the command on GitHub's runners. Once it is on `main`, anyone can start it from the GitHub app with a comment link.
   - **The manual check used in test B.** Open the comment in a browser and save the picture. Check that its SHA-256 equals the one the image cleaner showed, then run `check-image` on the saved file.
-  - **GitHub's own runners.** The workflow *Check a posted POW picture* runs the same command there. On PR #43 it checks the test B picture. Once the workflow is on `main`, anyone can start it from the GitHub app with a comment link.
